@@ -128,22 +128,12 @@
       </div>
 
       <div class="card" style="margin-top:0;">
-        <div class="card-title">// FITNESS <span class="tag">HEUTE</span></div>
+        <div class="card-title">// FITNESS <span class="tag">GEWICHT + WORKOUTS</span></div>
         <div class="stat-grid">
           <div class="stat">
-            <div class="label">Schritte</div>
-            <div class="value green" id="statSteps">0</div>
-            <button class="quick-btn" id="stepsAddBtn">+500 Schritte</button>
-          </div>
-          <div class="stat">
-            <div class="label">Kalorien</div>
-            <div class="value amber" id="statCal">0</div>
-            <button class="quick-btn" id="calAddBtn">+100 kcal</button>
-          </div>
-          <div class="stat">
             <div class="label">Workouts / Woche</div>
-            <div class="value purple" id="statWorkouts">0</div>
-            <button class="quick-btn" id="workoutAddBtn">+1 Workout</button>
+            <div class="value purple" id="statWorkouts">0/6</div>
+            <div class="hint" style="margin-top:6px;">Zählt automatisch über Habit «Training / Bewegung»</div>
           </div>
           <div class="stat">
             <div class="label">Gewicht (kg)</div>
@@ -153,24 +143,15 @@
         <div class="card-title" style="margin-bottom:8px; border:none; padding-bottom:0;">ZIELGEWICHT // 72 KG</div>
         <div class="progress-outer"><div class="progress-inner" id="weightBar" style="width:0%"></div></div>
         <div class="weight-goal-label" id="weightGoalLabel">—</div>
-        <div class="card-title" style="margin:14px 0 8px; border:none; padding-bottom:0;">SCHRITTE // 7 TAGE</div>
-        <div class="bars" id="stepsBars"></div>
       </div>
 
       <div class="card" style="margin-top:0;">
-        <div class="card-title">// LIFESTYLE <span class="tag">HEUTE</span></div>
-        <div class="stat-grid">
-          <div class="stat">
-            <div class="label">Schlaf (h)</div>
-            <input class="value-input" type="number" step="0.1" id="statSleep">
-          </div>
-          <div class="stat">
-            <div class="label">Screen Time (h)</div>
-            <input class="value-input" type="number" step="0.1" id="statScreen">
-          </div>
-        </div>
-        <div class="card-title" style="margin-bottom:8px; border:none; padding-bottom:0;">WASSER // GLÄSER (KLICKEN)</div>
-        <div class="water-row" id="waterRow"></div>
+        <div class="card-title">// ROUTINEN <span class="tag" id="routineTag">0/4 ERLEDIGT</span></div>
+        <div class="routine-label">🌅 MORGEN</div>
+        <ul class="list" id="morningRoutine"></ul>
+        <div class="routine-label">🌙 ABEND</div>
+        <ul class="list" id="eveningRoutine"></ul>
+        <div class="hint">Schlaf &amp; Screen Time in Stunden eintragen. «Tag geplant» und «Reflexion» haken automatisch ab. Jeder Punkt: +1 erledigt / −1 verpasst bei der Tagesabrechnung.</div>
       </div>
     </div>
 
@@ -293,14 +274,18 @@
           <div class="card-title">// REGELN <span class="tag">TAGESABRECHNUNG UM MITTERNACHT</span></div>
           <ul class="rules-list">
             <li><span class="pt plus">+1</span> Habit erledigt</li>
-            <li><span class="pt minus">−2</span> Habit verpasst</li>
-            <li><span class="pt plus">+3</span> Alle Habits an einem Tag</li>
+            <li><span class="pt minus">−2</span> Täglicher Habit verpasst</li>
+            <li><span class="pt plus">+3</span> Alle täglichen Habits an einem Tag</li>
+            <li><span class="pt plus">+3</span> Wochenziel erreicht (z.B. Training 6x) — sonntags</li>
+            <li><span class="pt minus">−1</span> Pro fehlende Wochenziel-Einheit — sonntags</li>
             <li><span class="pt plus">+1</span> Tagesplan-Block erledigt</li>
             <li><span class="pt minus">−2</span> Tagesplan-Block nicht erledigt</li>
+            <li><span class="pt plus">+1</span> Routine-Punkt erledigt (Schlaf, Plan, Handy, Screen)</li>
+            <li><span class="pt minus">−1</span> Routine-Punkt verpasst</li>
             <li><span class="pt plus">+2</span> Reflexion geschrieben</li>
             <li><span class="pt minus">−3</span> Reflexion vergessen</li>
             <li><span class="pt plus">+3…50</span> Streak-Meilensteine (3 / 7 / 14 / 21 / 30 / 50 / 100 Tage)</li>
-            <li><span class="pt plus">+1</span> Focus Session (sofort)</li>
+            <li><span class="pt plus">+1</span> Focus Session (sofort · hakt Deep Work ab)</li>
             <li><span class="pt plus">+5/+8/+15</span> Bewerbung versendet / Interview / Angebot (sofort)</li>
           </ul>
         </div>

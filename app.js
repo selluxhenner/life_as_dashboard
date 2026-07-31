@@ -1,6 +1,6 @@
 (function(){
-  var STORE_KEY = 'lifeOsDashboardState_v3';
-  var OLD_STORE_KEY = 'lifeOsDashboardState_v2';
+  var STORE_KEY = 'lifeOsDashboardState_v4';
+  var OLD_STORE_KEYS = ['lifeOsDashboardState_v3', 'lifeOsDashboardState_v2'];
   var TIERS = [
     {key:'woche', label:'Woche'},
     {key:'monat', label:'Monat'},
@@ -92,18 +92,16 @@
       ]
     },
     habits: [
-      {id:uid(), label:'Deep Work', icon:'🧠', history:{}},
-      {id:uid(), label:'Training / Sport', icon:'💪', history:{}},
-      {id:uid(), label:'Protein hitten', icon:'🥩', history:{}},
-      {id:uid(), label:'Lesen / Lernen', icon:'📚', history:{}}
+      {id:uid(), label:'Deep Work Block', sub:'Mind. 1×25-min Focus-Session', icon:'🧠', history:{}, mode:'daily', link:'focus'},
+      {id:uid(), label:'Training / Bewegung', sub:'Kraft oder Sport-Einheit', icon:'💪', history:{}, mode:'weekly', target:6},
+      {id:uid(), label:'Mahlzeiten + Protein', sub:'Frühstück · Mittag · Nachtessen + Shake/Wrap', icon:'🥩', history:{}, mode:'daily'}
     ],
     todos: {
       high: [ {id:uid(), label:'Tiger Wil Redesign weiterbringen', done:false} ],
       med: [ {id:uid(), label:'Trinkstube zum Hartz planen', done:false} ],
       low: []
     },
-    fitness: { steps:[0,0,0,0,0,0,0], weight:67.0, workouts:0, calories:0 },
-    lifestyle: { sleep:7.5, screenTime:0, waterGlasses:0 }
+    fitness: { weight:67.0 }
   };
 
   function freshExtras(){
@@ -120,7 +118,8 @@
         awarded:{beworben:true, interview:true}
       }],
       ledger: [],
-      focus: {}
+      focus: {},
+      routines: {}
     };
   }
 
@@ -129,13 +128,12 @@
       var raw = localStorage.getItem(STORE_KEY);
       if(raw) return migrate(JSON.parse(raw));
     }catch(e){}
-    try{
-      var old = localStorage.getItem(OLD_STORE_KEY);
-      if(old){
-        var s = JSON.parse(old);
-        return migrate(s);
-      }
-    }catch(e){}
+    for(var i=0;i<OLD_STORE_KEYS.length;i++){
+      try{
+        var old = localStorage.getItem(OLD_STORE_KEYS[i]);
+        if(old) return migrate(JSON.parse(old));
+      }catch(e){}
+    }
     var st = JSON.parse(JSON.stringify(defaultState));
     return migrate(st);
   }
@@ -152,9 +150,41 @@
     if(!s.bewerbungen) s.bewerbungen = ex.bewerbungen;
     if(!s.ledger) s.ledger = [];
     if(!s.focus) s.focus = {};
+    if(!s.routines) s.routines = {};
     (s.habits||[]).forEach(function(h){ if(!h.createdAt) h.createdAt = s.meta.createdAt; });
+    reworkHabits(s);
+    if(!s.fitness) s.fitness = { weight:67.0 };
+    delete s.fitness.steps; delete s.fitness.calories; delete s.fitness.workouts;
+    delete s.lifestyle;
     importBewerbungen(s);
     return s;
+  }
+
+  /* Einmalige Umstellung 31.07.2026: präzise Habit-Definitionen,
+     Training als Wochenziel (6x), Lesen entfernt, Deep Work an Focus Timer gekoppelt. */
+  function reworkHabits(s){
+    if(s.meta.habitRework20260731) return;
+    s.meta.habitRework20260731 = true;
+    var kept = [];
+    (s.habits||[]).forEach(function(h){
+      var l = (h.label||'').toLowerCase();
+      if(l.indexOf('deep work') !== -1){
+        h.label = 'Deep Work Block'; h.sub = 'Mind. 1×25-min Focus-Session';
+        h.mode = 'daily'; h.link = 'focus'; kept.push(h);
+      } else if(l.indexOf('training') !== -1 || l.indexOf('sport') !== -1){
+        h.label = 'Training / Bewegung'; h.sub = 'Kraft oder Sport-Einheit';
+        h.mode = 'weekly'; h.target = 6; kept.push(h);
+      } else if(l.indexOf('protein') !== -1 || l.indexOf('mahlzeit') !== -1){
+        h.label = 'Mahlzeiten + Protein'; h.sub = 'Frühstück · Mittag · Nachtessen + Shake/Wrap';
+        h.mode = 'daily'; kept.push(h);
+      } else if(l.indexOf('lesen') !== -1 || l.indexOf('lernen') !== -1){
+        /* entfernt — nicht mehr getrackt */
+      } else {
+        if(!h.mode) h.mode = 'daily';
+        kept.push(h);
+      }
+    });
+    s.habits = kept;
   }
 
   /* Einmaliger Import der Bewerbungsrunde vom 26.07. + ältere Absagen/Pendenzen.
@@ -244,13 +274,41 @@
     return s;
   }
 
+  function routineFor(dk){
+    if(!state.routines[dk]) state.routines[dk] = {sleep:null, screen:null, noPhone:false};
+    return state.routines[dk];
+  }
+  function hasVal(v){ return v !== null && v !== undefined && v !== ''; }
+  function routineItems(dk){
+    var r = state.routines[dk] || {};
+    return [
+      {key:'sleep',   part:'morgen', label:'Schlaf eingetragen',          done: hasVal(r.sleep)},
+      {key:'plan',    part:'morgen', label:'Tag geplant',                 done: (state.dayplan[dk]||[]).length > 0},
+      {key:'noPhone', part:'morgen', label:'Kein Handy erste 30 min',     done: !!r.noPhone},
+      {key:'screen',  part:'abend',  label:'Screen Time eingetragen',     done: hasVal(r.screen)}
+    ];
+  }
+  function weekCount(habit, anyDayKey){
+    var mon = mondayKeyOf(parseKey(anyDayKey));
+    var c = 0;
+    for(var i=0;i<7;i++){ if(habit.history[keyOffset(mon, i)]) c++; }
+    return c;
+  }
+
   function computeDaySettlement(dk){
-    var res = {delta:0, habitsDone:0, habitsTotal:0, planDone:0, planTotal:0, reflected:false, milestones:[]};
+    var res = {delta:0, habitsDone:0, habitsTotal:0, planDone:0, planTotal:0, routineDone:0, routineTotal:0, reflected:false, milestones:[]};
+    var dailyDone = 0, dailyTotal = 0;
     state.habits.forEach(function(h){
       if(h.createdAt && h.createdAt > dk) return;
       res.habitsTotal++;
+      if(h.mode === 'weekly'){
+        if(h.history[dk]){ res.habitsDone++; res.delta += 1; }
+        /* kein Malus an Ruhetagen — Wochenziel wird sonntags abgerechnet */
+        return;
+      }
+      dailyTotal++;
       if(h.history[dk]){
-        res.habitsDone++;
+        res.habitsDone++; dailyDone++;
         res.delta += 1;
         var s = streakAsOf(h.history, dk);
         if(STREAK_BONUS[s]) res.milestones.push({habit:h.label, streak:s, bonus:STREAK_BONUS[s]});
@@ -258,7 +316,12 @@
         res.delta -= 2;
       }
     });
-    if(res.habitsTotal > 0 && res.habitsDone === res.habitsTotal) res.delta += 3;
+    if(dailyTotal > 0 && dailyDone === dailyTotal) res.delta += 3;
+    routineItems(dk).forEach(function(it){
+      res.routineTotal++;
+      if(it.done){ res.routineDone++; res.delta += 1; }
+      else res.delta -= 1;
+    });
     (state.dayplan[dk] || []).forEach(function(b){
       res.planTotal++;
       if(b.done){ res.planDone++; res.delta += 1; }
@@ -274,11 +337,24 @@
     var r = computeDaySettlement(dk);
     var detail = 'Habits ' + r.habitsDone + '/' + r.habitsTotal
       + ' · Plan ' + r.planDone + '/' + r.planTotal
+      + ' · Routine ' + r.routineDone + '/' + r.routineTotal
       + ' · Reflexion ' + (r.reflected ? '✓' : '✗');
     addLedger('Tagesabrechnung ' + fmtShort(dk), r.delta, dk, detail);
     r.milestones.forEach(function(m){
       addLedger('🔥 ' + m.streak + '-Tage-Streak: ' + m.habit, m.bonus, dk);
     });
+    /* Sonntag: Wochenziel-Habits abrechnen */
+    if(parseKey(dk).getDay() === 0){
+      var monKey = keyOffset(dk, -6);
+      state.habits.forEach(function(h){
+        if(h.mode !== 'weekly') return;
+        if(h.createdAt && h.createdAt > monKey) return;
+        var c = weekCount(h, dk);
+        var t = h.target || 1;
+        if(c >= t) addLedger('🎯 Wochenziel erreicht: ' + h.label + ' (' + c + '/' + t + ')', 3, dk);
+        else addLedger('Wochenziel verpasst: ' + h.label + ' (' + c + '/' + t + ')', -(t - c), dk);
+      });
+    }
   }
 
   function settle(){
@@ -391,7 +467,13 @@
       top.appendChild(el('span','icon', h.icon));
       var meta = el('div','habit-meta');
       meta.appendChild(el('div','item-label', h.label));
-      meta.appendChild(el('div','streak', streakAsOf(h.history, h.history[tKey] ? tKey : keyOffset(tKey,-1)) + 'd streak'));
+      if(h.sub) meta.appendChild(el('div','habit-sub', h.sub));
+      if(h.mode === 'weekly'){
+        var wc = weekCount(h, tKey);
+        meta.appendChild(el('div','streak', wc + '/' + (h.target||1) + ' diese Woche'));
+      } else {
+        meta.appendChild(el('div','streak', streakAsOf(h.history, h.history[tKey] ? tKey : keyOffset(tKey,-1)) + 'd streak'));
+      }
       top.appendChild(meta);
       var del = el('div','del','×');
       del.onclick = function(){ state.habits.splice(idx,1); save(); renderAll(); };
@@ -601,13 +683,22 @@
     document.getElementById('todosTag').textContent = doneCount + '/' + total + ' ERLEDIGT';
   }
 
-  /* ---------- fitness / lifestyle ---------- */
+  /* ---------- fitness ---------- */
+  function trainingHabit(){
+    var found = null;
+    state.habits.forEach(function(h){ if(h.mode === 'weekly' && !found) found = h; });
+    return found;
+  }
+
   function renderFitness(){
     var f = state.fitness;
-    var todaySteps = f.steps[f.steps.length - 1];
-    document.getElementById('statSteps').textContent = todaySteps.toLocaleString('de-DE');
-    document.getElementById('statCal').textContent = f.calories.toLocaleString('de-DE');
-    document.getElementById('statWorkouts').textContent = f.workouts;
+    var th = trainingHabit();
+    var wEl = document.getElementById('statWorkouts');
+    if(th){
+      wEl.textContent = weekCount(th, todayKey()) + '/' + (th.target||1);
+    } else {
+      wEl.textContent = '—';
+    }
 
     var weightInput = document.getElementById('statWeight');
     if(document.activeElement !== weightInput) weightInput.value = f.weight.toFixed(1);
@@ -616,41 +707,58 @@
     var wp = Math.max(0, Math.min(100, Math.round(((f.weight - START) / (GOAL - START)) * 100)));
     document.getElementById('weightBar').style.width = wp + '%';
     document.getElementById('weightGoalLabel').textContent = f.weight.toFixed(1) + ' kg → ' + GOAL.toFixed(0) + ' kg · noch ' + Math.max(0, GOAL - f.weight).toFixed(1) + ' kg';
-
-    var days = ['Mo','Di','Mi','Do','Fr','Sa','So'];
-    var maxSteps = Math.max.apply(null, f.steps.concat([1]));
-    var barsWrap = document.getElementById('stepsBars');
-    barsWrap.innerHTML = '';
-    f.steps.forEach(function(s, i){
-      var col = el('div', 'bar-col');
-      var barHeight = Math.max(4, Math.round((s / maxSteps) * 80));
-      var bar = el('div', 'bar' + (i === f.steps.length - 1 ? ' today' : ''));
-      bar.style.height = barHeight + 'px';
-      col.appendChild(bar);
-      col.appendChild(el('div', 'day', days[i]));
-      barsWrap.appendChild(col);
-    });
   }
 
-  function renderLifestyle(){
-    var l = state.lifestyle;
-    var sleepInput = document.getElementById('statSleep');
-    if(document.activeElement !== sleepInput) sleepInput.value = l.sleep.toFixed(1);
-    var screenInput = document.getElementById('statScreen');
-    if(document.activeElement !== screenInput) screenInput.value = l.screenTime.toFixed(1);
+  /* ---------- routinen (morgen / abend) ---------- */
+  function routineNumberItem(label, value, unit, onChange){
+    var li = el('li','item' + (hasVal(value) ? ' done' : ''));
+    var check = el('div','check' + (hasVal(value) ? ' checked' : ''), hasVal(value) ? '✓' : '');
+    li.appendChild(check);
+    li.appendChild(el('div','item-label', label));
+    var input = el('input','routine-num');
+    input.type = 'number'; input.step = '0.1'; input.placeholder = '—';
+    if(hasVal(value)) input.value = value;
+    input.addEventListener('change', function(){
+      var v = parseFloat(input.value);
+      onChange(isNaN(v) ? null : v);
+      save(); renderAll();
+    });
+    li.appendChild(input);
+    li.appendChild(el('span','streak', unit));
+    return li;
+  }
+  function routineCheckItem(label, done, onToggle, hint){
+    var li = el('li','item' + (done ? ' done' : ''));
+    var check = el('div','check' + (done ? ' checked' : ''), done ? '✓' : '');
+    if(onToggle){ check.onclick = function(){ onToggle(); save(); renderAll(); }; }
+    li.appendChild(check);
+    li.appendChild(el('div','item-label', label));
+    if(hint) li.appendChild(el('span','streak', hint));
+    return li;
+  }
 
-    var waterRow = document.getElementById('waterRow');
-    waterRow.innerHTML = '';
-    for(var i = 0; i < 8; i++){
-      (function(idx){
-        var g = el('div', 'glass' + (idx < l.waterGlasses ? ' filled' : ''), '●');
-        g.onclick = function(){
-          l.waterGlasses = (idx + 1 === l.waterGlasses) ? idx : idx + 1;
-          save(); renderLifestyle(); computeAndRenderNexus();
-        };
-        waterRow.appendChild(g);
-      })(i);
-    }
+  function renderRoutines(){
+    var tKey = todayKey();
+    var r = routineFor(tKey);
+    var items = routineItems(tKey);
+    var done = items.filter(function(it){ return it.done; }).length;
+    document.getElementById('routineTag').textContent = done + '/' + items.length + ' ERLEDIGT';
+
+    var focused = document.activeElement && document.activeElement.classList
+      && document.activeElement.classList.contains('routine-num');
+    if(focused) return; /* nicht neu bauen während getippt wird */
+
+    var morning = document.getElementById('morningRoutine');
+    morning.innerHTML = '';
+    morning.appendChild(routineNumberItem('Schlaf letzte Nacht', r.sleep, 'h', function(v){ r.sleep = v; }));
+    morning.appendChild(routineCheckItem('Tag geplant', (state.dayplan[tKey]||[]).length > 0, null, 'AUTO'));
+    morning.appendChild(routineCheckItem('Kein Handy erste 30 min', !!r.noPhone, function(){ r.noPhone = !r.noPhone; }));
+
+    var evening = document.getElementById('eveningRoutine');
+    evening.innerHTML = '';
+    evening.appendChild(routineNumberItem('Screen Time heute', r.screen, 'h', function(v){ r.screen = v; }));
+    var refl = state.reflections[tKey];
+    evening.appendChild(routineCheckItem('Reflexion geschrieben', reflHasContent(refl), function(){ switchView('reflexion'); }, 'AUTO'));
   }
 
   /* ---------- bewerbungen ---------- */
@@ -777,12 +885,17 @@
     streakList.innerHTML = '';
     var tKey = todayKey();
     state.habits.forEach(function(h){
-      var cur = streakAsOf(h.history, h.history[tKey] ? tKey : keyOffset(tKey,-1));
       var li = el('li','streak-item');
       li.appendChild(el('span','icon', h.icon));
       li.appendChild(el('div','slabel', h.label));
-      li.appendChild(el('span','scount', cur + 'd 🔥'));
-      li.appendChild(el('span','sbest', 'best ' + bestStreak(h.history) + 'd'));
+      if(h.mode === 'weekly'){
+        li.appendChild(el('span','scount', weekCount(h, tKey) + '/' + (h.target||1) + ' 🎯'));
+        li.appendChild(el('span','sbest', 'Wochenziel'));
+      } else {
+        var cur = streakAsOf(h.history, h.history[tKey] ? tKey : keyOffset(tKey,-1));
+        li.appendChild(el('span','scount', cur + 'd 🔥'));
+        li.appendChild(el('span','sbest', 'best ' + bestStreak(h.history) + 'd'));
+      }
       streakList.appendChild(li);
     });
 
@@ -813,6 +926,7 @@
     node.appendChild(b);
     node.appendChild(document.createTextNode(' · Habits ' + prog.habitsDone + '/' + prog.habitsTotal
       + ' · Plan ' + prog.planDone + '/' + prog.planTotal
+      + ' · Routine ' + prog.routineDone + '/' + prog.routineTotal
       + ' · Reflexion ' + (prog.reflected ? '✓' : '✗')));
   }
 
@@ -845,6 +959,8 @@
 
     var habitsLeft = prog.habitsTotal - prog.habitsDone;
     addSnap(snap, '🧠', 'Habits offen', habitsLeft === 0 ? 'Alle erledigt ✓' : habitsLeft + ' offen', habitsLeft === 0 ? 'good' : 'warn');
+
+    addSnap(snap, '🌅', 'Routine', prog.routineDone + '/' + prog.routineTotal, prog.routineDone === prog.routineTotal ? 'good' : 'warn');
 
     var blocks = (state.dayplan[tKey] || []).filter(function(b){ return !b.done; }).sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); });
     addSnap(snap, '📅', 'Nächster Block', blocks.length ? (blocks[0].time + ' ' + blocks[0].label) : 'Keiner offen', blocks.length ? '' : 'good');
@@ -895,11 +1011,13 @@
     ['high','med','low'].forEach(function(k){
       state.todos[k].forEach(function(t){ todoTotal++; if(t.done) todoDone++; });
     });
-    var stepsToday = state.fitness.steps[state.fitness.steps.length-1];
-    var fitnessPct = Math.min(100, Math.round((stepsToday/10000)*100));
-    var sleepPct = Math.min(100, Math.round((state.lifestyle.sleep/8)*100));
-    var waterPct = Math.min(100, Math.round((state.lifestyle.waterGlasses/8)*100));
-    var lifestylePct = Math.round((sleepPct+waterPct)/2);
+    var th = trainingHabit();
+    var weekWorkouts = th ? weekCount(th, tKey) : 0;
+    var weekTarget = th ? (th.target||1) : 1;
+    var fitnessPct = Math.min(100, Math.round((weekWorkouts/weekTarget)*100));
+    var rItems = routineItems(tKey);
+    var rDone = rItems.filter(function(it){ return it.done; }).length;
+    var routinePct = pct(rDone, rItems.length);
     var appsWeek = bewAppsThisWeek();
     var bewPct = Math.min(100, Math.round((appsWeek/2)*100));
 
@@ -907,8 +1025,8 @@
       ziele: { pct: pct(zieleAgg.done, zieleAgg.total), done:zieleAgg.done, total:zieleAgg.total, perTier: perTier },
       habits: { pct: pct(habitsDone, habitsTotal), done:habitsDone, total:habitsTotal },
       todos: { pct: pct(todoDone, todoTotal), done:todoDone, total:todoTotal, open: todoTotal-todoDone },
-      fitness: { pct: fitnessPct },
-      lifestyle: { pct: lifestylePct },
+      fitness: { pct: fitnessPct, week: weekWorkouts, target: weekTarget },
+      routines: { pct: routinePct, done: rDone, total: rItems.length },
       bewerbungen: { pct: bewPct, week: appsWeek }
     };
   }
@@ -969,8 +1087,8 @@
       {key:'habits', label:'HABITS', angle:-30, radius:150, color:'#a98bff', pct:stats.habits.pct, frac: stats.habits.done+'/'+stats.habits.total, target:'heute'},
       {key:'todos', label:'TO-DOS', angle:30, radius:150, color:'#ffb648', pct:stats.todos.pct, frac: stats.todos.open+' offen', target:'heute'},
       {key:'bewerbungen', label:'BEWERBUNGEN', angle:90, radius:150, color:'#ff5c6a', pct:stats.bewerbungen.pct, frac: stats.bewerbungen.week+' diese Woche', target:'bewerbungen'},
-      {key:'lifestyle', label:'LIFESTYLE', angle:150, radius:150, color:'#ff8fb0', pct:stats.lifestyle.pct, frac: stats.lifestyle.pct+'%', target:'heute'},
-      {key:'fitness', label:'FITNESS', angle:210, radius:150, color:'#4fd8ff', pct:stats.fitness.pct, frac: stats.fitness.pct+'%', target:'heute'}
+      {key:'routines', label:'ROUTINEN', angle:150, radius:150, color:'#ff8fb0', pct:stats.routines.pct, frac: stats.routines.done+'/'+stats.routines.total+' heute', target:'heute'},
+      {key:'fitness', label:'FITNESS', angle:210, radius:150, color:'#4fd8ff', pct:stats.fitness.pct, frac: stats.fitness.week+'/'+stats.fitness.target+' Workouts', target:'heute'}
     ];
 
     function pos(angleDeg, radius){
@@ -1026,7 +1144,7 @@
 
   function computeAndRenderNexus(){
     var stats = computeCategoryStats();
-    var overall = Math.round((stats.ziele.pct+stats.habits.pct+stats.todos.pct+stats.fitness.pct+stats.lifestyle.pct+stats.bewerbungen.pct)/6);
+    var overall = Math.round((stats.ziele.pct+stats.habits.pct+stats.todos.pct+stats.fitness.pct+stats.routines.pct+stats.bewerbungen.pct)/6);
     renderLegend(stats);
     buildNexus(stats, overall);
   }
@@ -1051,6 +1169,9 @@
       var tKey = todayKey();
       state.focus[tKey] = (state.focus[tKey] || 0) + 1;
       addLedger('⏱ Focus Session abgeschlossen', 1);
+      state.habits.forEach(function(h){
+        if(h.link === 'focus' && !h.history[tKey]) h.history[tKey] = true;
+      });
       save(); renderAll();
       return;
     }
@@ -1069,7 +1190,7 @@
     renderReflexion();
     renderTodos();
     renderFitness();
-    renderLifestyle();
+    renderRoutines();
     renderBewerbungen();
     renderRang();
     renderTimer();
@@ -1093,7 +1214,7 @@
       if(m) addPlanBlock(m[1].replace('.',':').padStart(5,'0'), m[2]);
       else addPlanBlock('', val);
     }
-    else if(target === 'habit') state.habits.push({id:uid(), label:val, icon:'⭐', history:{}, createdAt: todayKey()});
+    else if(target === 'habit') state.habits.push({id:uid(), label:val, icon:'⭐', history:{}, mode:'daily', createdAt: todayKey()});
     else if(target === 'ziele-woche') state.ziele.woche.push({id:uid(), label:val, done:false});
     else if(target === 'ziele-monat') state.ziele.monat.push({id:uid(), label:val, done:false});
     else if(target === 'ziele-jahr') state.ziele.jahr.push({id:uid(), label:val, done:false});
@@ -1110,7 +1231,7 @@
     var input = document.getElementById('habitInput');
     var val = input.value.trim();
     if(!val) return;
-    state.habits.push({id:uid(), label:val, icon:'⭐', history:{}, createdAt: todayKey()});
+    state.habits.push({id:uid(), label:val, icon:'⭐', history:{}, mode:'daily', createdAt: todayKey()});
     input.value = '';
     save(); renderAll();
   }
@@ -1166,30 +1287,9 @@
     document.getElementById(id).addEventListener('blur', function(){ renderAll(); });
   });
 
-  document.getElementById('stepsAddBtn').onclick = function(){
-    var f = state.fitness;
-    f.steps[f.steps.length-1] += 500;
-    save(); renderAll();
-  };
-  document.getElementById('calAddBtn').onclick = function(){
-    state.fitness.calories += 100;
-    save(); renderAll();
-  };
-  document.getElementById('workoutAddBtn').onclick = function(){
-    state.fitness.workouts += 1;
-    save(); renderAll();
-  };
   document.getElementById('statWeight').addEventListener('change', function(e){
     var v = parseFloat(e.target.value);
     if(!isNaN(v)){ state.fitness.weight = v; save(); renderFitness(); computeAndRenderNexus(); }
-  });
-  document.getElementById('statSleep').addEventListener('change', function(e){
-    var v = parseFloat(e.target.value);
-    if(!isNaN(v)){ state.lifestyle.sleep = v; save(); computeAndRenderNexus(); }
-  });
-  document.getElementById('statScreen').addEventListener('change', function(e){
-    var v = parseFloat(e.target.value);
-    if(!isNaN(v)){ state.lifestyle.screenTime = v; save(); }
   });
 
   document.getElementById('timerStartBtn').onclick = function(){
