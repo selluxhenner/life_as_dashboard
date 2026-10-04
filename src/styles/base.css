@@ -1,0 +1,77 @@
+/* Reset + global surface. Reads only tokens. */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  line-height: var(--lh-body);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  transition: background-color var(--t-slow) var(--ease-out);
+}
+
+/* Ambient layers above the map, below the app: dot grid, scanlines, grain. */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  z-index: var(--z-backdrop);
+  pointer-events: none;
+  background-image: radial-gradient(var(--grid-dot) 1px, transparent 1.2px);
+  background-size: 24px 24px;
+}
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  z-index: var(--z-backdrop);
+  pointer-events: none;
+  opacity: var(--scan-opacity);
+  background: repeating-linear-gradient(0deg, rgb(255 255 255 / .6) 0 1px, transparent 1px 3px);
+}
+.grain {
+  position: fixed; inset: -50%;
+  z-index: var(--z-backdrop);
+  pointer-events: none;
+  opacity: .045;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+h1, h2, h3, h4 { margin: 0; font-weight: 500; letter-spacing: var(--track-tight); line-height: var(--lh-tight); }
+p { margin: 0; }
+ul, ol { margin: 0; padding: 0; list-style: none; }
+a { color: var(--signal); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+::selection { background: color-mix(in oklab, var(--signal) 35%, transparent); color: var(--ink); }
+
+:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+/* scrollbars: thin hairlines */
+* { scrollbar-width: thin; scrollbar-color: var(--seam-strong) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--seam-strong); border-radius: var(--r-pill); border: 2px solid transparent; background-clip: padding-box; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.data { font-family: var(--font-data); font-size: .92em; letter-spacing: 0; }
+.micro {
+  font-family: var(--font-data);
+  font-size: var(--fs-micro);
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.muted { color: var(--ink-3); }
+.dim { color: var(--ink-2); }

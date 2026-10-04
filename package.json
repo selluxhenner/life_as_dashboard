@@ -1,0 +1,49 @@
+{
+  "name": "agentic-os",
+  "version": "1.0.0",
+  "description": "Agentic OS - personal AI operating system (desktop + Android)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "build:android": "vite build && npx cap sync android",
+    "world-dots": "node scripts/build-world-dots.mjs",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/selluxhenner/life_as_dashboard.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/selluxhenner/life_as_dashboard/issues"
+  },
+  "homepage": "https://github.com/selluxhenner/life_as_dashboard#readme",
+  "dependencies": {
+    "@capacitor-community/text-to-speech": "^8.0.2",
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/core": "^8.5.1",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/space-grotesk": "^5.3.0",
+    "@fontsource/doto": "^5.3.0",
+    "@tauri-apps/api": "^2.12.1",
+    "@tauri-apps/plugin-notification": "^2.5.1",
+    "chrono-node": "^2.10.2",
+    "d3-geo": "^3.1.1",
+    "d3-shape": "^3.2.0",
+    "suncalc": "^2.1.0",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.1",
+    "@tauri-apps/cli": "^2.12.1",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "LIFE OS // Dashboard",
+  "short_name": "LIFE OS",
+  "description": "Personal life dashboard - Tagesplan, Habits, Ziele, Reflexion, Bewerbungen.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#171a21",
+  "theme_color": "#171a21",
+  "orientation": "any",
+  "lang": "de",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

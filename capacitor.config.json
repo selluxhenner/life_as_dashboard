@@ -1,0 +1,9 @@
+{
+  "appId": "com.kevinschmid.lifeos",
+  "appName": "Agentic OS",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#05070A",
+    "allowMixedContent": false
+  }
+}

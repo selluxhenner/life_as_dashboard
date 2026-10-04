@@ -1,0 +1,171 @@
+/* ==========================================================================
+   AGENTIC OS — design tokens
+   One file holds every visual decision. Components only read these vars.
+   Themes: orbital (default) · ember · aurora  →  <html data-theme="…">
+   See DESIGN.md for the reasoning behind each group.
+   ========================================================================== */
+
+@import '@fontsource-variable/space-grotesk';
+@import '@fontsource-variable/jetbrains-mono';
+@import '@fontsource/doto/300.css';
+@import '@fontsource/doto/700.css';
+
+:root {
+  /* ---------- type ---------- */
+  --font-ui: 'Space Grotesk Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-data: 'JetBrains Mono Variable', ui-monospace, 'Cascadia Mono', monospace;
+  --font-dot: 'Doto', var(--font-data);
+
+  /* modular scale 1.25, base 15px */
+  --fs-micro: 10.5px;
+  --fs-xs: 12px;
+  --fs-sm: 13.5px;
+  --fs-md: 15px;
+  --fs-lg: 18.75px;
+  --fs-xl: 23.4px;
+  --fs-2xl: 29.3px;
+  --fs-3xl: 36.6px;
+  --fs-hero: clamp(44px, 6vw, 76px);
+  --track-micro: .14em;
+  --track-tight: -.02em;
+  --lh-body: 1.5;
+  --lh-tight: 1.15;
+
+  /* ---------- space (4px grid) ---------- */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px;
+  --s-6: 24px; --s-8: 32px; --s-10: 40px; --s-12: 48px; --s-16: 64px;
+
+  /* ---------- rounding ----------
+     Hierarchy, not one radius everywhere: chips are pills, controls are
+     sharp-ish, panels use a chamfer (cut corner) instead of a radius.        */
+  --r-xs: 2px;
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+  --chamfer: 12px;
+  --chamfer-sm: 7px;
+
+  /* ---------- motion ---------- */
+  --t-fast: 120ms;
+  --t-base: 220ms;
+  --t-slow: 480ms;
+  --t-draw: 650ms;
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+  /* critically-damped spring, sampled */
+  --ease-spring: linear(0, .009, .035 2.1%, .141 4.4%, .723 12.9%, .938 16.7%, 1.017 19.4%,
+                        1.067, 1.089 25.5%, 1.077 29.2%, 1.025 37.4%, .997 45.9%, .992 52.2%, 1);
+  --stagger: 40ms;
+
+  /* ---------- continent tones (shared by all themes) ----------
+     Same OKLCH lightness + chroma, only hue changes, so no region shouts. */
+  --tone-europe:   oklch(.74 .11 262);
+  --tone-africa:   oklch(.76 .12 62);
+  --tone-asia:     oklch(.72 .13 12);
+  --tone-mideast:  oklch(.80 .10 92);
+  --tone-namerica: oklch(.78 .10 185);
+  --tone-samerica: oklch(.80 .12 138);
+  --tone-oceania:  oklch(.74 .11 300);
+
+  /* ---------- z layers ---------- */
+  --z-backdrop: 0;
+  --z-app: 1;
+  --z-rail: 10;
+  --z-overlay: 50;
+  --z-palette: 60;
+  --z-boot: 100;
+}
+
+/* ===================== THEME · ORBITAL (default) ===================== */
+:root,
+[data-theme='orbital'] {
+  --void: #05070A;          /* page */
+  --hull: #0B1016;          /* panel */
+  --hull-2: #101821;        /* raised */
+  --seam: #1A2430;          /* hairline */
+  --seam-strong: #263445;
+  --ink: #E6EDF3;           /* text */
+  --ink-2: #A7B4C2;
+  --ink-3: #6B7A8C;         /* muted */
+  --signal: #4FE3FF;        /* primary accent */
+  --signal-2: #2AA9C9;
+  --flare: #FF4D5E;         /* alert */
+  --pulse: #7CFFB2;         /* ok */
+  --amber: #FFC857;         /* warning */
+  --on-signal: #02141A;
+
+  --panel-bg: color-mix(in oklab, var(--hull) 82%, transparent);
+  --panel-blur: 10px;
+  --panel-edge: inset 0 1px 0 rgb(255 255 255 / .05);
+  --glow: 0 0 24px color-mix(in oklab, var(--signal) 28%, transparent);
+  --glow-text: 0 0 10px color-mix(in oklab, var(--signal) 55%, transparent);
+  --grid-dot: rgb(79 227 255 / .055);
+  --scan-opacity: .035;
+  --night: rgb(2 4 8 / .62);
+  --map-dot-alpha: .55;
+  --clock-face: var(--font-dot);
+  color-scheme: dark;
+}
+
+/* ===================== THEME · EMBER (Nothing / TE) ===================== */
+[data-theme='ember'] {
+  --void: #080808;
+  --hull: #111111;
+  --hull-2: #181818;
+  --seam: #242424;
+  --seam-strong: #333333;
+  --ink: #F2F2F0;
+  --ink-2: #BDBDB8;
+  --ink-3: #7A7A75;
+  --signal: #FF5A1F;
+  --signal-2: #C9441A;
+  --flare: #FF3B3B;
+  --pulse: #FFD23F;
+  --amber: #FFD23F;
+  --on-signal: #160600;
+
+  --panel-bg: color-mix(in oklab, var(--hull) 92%, transparent);
+  --panel-blur: 0px;
+  --panel-edge: inset 0 1px 0 rgb(255 255 255 / .04);
+  --glow: 0 0 18px color-mix(in oklab, var(--signal) 22%, transparent);
+  --glow-text: none;
+  --grid-dot: rgb(255 255 255 / .06);
+  --scan-opacity: 0;
+  --night: rgb(0 0 0 / .66);
+  --map-dot-alpha: .5;
+  --clock-face: var(--font-dot);
+}
+
+/* ===================== THEME · AURORA (glass) ===================== */
+[data-theme='aurora'] {
+  --void: #07060B;
+  --hull: #100E1A;
+  --hull-2: #171427;
+  --seam: rgb(255 255 255 / .09);
+  --seam-strong: rgb(255 255 255 / .16);
+  --ink: #EDEBF5;
+  --ink-2: #B9B4CF;
+  --ink-3: #7D7896;
+  --signal: #8B7CFF;
+  --signal-2: #3DDBD9;
+  --flare: #FF6AD5;
+  --pulse: #3DDBD9;
+  --amber: #FFC87A;
+  --on-signal: #0B0720;
+
+  --panel-bg: rgb(255 255 255 / .045);
+  --panel-blur: 22px;
+  --panel-edge: inset 0 1px 0 rgb(255 255 255 / .12), inset 0 0 0 1px rgb(255 255 255 / .03);
+  --glow: 0 0 32px color-mix(in oklab, var(--signal) 30%, transparent);
+  --glow-text: 0 0 12px color-mix(in oklab, var(--signal) 50%, transparent);
+  --grid-dot: rgb(255 255 255 / .04);
+  --scan-opacity: 0;
+  --night: rgb(4 2 10 / .58);
+  --map-dot-alpha: .6;
+  --clock-face: var(--font-ui);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --t-fast: 0ms; --t-base: 0ms; --t-slow: 0ms; --t-draw: 0ms; --stagger: 0ms; }
+}

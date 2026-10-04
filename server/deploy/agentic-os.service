@@ -1,0 +1,25 @@
+# /etc/systemd/system/agentic-os.service
+[Unit]
+Description=Agentic OS server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=agentic
+Group=agentic
+WorkingDirectory=/srv/agentic-os/server
+EnvironmentFile=/etc/agentic-os.env
+ExecStart=/usr/bin/node --experimental-sqlite --disable-warning=ExperimentalWarning src/index.js
+Restart=always
+RestartSec=5
+# hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/srv/agentic-os/server/data
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

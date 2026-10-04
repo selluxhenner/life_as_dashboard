@@ -1,0 +1,11 @@
+{
+  "name": "Agentic OS",
+  "short_name": "Agentic OS",
+  "description": "Personal operating system: day, calendar, inbox, world news, AI and job hunt.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#05070A",
+  "theme_color": "#05070A",
+  "lang": "en",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

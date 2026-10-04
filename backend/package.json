@@ -1,0 +1,19 @@
+{
+  "name": "lifeos-api",
+  "version": "1.0.0",
+  "description": "LIFE OS API (Cloudflare Worker + D1)",
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "db:migrate:local": "wrangler d1 migrations apply lifeos --local",
+    "db:migrate:remote": "wrangler d1 migrations apply lifeos --remote",
+    "deploy": "wrangler deploy",
+    "test": "node --test test/api.test.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "wrangler": "^4.137.0"
+  },
+  "private": true
+}

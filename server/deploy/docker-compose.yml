@@ -1,0 +1,20 @@
+# ~/agentic-os/docker-compose.yml on the shared Hetzner box. nginx proxies 443 -> 127.0.0.1:3160.
+services:
+  server:
+    build: ./server
+    image: agentic-os-server:latest
+    container_name: agentic-os
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8787
+      DATA_DIR: /data
+    ports:
+      - "127.0.0.1:3160:8787"
+    volumes:
+      - ./data:/data
+    mem_limit: 384m
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }

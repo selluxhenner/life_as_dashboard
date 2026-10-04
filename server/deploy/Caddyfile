@@ -1,0 +1,30 @@
+# /etc/caddy/Caddyfile — automatic HTTPS for agentic-os.serviweb.ch
+agentic-os.serviweb.ch {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	# API + phone WebSocket -> Node
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8787
+	}
+
+	# Optional: the web build of the app (copy ../www here with deploy.sh --web)
+	handle {
+		root * /srv/agentic-os/www
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output file /var/log/caddy/agentic-os.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+	}
+}
