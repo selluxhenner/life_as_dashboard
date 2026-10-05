@@ -5,7 +5,7 @@ A personal operating system: day plan, calendar (Google + Fuxam lessons), inbox 
 | Part | Where | Tech |
 |---|---|---|
 | App (UI) | `src/` | Vite + vanilla JS modules. Design system in [DESIGN.md](DESIGN.md) |
-| Desktop | `src-tauri/` | Tauri 2: global hotkey **Ctrl+Alt+Space**, tray icon, starts with Windows |
+| Desktop | `src-tauri/` | Tauri 2: global hotkey **Ctrl+Alt+Space** (falls back to **Ctrl+Alt+O** if another app owns it; the tray tooltip shows the active one), tray icon, starts with Windows |
 | Android | `android/` | Capacitor |
 | Server | `server/` | Node 22 + Hono + SQLite, runs on Hetzner at `agentic-os.serviweb.ch` |
 
@@ -82,6 +82,8 @@ the server runs as the Docker container `agentic-os` on `127.0.0.1:3160`, behind
 ### 2. Pair your devices
 In the app, open **Settings → Server**. The URL is pre-filled. Paste the `API_TOKEN` and press **Pair this device**.
 - Each device gets its own revocable token. The master token is not stored on the device.
+- Paired devices share everything: tasks, jobs, plan blocks, week planner, habits, captures, goals, routines, reflections, focus sessions, weight and the theme. Sound and motion stay per device. The newest edit wins per item.
+- A device that already has data keeps it when it is paired: habits with the same name are combined, and plan blocks of the same day are put together.
 
 ### 3. Connections (Settings → Connections)
 **Google** (any number of accounts; Calendar and/or Gmail, read-only):

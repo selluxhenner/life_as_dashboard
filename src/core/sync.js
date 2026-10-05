@@ -1,6 +1,9 @@
-// Todo sync with the server (POST /api/sync). Last-writer-wins on updatedAt; tombstones for deletes.
-import { state, persist, notify } from './store.js';
+// Sync with the server: todos (POST /api/sync), jobs (/api/jobs/sync) and every other part of the state
+// as documents (/api/docs/sync, see docsync.js). Last-writer-wins on updatedAt; tombstones for deletes.
+import { state, persist, notify, onSave } from './store.js';
 import { apiConfig, apiFetch, setApiConfig } from './api.js';
+import { scan, outbox, acknowledge, receive, firstMerge } from './docsync.js';
+import { applyTheme } from './theme.js';
 
 const SYNC_BATCH = 200;
 const TOMBSTONE_TTL = 30 * 86400000;
@@ -56,6 +59,37 @@ async function syncJobs(cfg) {
   return changed;
 }
 
+/* Plan blocks, habits, captures, goals, routines, reflections, week planner, weight, shared settings. */
+async function syncDocs(cfg) {
+  const s = state.sync;
+  let changed = false;
+  if (!s.docs || !s.docsReady) {
+    // first sync of this device: take what the server has, combine, then upload what only this device has
+    s.docs = {}; s.docsDirty = {};
+    let since = 0;
+    const all = [];
+    for (;;) {
+      const r = await apiFetch(cfg, '/api/docs/sync', { since, upserts: [] });
+      all.push(...(r.docs || [])); since = r.cursor;
+      if (!r.more) break;
+    }
+    firstMerge(state, all);
+    s.docsCursor = since; s.docsReady = true;
+    changed = all.length > 0;
+  }
+  scan(state);
+  for (let round = 0; round < 20; round++) {
+    const sent = outbox(state);
+    const r = await apiFetch(cfg, '/api/docs/sync', { since: s.docsCursor, upserts: sent });
+    acknowledge(state, sent);
+    if (receive(state, r.docs || [])) changed = true;
+    s.docsCursor = r.cursor;
+    if (!r.more && !Object.keys(s.docsDirty).length) break;
+  }
+  if (changed) applyTheme(state.settings.theme);
+  return changed;
+}
+
 export async function runSync() {
   const cfg = apiConfig();
   if (!cfg) { setStatus('off'); return; }
@@ -79,7 +113,9 @@ export async function runSync() {
       const t = state.tasks.find(x => x.id === id);
       if (!t || t.updatedAt === sent[id]) delete state.sync.dirty[id];
     }
-    const changed = mergeRemote(res.todos || []) | await syncJobs(cfg);
+    // a server without /api/docs yet (not redeployed) must not break todo and job sync
+    const docs = await syncDocs(cfg).catch(e => { if (e && e.kind === 'server' && /not found|404/i.test(e.msg)) return false; throw e; });
+    const changed = mergeRemote(res.todos || []) | await syncJobs(cfg) | docs;
     state.sync.cursor = res.cursor;
     state.sync.lastSync = Date.now();
     persist();
@@ -129,7 +165,8 @@ export function initSync() {
   window.addEventListener('online', () => scheduleSync(0));
   window.addEventListener('focus', () => scheduleSync(0));
   document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleSync(0); });
-  setInterval(() => { if (!document.hidden) scheduleSync(0); }, 60000);
+  setInterval(() => { if (!document.hidden) scheduleSync(0); }, 30000);
+  onSave(() => scheduleSync(1500));               // any edit goes up a moment later
   setStatus(apiConfig() ? 'busy' : 'off');
   scheduleSync(0);
 }

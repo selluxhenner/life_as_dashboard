@@ -1,12 +1,13 @@
 import { Hono } from 'hono';
 import { config } from './config.js';
-import { HttpError } from './http.js';
+import { HttpError, page } from './http.js';
 import { requireAuth } from './auth.js';
 import { callback as googleCallback } from './connectors/google.js';
 import { twiml, callStatus, validTwilioSignature } from './phone/twilio.js';
 import { safeEqual, hmac } from './lib/crypto.js';
 import { todos } from './routes/todos.js';
 import { jobs } from './routes/jobs.js';
+import { docs } from './routes/docs.js';
 import { connections } from './routes/connections.js';
 import { voice } from './routes/voice.js';
 import { misc } from './routes/misc.js';
@@ -37,6 +38,9 @@ app.onError((err, c) => {
 /* ---------- public endpoints (own verification) ---------- */
 app.get('/api/health', c => c.json({ ok: true, version: '2.0.0' }));
 app.get('/api/oauth/google/callback', c => googleCallback(new URL(c.req.url)));
+// Home page + privacy policy URLs for the Google OAuth consent screen.
+app.get('/api/home', () => page('Agentic OS', 'A private personal dashboard for one person. It is not a public service and has no sign-up.'));
+app.get('/api/privacy', () => page('Privacy policy', 'Agentic OS is used by its owner only. With your consent it reads your Google Calendar and Gmail (read-only for mail) to show them in your own dashboard. Data is stored encrypted on the owner\'s server, never sold or shared, and is only passed to the AI provider to write summaries for you. You can revoke access at any time in your Google account under Security → Third-party access, and the data is then deleted on request. Contact: p.henner.18@gmail.com'));
 
 const twilioOk = async (c, id) => {
   const params = Object.fromEntries(Object.entries(await c.req.parseBody()).map(([k, v]) => [k, String(v)]));
@@ -53,6 +57,7 @@ const api = new Hono();
 api.use('*', requireAuth);
 api.route('/', todos);
 api.route('/', jobs);
+api.route('/', docs);
 api.route('/', connections);
 api.route('/', voice);
 api.route('/', misc);

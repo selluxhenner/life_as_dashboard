@@ -38,18 +38,17 @@ import settings from './views/settings.js';
 import lab from './views/lab.js';
 import captures from './views/captures.js';
 import { unsorted } from './features/capture/captures.js';
-import { initHealth } from './features/health/garmin.js';
 import { initNotifications } from './core/notifications.js';
 
 const ROUTES = [
-  { id: 'home', label: 'Home', icon: 'home', view: home, dock: true, key: 'G H' },
-  { id: 'captures', label: 'Captures', icon: 'capture', view: captures, dock: true, key: 'G N' },
+  { id: 'home', label: 'Home', short: 'Overview', icon: 'home', view: home, dock: true, key: 'G H' },
+  { id: 'captures', label: 'Captures', short: 'Notes', icon: 'capture', view: captures, dock: true, key: 'G N' },
   { id: 'today', label: 'Today', icon: 'today', view: today, dock: true, key: 'G T' },
-  { id: 'calendar', label: 'Calendar', icon: 'calendar', view: calendar, dock: true, key: 'G C' },
+  { id: 'calendar', label: 'Calendar', icon: 'calendar', view: calendar, key: 'G C' },
   { id: 'inbox', label: 'Inbox', icon: 'inbox', view: inbox, key: 'G I' },
   { id: 'news', label: 'World', icon: 'globe', view: news, key: 'G W' },
   { id: 'ai', label: 'AI', icon: 'spark', view: ai, key: 'G A' },
-  { id: 'jobs', label: 'Jobs', icon: 'briefcase', view: jobs, dock: true, key: 'G J' },
+  { id: 'jobs', label: 'Jobs', icon: 'briefcase', view: jobs, key: 'G J' },
   { id: 'goals', label: 'Goals', icon: 'target', view: goals },
   { id: 'reflection', label: 'Reflect', icon: 'journal', view: reflection },
   { id: 'rank', label: 'Rank', icon: 'rank', view: rankView, hidden: () => !pointsOn() },
@@ -64,9 +63,9 @@ const mark = () => h('svg', { viewBox: '0 0 32 32', 'aria-hidden': 'true' },
   h('path', { d: 'M16 3a13 13 0 0 1 0 26', fill: 'none', stroke: 'var(--signal)', 'stroke-width': 1.6 }),
   h('circle', { cx: 16, cy: 16, r: 3.2, fill: 'var(--signal)' }));
 
-function navLinks(filter) {
+function navLinks(filter, short = false) {
   return routeList().filter(r => r.id !== 'lab').filter(filter).map(r =>
-    h('a', { href: '#/' + r.id, dataset: { route: r.id }, title: r.label }, icon(r.icon), h('span', r.label)));
+    h('a', { href: '#/' + r.id, dataset: { route: r.id }, title: r.label }, icon(r.icon), h('span', short && r.short || r.label)));
 }
 
 const clockEl = h('span.clock.data');
@@ -79,7 +78,7 @@ const dock = h('nav.dock', { 'aria-label': 'Main' });
 
 function buildNav() {
   rail.replaceChildren(h('div.mark', mark()), ...navLinks(r => !r.bottom), h('div.spacer'), ...navLinks(r => r.bottom));
-  dock.replaceChildren(...navLinks(r => r.dock), h('button', { type: 'button', onclick: openSheet }, icon('more'), h('span', 'More')));
+  dock.replaceChildren(...navLinks(r => r.dock, true), h('button', { type: 'button', onclick: openSheet }, icon('more'), h('span', 'More')));
   markCurrent();
 }
 function markCurrent() {
@@ -94,7 +93,7 @@ function markCurrent() {
 }
 function openSheet() {
   const sheet = h('div.sheet', { onclick: e => { if (e.target === sheet || e.target.closest('a')) sheet.remove(); } },
-    h('div.panel', h('nav', navLinks(() => true))));
+    h('div.panel', h('nav', navLinks(r => !r.dock))));
   document.body.append(sheet);
   markCurrent();
 }
@@ -187,7 +186,6 @@ async function start() {
   initCal();
   initPalette();
   initNotifications();
-  initHealth();
   updatePings();
 
   if ('serviceWorker' in navigator && platform.kind === 'web' && import.meta.env.PROD) {

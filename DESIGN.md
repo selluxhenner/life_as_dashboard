@@ -95,7 +95,7 @@ Stacked from back to front:
 ## Screen sizes (`styles/responsive.css`)
 | Width / height | Layout |
 |---|---|
-| ≤ 860px | Phone: dock, single column, Garmin tiles scroll sideways |
+| ≤ 860px | Phone: dock, single column, calendar opens on Day, input rows stack, dimmer map |
 | 861–1440px wide **or** ≤ 900px tall | Laptop density: 64px rail, 44px status bar, 16px panel padding, the clock scales with window height so Home's panels start in the first screen |
 | ≤ 720px tall | Icon-only rail (browser chrome on a 768px laptop) |
 | ≥ 1680px | Wide canvas (1760px, 2080px from 2300px); Home uses 4 columns |

@@ -93,7 +93,7 @@ export function routineFor(dk) {
 export function routineItems(dk) {
   const r = state.routines[dk] || {};
   return [
-    { key: 'sleep', part: 'morning', label: 'Sleep logged', done: hasVal(r.sleep) || hasVal(((state.health && state.health.days[dk]) || {}).sleepHours) },
+    { key: 'sleep', part: 'morning', label: 'Sleep logged', done: hasVal(r.sleep) },
     { key: 'plan', part: 'morning', label: 'Day planned', done: (state.dayplan[dk] || []).length > 0 },
     { key: 'noPhone', part: 'morning', label: 'No phone for the first 30 min', done: !!r.noPhone },
     { key: 'screen', part: 'evening', label: 'Screen time logged', done: hasVal(r.screen) }

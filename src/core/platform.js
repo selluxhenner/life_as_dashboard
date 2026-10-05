@@ -21,3 +21,7 @@ export async function windowAction(action) {
   if (action === 'max') return (await w.isMaximized()) ? w.unmaximize() : w.maximize();
   if (action === 'close') return w.hide();
 }
+
+/* Phone-sized screen (matches the CSS breakpoint). Views use it to show a slimmer layout. */
+export const phoneQuery = typeof window !== 'undefined' ? matchMedia('(max-width: 860px)') : { matches: false, addEventListener() {} };
+export const isPhone = () => phoneQuery.matches;

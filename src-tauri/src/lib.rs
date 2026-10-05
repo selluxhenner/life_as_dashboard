@@ -13,7 +13,10 @@ fn show(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.unminimize();
         let _ = w.show();
+        // Windows blocks focus stealing; a short always-on-top pulse reliably brings the window forward.
+        let _ = w.set_always_on_top(true);
         let _ = w.set_focus();
+        let _ = w.set_always_on_top(false);
     }
 }
 

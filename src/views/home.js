@@ -13,10 +13,10 @@ import { go } from '../core/router.js';
 import { decode, tick, toast } from '../core/fx.js';
 import { icon } from '../core/icons.js';
 import { TYPES, typeOf, liveCaptures, unsorted, captureText, setType } from '../features/capture/captures.js';
-import { vitalsStrip } from '../features/health/garmin.js';
 import { briefingPanel } from './briefing-panel.js';
 import { worldPulsePanel } from './news.js';
 import { rankCard } from '../features/points/points.js';
+import { phoneQuery, isPhone } from '../core/platform.js';
 
 let chrono = null;
 
@@ -87,13 +87,13 @@ const fmtIn = m => m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + pad2(m % 6
 function tasksPanel() {
   const open = liveTasks().filter(t => !t.done).sort((a, b) => ({ high: 0, med: 1, low: 2 }[a.priority] - { high: 0, med: 1, low: 2 }[b.priority]));
   const list = h('div.rows');
-  open.slice(0, 7).forEach(t => list.append(h('div.row', { class: 'prio-' + t.priority },
+  open.slice(0, isPhone() ? 5 : 7).forEach(t => list.append(h('div.row', { class: 'prio-' + t.priority },
     check(false, () => toggleTask(t), 'Complete task'),
     h('div.grow', h('div.title', t.title)),
     t.priority === 'high' ? chip('high', 'alert') : t.due ? chip(fmt.short(t.due), 'plain') : null)));
   if (!open.length) list.append(empty('Inbox zero for tasks', 'Everything is done.'));
   return panel({ title: 'Tasks', readout: h('span', h('b', String(open.length)), ' open'), actions: [h('button.btn.sm.ghost', { type: 'button', onclick: () => go('today') }, 'All')] }, list,
-    open.length > 7 ? h('div.hint', `+ ${open.length - 7} more on Today`) : null);
+    open.length > (isPhone() ? 5 : 7) ? h('div.hint', `+ ${open.length - (isPhone() ? 5 : 7)} more on Today`) : null);
 }
 
 function habitsPanel() {
@@ -136,7 +136,7 @@ function principle() {
 const WIDE = matchMedia('(min-width: 1680px)');
 const MID = matchMedia('(min-width: 1181px)');
 const NARROW = matchMedia('(min-width: 861px)');
-[WIDE, MID, NARROW].forEach(q => q.addEventListener('change', () => notify()));
+[WIDE, MID, NARROW, phoneQuery].forEach(q => q.addEventListener('change', () => notify()));
 function columns() {
   const P = {
     upNext: upNext(), tasks: tasksPanel(), habits: habitsPanel(), captures: capturesPanel(),
@@ -149,9 +149,27 @@ function columns() {
   return h('div.grid.home-grid', { style: { '--cols': cols.length } }, cols.map(c => h('div.stack', c.map(k => P[k]))));
 }
 
+/* Phone: a short overview only. What's next, what to do, habits. Notes and Today have their own tabs. */
+function phoneOverview(root) {
+  const s = dayScore();
+  const title = h('h1.hero-title');
+  root.append(h('div.view.home.home-phone',
+    h('section.phone-hero',
+      title,
+      h('div.hero-sub', fmt.long(new Date()) + ' · ' + state.settings.home.city, h('span.day-score.data', 'Day ' + s.score + '%'))),
+    captureBar(),
+    h('div.stack', upNext(), briefingPanel(), tasksPanel(), habitsPanel())));
+  return title;
+}
+
 export default {
   id: 'home',
   render(root) {
+    if (isPhone()) {
+      const title = phoneOverview(root);
+      title.textContent = greeting() + ', ' + state.name + '.';
+      return;
+    }
     const tk = todayKey();
     const agenda = agendaFor(tk).filter(i => !i.allDay && i.start != null);
     chrono = createChronosphere({ lat: state.settings.home.lat, lon: state.settings.home.lon, size: 400 });
@@ -166,7 +184,6 @@ export default {
         h('div.hero-side',
           h('div.hero-greet', title, h('div.hero-sub', fmt.long(new Date()) + ' · ' + state.settings.home.city)),
           captureBar(),
-          vitalsStrip(),
           briefingPanel())),
       columns()));
     const text = greeting() + ', ' + state.name + '.';

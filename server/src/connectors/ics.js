@@ -15,6 +15,28 @@ export async function fetchIcs(url) {
   return text;
 }
 
+// Zone for times without a usable offset (floating, or a TZID the feed never defines — Fuxam does this).
+const FALLBACK_TZ = process.env.CALENDAR_TZ || 'Europe/Berlin';
+const validTz = id => { try { return id && Intl.DateTimeFormat('en', { timeZone: id }) && id; } catch { return null; } };
+
+// Offset of an IANA zone at a given instant, in ms.
+function tzOffset(ms, tz) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    .formatToParts(new Date(ms)).map(x => [x.type, +x.value]));
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - ms;
+}
+
+// ICAL.Time -> JS Date. Wall-clock times are read in their TZID (or FALLBACK_TZ), never the server's zone.
+function toInstant(t, tzid) {
+  const tzName = t.zone?.tzid;
+  if (tzName === 'UTC' || (tzName && tzName !== 'floating' && ICAL.TimezoneService.has(tzName))) return t.toJSDate();
+  const tz = validTz(tzid) || validTz(FALLBACK_TZ) || 'UTC';
+  const wall = Date.UTC(t.year, t.month - 1, t.day, t.hour, t.minute, t.second);
+  let ms = wall - tzOffset(wall, tz);
+  ms = wall - tzOffset(ms, tz); // second pass settles DST boundaries
+  return new Date(ms);
+}
+
 /* Returns [{uid, title, start, end, allDay, location}] overlapping [from, to). */
 export function expand(icsText, from, to) {
   const comp = new ICAL.Component(ICAL.parse(icsText));
@@ -30,11 +52,12 @@ export function expand(icsText, from, to) {
   }
   const push = (ev, start, end) => {
     const allDay = start.isDate;
+    const tzOf = name => ev.component.getFirstProperty(name)?.getParameter('tzid');
     out.push({
       uid: ev.uid + ':' + start.toString(),
       title: ev.summary || '(no title)',
-      start: allDay ? start.toString().slice(0, 10) : start.toJSDate().toISOString(),
-      end: allDay ? end.toString().slice(0, 10) : end.toJSDate().toISOString(),
+      start: allDay ? start.toString().slice(0, 10) : toInstant(start, tzOf('dtstart')).toISOString(),
+      end: allDay ? end.toString().slice(0, 10) : toInstant(end, tzOf('dtend') || tzOf('dtstart')).toISOString(),
       allDay,
       location: ev.location || null
     });

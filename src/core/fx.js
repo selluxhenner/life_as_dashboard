@@ -3,11 +3,11 @@ import { h } from './dom.js';
 import { state } from './store.js';
 
 const GLYPHS = '01<>/\\[]{}=+*#%&ABCDEFHKLMNPRSTXZ';
-const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches || state.settings.motion === 'calm';
+export const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches || state.settings.motion === 'calm';
 
 /* Scrambles through glyphs, then settles on the final text (~300ms). */
 export function decode(node, text, duration = 320) {
-  if (reduced()) { node.textContent = text; return; }
+  if (reducedMotion()) { node.textContent = text; return; }
   const start = performance.now();
   node.classList.add('decoding');
   const step = now => {

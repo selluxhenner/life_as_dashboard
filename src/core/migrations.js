@@ -19,9 +19,6 @@ export function defaultSettings() {
   };
 }
 
-/* Garmin metrics, one record per day: { bodyBattery, sleepScore, sleepHours, hrv, restingHr, stress, steps, readiness }. */
-export const freshHealth = () => ({ days: {}, source: 'manual', lastSync: 0 });
-
 export function freshState() {
   const today = todayKey();
   return {
@@ -49,7 +46,6 @@ export function freshState() {
     sync: { cursor: 0, dirty: {}, lastSync: 0 },
     gcal: { connected: false, pushed: {}, events: [], range: null, lastFetch: 0 },
     captures: [],
-    health: freshHealth(),
     settings: defaultSettings()
   };
 }
@@ -76,7 +72,7 @@ export function migrate(s) {
   if (!s.sync) s.sync = { cursor: 0, dirty: {}, lastSync: 0 };
   if (!s.gcal) s.gcal = { connected: false, pushed: {}, events: [], range: null, lastFetch: 0 };
   if (!Array.isArray(s.captures)) s.captures = [];
-  if (!s.health || !s.health.days) s.health = freshHealth();
+  delete s.health;                 // Garmin vitals were dropped
   s.settings = { ...defaultSettings(), ...(s.settings || {}) };
   s.settings.flags = { ...defaultSettings().flags, ...(s.settings.flags || {}) };
   english(s);

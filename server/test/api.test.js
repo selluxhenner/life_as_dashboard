@@ -137,3 +137,21 @@ test('usage reports a monthly cap', async () => {
   const r = await api('GET', '/api/usage');
   assert.equal(r.body.usage.aiCapUsd, 40);
 });
+
+test('docs sync: last write wins, tombstones, paging cursor', async () => {
+  const t = Date.now();
+  const a = await api('POST', '/api/docs/sync', { since: 0, upserts: [
+    { key: 'dayplan:2026-10-05', value: [{ id: 'b1', time: '09:00', label: 'Deep work', done: false }], updatedAt: t },
+    { key: 'habit:h1', value: { id: 'h1', label: 'Training', history: {} }, updatedAt: t }
+  ] });
+  assert.equal(a.status, 200);
+  assert.equal(a.body.docs.length, 2);
+  // an older write loses
+  await api('POST', '/api/docs/sync', { since: a.body.cursor, upserts: [{ key: 'dayplan:2026-10-05', value: [], updatedAt: t - 1000 }] });
+  const b = await api('POST', '/api/docs/sync', { since: 0, upserts: [] });
+  assert.equal(b.body.docs.find(d => d.key === 'dayplan:2026-10-05').value[0].label, 'Deep work');
+  // a delete is a tombstone other devices receive
+  const c = await api('POST', '/api/docs/sync', { since: b.body.cursor, upserts: [{ key: 'habit:h1', deleted: true, updatedAt: t + 1 }] });
+  assert.deepEqual(c.body.docs.map(d => [d.key, d.deleted]), [['habit:h1', true]]);
+  assert.equal((await api('POST', '/api/docs/sync', { since: 0, upserts: [{ key: 'bad key!', value: 1, updatedAt: t }] })).status, 400);
+});

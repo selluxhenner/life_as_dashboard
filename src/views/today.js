@@ -1,5 +1,5 @@
 import { h } from '../core/dom.js';
-import { state, save } from '../core/store.js';
+import { state, save, notify } from '../core/store.js';
 import { todayKey, fmt, hm } from '../core/dates.js';
 import { panel } from '../components/panel.js';
 import { viewHead, check, removeBtn, addRow, empty, meter, chip, select } from '../components/ui.js';
@@ -10,7 +10,9 @@ import {
 import { agendaFor } from '../core/agenda.js';
 import { focusTimer } from '../components/timer.js';
 import { go } from '../core/router.js';
-import { garminPanel, latest } from '../features/health/garmin.js';
+import { phoneQuery, isPhone } from '../core/platform.js';
+
+phoneQuery.addEventListener('change', () => notify());
 
 let todoPrio = 'med';
 let timer = null;
@@ -88,7 +90,7 @@ function routines() {
   return panel({ title: 'Routines', readout: h('span', h('b', `${items.filter(i => i.done).length}/${items.length}`), ' done') },
     h('div.micro', { style: { margin: '0 0 4px' } }, 'Morning'),
     h('div.rows',
-      r.sleep == null && latest('sleepHours') ? h('div.row.done-soft', check(true, () => {}, 'Sleep from Garmin'), h('div.grow', h('div.title', 'Sleep last night')), h('span.data', latest('sleepHours').value.toFixed(1)), h('span.data.muted', 'h · Garmin')) : num('Sleep last night', 'sleep', 'h'),
+      num('Sleep last night', 'sleep', 'h'),
       auto('Day planned', (state.dayplan[tk] || []).length > 0),
       h('div.row', check(!!r.noPhone, () => { r.noPhone = !r.noPhone; save(); }, 'No phone first 30 min'), h('div.grow', h('div.title', 'No phone for the first 30 min')))),
     h('div.micro', { style: { margin: '14px 0 4px' } }, 'Evening'),
@@ -137,14 +139,21 @@ function tasks() {
 export default {
   id: 'today',
   render(root) {
+    // Phone: just the day. Plan, tasks, habits, routines. Focus timer and weight stay on desktop.
+    if (isPhone()) {
+      root.append(h('div.view.today-phone',
+        viewHead('Today', fmt.long(new Date())),
+        h('div.stack', dayPlan(), tasks(), habits(), routines())));
+      return;
+    }
     timer = focusTimer();
     root.append(h('div.view',
       viewHead('Today', fmt.long(new Date())),
       h('div.grid.g-today',
         dayPlan(),
         h('div.stack', timer.el, routines())),
-      h('div.grid.g-today.today-row', h('div', garminPanel()), h('div.stack', fitness(), habits())),
+      h('div.grid.g-2.today-row', fitness(), habits()),
       h('div', { style: { marginTop: '16px' } }, tasks())));
   },
-  unmount() { if (timer) timer.destroy(); }
+  unmount() { if (timer) { timer.destroy(); timer = null; } }
 };

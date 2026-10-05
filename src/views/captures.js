@@ -14,6 +14,7 @@ import {
 } from '../features/capture/captures.js';
 import { PRIORITIES } from '../core/model.js';
 import { render } from '../core/router.js';
+import { isPhone } from '../core/platform.js';
 
 let filter = 'all';
 let sort = 'new';
@@ -46,7 +47,7 @@ const createdKey = c => { const d = new Date(c.createdAt); return d.getFullYear(
 function dumpBox() {
   const ta = h('textarea.field.dump', {
     rows: 3, 'aria-label': 'Brain dump',
-    placeholder: 'Brain dump. One thought per line, sort later.\nDates like “Fri 15:00” or “tomorrow” are picked up.'
+    placeholder: isPhone() ? 'Write a note…' : 'Brain dump. One thought per line, sort later.\nDates like “Fri 15:00” or “tomorrow” are picked up.'
   });
   const submit = () => {
     if (!ta.value.trim()) { ta.focus(); return; }
@@ -58,7 +59,7 @@ function dumpBox() {
   };
   ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } });
   return panel({ title: 'Capture', cls: 'dump-panel', readout: 'Enter saves · Shift+Enter new line' },
-    ta, h('div.dump-foot', h('span.hint', 'Paste a whole list: every line becomes its own capture.'), h('button.btn.primary', { type: 'button', onclick: submit }, icon('plus'), 'Capture')));
+    ta, h('div.dump-foot', h('span.hint', isPhone() ? 'Dates like “Fri 15:00” are picked up.' : 'Paste a whole list: every line becomes its own capture.'), h('button.btn.primary', { type: 'button', onclick: submit }, icon('plus'), isPhone() ? 'Save' : 'Capture')));
 }
 
 /* ---------- sorter ---------- */
@@ -182,7 +183,8 @@ export default {
   render(root) {
     const s = sorter();
     root.append(h('div.view.captures',
-      viewHead('Captures', 'Write everything down first. Decide later if it’s a note, task, habit, goal or meeting.'),
+      isPhone() ? viewHead('Notes', 'Write it down now. Sort it later.')
+        : viewHead('Captures', 'Write everything down first. Decide later if it’s a note, task, habit, goal or meeting.'),
       h('div.cap-top' + (s ? '' : '.solo'), dumpBox(), s),
       listPanel()));
     bindKeys();

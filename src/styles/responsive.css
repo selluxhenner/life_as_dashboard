@@ -65,4 +65,59 @@
   .hero { grid-template-columns: minmax(0, 1fr); }
   .hero .chronosphere { width: min(340px, 86vw); }
   .capture-count { padding: 0 var(--s-3); }
+
+  /* the world map sits behind text on a narrow screen: keep it as atmosphere */
+  #backdrop { opacity: .5; }
+  .view-head .sub { text-shadow: 0 1px 8px var(--void); }
+
+  /* inputs with a prefix control (time, type): text field gets its own line */
+  .input-row:has(> .narrow) { flex-wrap: wrap; }
+  .input-row:has(> .narrow) > .field:not(.narrow) { flex: 1 0 100%; order: -1; }
+  .input-row:has(> .narrow) > .narrow { flex: 1 1 auto; }
+  .job-add .field:nth-child(2) { flex: 1 0 100%; }
+
+  /* calendar header: view switch on one line, prev / today / next below */
+  .calendar .view-head .actions .seg { flex: 1 1 100%; }
+  .calendar .view-head .actions .seg button { flex: 1; }
+  .calendar .view-head .actions > .btn:not(.icon) { flex: 1; }
+  .cal-range { min-width: 0; }
+  .cal-bar .qa { min-width: 0; flex: 1 0 100%; }
+  /* week on a phone: ~2.5 days in view, swipe sideways day by day */
+  .cal-grid.multi { --colw: 38vw; }
+  .cal-grid.multi .cg-top, .cal-grid.multi .cg-body { width: max-content; min-width: 100%; }
+  .cal-grid.multi .cg-scroll { scroll-snap-type: x mandatory; scroll-padding-left: var(--gut); overscroll-behavior-x: contain; }
+  .cal-grid.multi .cg-col { scroll-snap-align: start; }
+  .cg-scroll { max-height: calc(100dvh - 160px); min-height: 360px; }
+
+  /* chat fits between the header and the dock */
+  .chat { height: calc(100dvh - 330px); min-height: 360px; }
+
+  /* bigger touch targets */
+  .seg button { height: 34px; }
+  .btn.icon:not(.sm) { width: 40px; height: 40px; }
+}
+
+/* very narrow phones (≤ 380px) */
+@media (max-width: 380px) {
+  main { padding-left: var(--s-3); padding-right: var(--s-3); }
+  .panel { --pad: var(--s-4); }
+  .hero-title { font-size: 34px; }
+  .g-4.job-stats { gap: var(--s-2); }
+}
+
+/* ---------- phone: Overview / Notes / Today ---------- */
+@media (max-width: 860px) {
+  .home-phone { display: flex; flex-direction: column; gap: var(--s-4); }
+  .phone-hero .hero-title { font-size: 32px; }
+  .phone-hero .hero-sub { display: flex; flex-wrap: wrap; gap: 4px var(--s-3); align-items: baseline; }
+  .day-score { color: var(--signal); }
+  .home-phone .capture-bar { display: flex; gap: var(--s-2); }
+  .home-phone .capture-bar .field.capture { flex: 1; height: 46px; }
+  .home-phone .up-next .tl-item { min-height: 0; }
+  .captures .cap-top { margin-bottom: var(--s-4); }
+  .captures .dump { min-height: 84px; font-size: 16px; }   /* 16px stops iOS/Android zooming on focus */
+  .captures .dump-foot .btn.primary { height: 42px; padding: 0 var(--s-5); }
+  .captures .sorter-text { font-size: var(--fs-lg); }
+  .captures .type-btn { height: 40px; }
+  .today-phone .stack { gap: var(--s-4); }
 }

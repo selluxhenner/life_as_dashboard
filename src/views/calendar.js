@@ -11,7 +11,7 @@ import { toast } from '../core/fx.js';
 import * as chrono from 'chrono-node';
 
 const DAY_START = 6 * 60, DAY_END = 24 * 60, HOUR_PX = 52;
-let mode = 'week';          // week | day | planner
+let mode = matchMedia('(max-width: 860px)').matches ? 'day' : 'week';   // week | day | planner — phones start on Day
 let anchor = todayKey();    // any day inside the shown range
 let selected = null;        // event detail
 let clock = null;
@@ -79,9 +79,15 @@ function timeGrid(days) {
     return col;
   });
   const body = h('div.cg-body', { style: { height: y(DAY_END) + 'px' } }, gutter, h('div.cg-cols', { style: { '--n': days.length } }, cols));
-  const scroller = h('div.cg-scroll', body);
-  requestAnimationFrame(() => { scroller.scrollTop = Math.max(0, y(Math.max(DAY_START, Math.min(nowMin, 22 * 60)) - 90)); });
-  return h('div.cal-grid', { style: { '--n': days.length } }, head, allDay, scroller);
+  // one scroller for both axes: the day header sticks to the top, the hour gutter to the left
+  // (on phones the week is wider than the screen and scrolls sideways, day by day)
+  const scroller = h('div.cg-scroll', h('div.cg-top', head, allDay), body);
+  requestAnimationFrame(() => {
+    scroller.scrollTop = Math.max(0, y(Math.max(DAY_START, Math.min(nowMin, 22 * 60)) - 90));
+    const today = scroller.querySelector('.cg-col.today');
+    if (today) scroller.scrollLeft = today.offsetLeft;
+  });
+  return h('div.cal-grid' + (days.length > 1 ? '.multi' : ''), { style: { '--n': days.length } }, scroller);
 }
 
 function addBlock(dk, time, title) {

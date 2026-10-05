@@ -3,13 +3,28 @@
    ========================================================================== */
 
 /* ---------- Chronosphere ---------- */
-.chronosphere { width: min(var(--size, 400px), 100%); aspect-ratio: 1; position: relative; }
+/* Geometry note: the SVG viewBox is 430 units wide, so in the HTML overlays
+   `closest-side` = 215 units. Seconds ring 92–96 → 42.8–44.65%, dial edge 206 → 95.8%. */
+.chronosphere {
+  width: min(var(--size, 400px), 100%); aspect-ratio: 1; position: relative;
+  container-type: inline-size;
+  transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transform-style: preserve-3d;
+  transition: transform .7s var(--ease-out);
+}
+.chronosphere.tilt { transition-duration: .18s; }
 .chronosphere svg { width: 100%; height: 100%; overflow: visible; }
+.chrono .tk, .chrono .hand, .chrono .sec-head, .chrono .pdot, .chrono .pfg, .chrono .shock, .chrono .orbit, .chrono .ring,
+.chrono .daylight, .chrono .events, .chrono .secs, .chrono .wake, .chrono .center, .chrono .ev { transform-box: view-box; transform-origin: 0 0; }
+
 .chrono .tk { stroke: var(--seam-strong); stroke-width: 1; }
 .chrono .tk.hour { stroke: var(--ink-3); }
 .chrono .tk.major { stroke: var(--ink-2); stroke-width: 1.5; }
 .chrono .hl { fill: var(--ink-3); font-family: var(--font-data); font-size: 10px; }
 .chrono .ring { fill: none; stroke: var(--seam); stroke-dasharray: 1 5; }
+.chrono .orbit { fill: none; stroke: color-mix(in oklab, var(--signal) 35%, transparent); stroke-width: .8; stroke-dasharray: 46 14 3 14 2 21; animation: orbit 120s linear infinite; }
+@keyframes orbit { to { transform: rotate(360deg); } }
+.chrono .wake path { fill: var(--signal); }
 .chrono .night { fill: color-mix(in oklab, var(--hull-2) 90%, transparent); stroke: var(--seam); stroke-width: .5; }
 .chrono .twilight { fill: color-mix(in oklab, var(--amber) 22%, var(--hull-2)); }
 .chrono .sun { fill: color-mix(in oklab, var(--amber) 48%, transparent); filter: drop-shadow(0 0 6px color-mix(in oklab, var(--amber) 50%, transparent)); }
@@ -19,20 +34,99 @@
 .chrono .ev { fill: color-mix(in oklab, var(--c) 70%, transparent); stroke: var(--c); stroke-width: .6; transition: opacity var(--t-base); }
 .chrono .ev.past { opacity: .35; }
 .chrono .ev.now { filter: drop-shadow(0 0 6px var(--c)); }
-.chrono .pbg { fill: var(--seam); }
-.chrono .pfg { fill: var(--ink-3); }
-.chrono .progress g:last-child .pfg, .chrono .pfg:nth-of-type(2) { fill: var(--signal); }
-.chrono .pdot { fill: var(--ink); }
-.chrono .sec { fill: var(--seam); transition: fill var(--t-fast); }
-.chrono .sec.on { fill: color-mix(in oklab, var(--signal) 70%, transparent); }
+.chrono .ev.ping { animation: ev-ping .9s ease-out; }
+@keyframes ev-ping { 0% { filter: brightness(2) drop-shadow(0 0 9px var(--c)); } }
+.chrono .pbg { fill: none; stroke: var(--seam); stroke-width: 3; }
+.chrono .pfg { fill: none; stroke: var(--ink-3); stroke-width: 3; stroke-linecap: round; transform: rotate(-90deg); transition: stroke-dasharray 1.6s var(--ease-out); }
+.chrono .pfg.w { stroke: var(--signal); }
+.chrono .pdot { fill: var(--ink); transition: transform 1.6s var(--ease-out); }
+.chrono .sec { fill: var(--seam); }
+.chrono .sec-head { fill: #fff; filter: drop-shadow(0 0 4px var(--signal)) drop-shadow(0 0 10px var(--signal)); }
 .chrono .hand-line { stroke: var(--signal); stroke-width: 1.4; filter: drop-shadow(0 0 4px var(--signal)); }
 .chrono .hand-dot { fill: var(--void); stroke: var(--signal); stroke-width: 2; }
-.chrono .hand-tip { fill: var(--signal); }
-.chrono .t-main { fill: var(--ink); font-family: var(--clock-face); font-weight: 700; font-size: 58px; letter-spacing: -.02em; }
-[data-theme='orbital'] .chrono .t-main, :root:not([data-theme]) .chrono .t-main { filter: drop-shadow(0 0 10px color-mix(in oklab, var(--signal) 45%, transparent)); }
+.chrono .hand-tip { fill: var(--signal); filter: drop-shadow(0 0 5px var(--signal)); }
+.chrono .shock { fill: none; stroke: var(--signal); stroke-width: 1.5; vector-effect: non-scaling-stroke; animation: shock 1.5s var(--ease-out) forwards; }
+@keyframes shock { from { transform: scale(1); opacity: .9; } to { transform: scale(2.15); opacity: 0; } }
 .chrono .t-date { fill: var(--ink-2); font-family: var(--font-ui); font-size: 13px; }
 .chrono .t-sun { fill: var(--ink-3); font-family: var(--font-data); font-size: 9.5px; }
 .chrono .t-top { fill: var(--ink-3); font-family: var(--font-data); font-size: 9.5px; letter-spacing: .08em; }
+
+/* seconds: a comet fills the segmented ring, its head at --sec */
+.chrono-comet, .chrono-radar, .chrono-glare { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
+.chrono-comet {
+  background: conic-gradient(
+    color-mix(in oklab, var(--signal) 22%, transparent) 0deg,
+    color-mix(in oklab, var(--signal) 22%, transparent) max(0deg, calc(var(--sec, 0deg) - 110deg)),
+    var(--signal) var(--sec, 0deg),
+    transparent var(--sec, 0deg));
+  --ring: radial-gradient(closest-side, transparent 42.6%, #000 42.8%, #000 44.65%, transparent 44.85%);
+  --segs: repeating-conic-gradient(from .69deg, #000 0 4.62deg, transparent 4.62deg 6deg);
+  -webkit-mask-image: var(--ring), var(--segs); -webkit-mask-composite: source-in;
+  mask-image: var(--ring), var(--segs); mask-composite: intersect;
+}
+/* radar beam sweeping the dial once a minute */
+.chrono-radar {
+  background: conic-gradient(from calc(var(--sec, 0deg) - 70deg),
+    transparent 0deg, color-mix(in oklab, var(--signal) 13%, transparent) 62deg,
+    color-mix(in oklab, var(--signal) 42%, transparent) 70deg, transparent 70.4deg);
+  -webkit-mask-image: radial-gradient(closest-side, transparent 46%, #000 54%, #000 92%, transparent 96%);
+  mask-image: radial-gradient(closest-side, transparent 46%, #000 54%, #000 92%, transparent 96%);
+  mix-blend-mode: screen;
+}
+.chrono-glare {
+  opacity: 0; transition: opacity .5s;
+  background: radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), color-mix(in oklab, var(--signal) 20%, transparent), transparent 42%);
+  mix-blend-mode: screen; transform: translateZ(60px);
+}
+.chronosphere.tilt .chrono-glare { opacity: 1; }
+
+/* the time: HTML so each digit can roll; floats above the dial when tilted */
+.chrono-time {
+  position: absolute; left: 50%; top: 48.6%;
+  transform: translate(-50%, -50%) translateZ(40px);
+  display: flex; align-items: center;
+  font-family: var(--clock-face); font-weight: 700; font-size: 12.2cqw; line-height: 1.08; letter-spacing: -.02em;
+  color: var(--ink); white-space: nowrap; pointer-events: none;
+}
+[data-theme='orbital'] .chrono-time, :root:not([data-theme]) .chrono-time { text-shadow: 0 0 .17em color-mix(in oklab, var(--signal) 45%, transparent); }
+.dg { position: relative; display: inline-block; clip-path: inset(0 -40%); }
+.dg-c { display: block; }
+.dg-c.out { position: absolute; left: 0; top: 0; animation: dg-out .6s var(--ease-out) forwards; }
+.dg-c.in { animation: dg-in .6s var(--ease-out) both; }
+.dg.flash { animation: dg-flash 1.1s ease-out; }
+@keyframes dg-out { to { transform: translateY(-90%) scaleY(.6); opacity: 0; filter: blur(3px); } }
+@keyframes dg-in { from { transform: translateY(90%) scaleY(.6); opacity: 0; filter: blur(3px); } }
+@keyframes dg-flash { 0%, 20% { color: var(--signal); text-shadow: 0 0 .3em var(--signal); } }
+.chrono-time .colon { animation: colon 2s ease-in-out infinite; }
+@keyframes colon { 50% { opacity: .3; } }
+
+/* boot sequence, first show only */
+.intro .tk { animation: tk-in .55s var(--ease-out) both; animation-delay: calc(var(--i) * 7ms); }
+@keyframes tk-in { from { opacity: 0; transform: scale(.5); } 60% { stroke: var(--signal); } }
+.intro .hl { animation: blur-in .6s var(--ease-out) both; animation-delay: calc(.35s + var(--i) * 45ms); }
+@keyframes blur-in { from { opacity: 0; filter: blur(4px); } }
+.intro .ring { animation: ring-in 1.1s var(--ease-out) both; }
+@keyframes ring-in { from { opacity: 0; transform: rotate(-140deg) scale(.86); } }
+.intro .daylight { animation: unfold 1s var(--ease-out) .3s both; }
+.intro .secs { animation: unfold .9s var(--ease-out) .5s both; }
+.intro .progress { animation: blur-in .6s ease .55s both; }
+@keyframes unfold { from { opacity: 0; transform: rotate(-35deg) scale(.9); } }
+.intro .ev { animation: ev-in .7s var(--ease-spring) both; animation-delay: calc(.65s + var(--i) * 70ms); }
+@keyframes ev-in { from { opacity: 0; transform: scale(.82); } }
+.intro .wake { animation: fade 1.2s ease 1.3s both; }
+.intro .center { animation: fade-up .7s var(--ease-out) .9s both; }
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } }
+.intro .chrono-comet, .intro .chrono-radar { animation: fade 1s ease .9s both; }
+.intro .chrono-time { animation: time-in .7s var(--ease-out) both; }
+@keyframes time-in { from { opacity: 0; letter-spacing: .35em; filter: blur(6px); } }
+@keyframes fade { from { opacity: 0; } }
+
+/* every full hour a ripple runs round the dial */
+.dial.ripple .tk { animation: tk-ripple 1.3s ease-out; animation-delay: calc(var(--i) * 9ms); }
+@keyframes tk-ripple { 25% { stroke: var(--signal); transform: scale(1.05); } }
+
+.chronosphere.calm .chrono-radar, .chronosphere.calm .orbit { display: none; }
+.chronosphere.calm .chrono-time .colon { animation: none; }
 
 /* ---------- Home ---------- */
 .hero { display: grid; grid-template-columns: minmax(300px, 440px) 1fr; gap: var(--s-8); align-items: start; margin-bottom: var(--s-6); }
@@ -120,7 +214,9 @@
 .cal-side { position: sticky; top: 76px; }
 .cal-panel { overflow: hidden; }
 .cal-grid { --gut: 56px; }
-.cg-head, .cg-allday { display: grid; grid-template-columns: var(--gut) repeat(var(--n), minmax(0, 1fr)); border-bottom: 1px solid var(--seam); }
+.cg-head, .cg-allday { display: grid; grid-template-columns: var(--gut) repeat(var(--n), var(--colw, minmax(0, 1fr))); border-bottom: 1px solid var(--seam); }
+.cg-top { position: sticky; top: 0; z-index: 4; background: var(--hull); }
+.cg-corner, .cg-gutter { position: sticky; left: 0; z-index: 3; background: var(--hull); }
 .cg-corner { display: flex; align-items: flex-end; padding: 6px 8px; }
 .cg-day { padding: 10px 10px 8px; display: flex; align-items: baseline; gap: 8px; border-left: 1px solid var(--seam); }
 .cg-wd { font-size: var(--fs-xs); color: var(--ink-3); }
@@ -130,11 +226,12 @@
 .ad-pill { border: 0; text-align: left; font-size: 11px; padding: 2px 6px; border-radius: var(--r-xs); color: var(--ink); background: color-mix(in oklab, var(--c) 18%, transparent); box-shadow: inset 2px 0 0 var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ad-pill.task.done { text-decoration: line-through; opacity: .6; }
 .cg-scroll { max-height: calc(100vh - 290px); min-height: 420px; overflow-y: auto; }
-.cg-body { position: relative; display: grid; grid-template-columns: var(--gut) 1fr; }
-.cg-gutter { position: relative; }
+.cg-body { position: relative; display: flex; }   /* flex, not grid: a sticky grid item cannot leave its cell */
+.cg-gutter { flex: 0 0 var(--gut); }
+.cg-body > .cg-cols { flex: 1; min-width: 0; }
 .cg-hour { position: absolute; right: 8px; transform: translateY(-50%); font-family: var(--font-data); font-size: 10px; color: var(--ink-3); }
 .cg-hour:first-child { transform: none; }
-.cg-cols { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); position: relative; }
+.cg-cols { display: grid; grid-template-columns: repeat(var(--n), var(--colw, minmax(0, 1fr))); position: relative; }
 .cg-col { position: relative; border-left: 1px solid var(--seam); }
 .cg-col.today { background: color-mix(in oklab, var(--signal) 4%, transparent); }
 .cg-line { position: absolute; left: 0; right: 0; height: 1px; background: color-mix(in oklab, var(--seam) 70%, transparent); }
@@ -163,7 +260,7 @@
 .wb-day .row { min-height: 32px; }
 .field.sm { height: 30px; font-size: var(--fs-xs); }
 @media (max-width: 1180px) { .cal-layout.with-side { grid-template-columns: 1fr; } .cal-side { display: none; } .week-board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 860px) { .cal-grid { --gut: 40px; } .cg-day { padding: 8px 4px; flex-direction: column; gap: 0; } .cg-dn { font-size: var(--fs-md); } .ev-time { display: none; } .week-board { grid-template-columns: 1fr; } .cal-legend { display: none; } }
+@media (max-width: 860px) { .cal-grid { --gut: 40px; } .cg-day { padding: 8px 4px; flex-direction: column; gap: 0; } .cg-dn { font-size: var(--fs-md); } .week-board { grid-template-columns: 1fr; } .cal-legend { display: none; } }
 
 /* ---------- World / News ---------- */
 .map-panel { padding: 0; }
