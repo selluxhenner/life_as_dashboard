@@ -12,6 +12,7 @@ const COUNTRIES = JSON.parse(readFileSync(new URL('../data/countries.json', impo
 const COUNTRY_NAMES = Object.keys(COUNTRIES).sort();
 const REGIONS = ['europe', 'africa', 'asia', 'mideast', 'namerica', 'samerica', 'oceania'];
 export const TOPICS = ['politics', 'elections', 'economy', 'conflict', 'diplomacy', 'climate', 'tech', 'health', 'society', 'other'];
+const ELECTION_STATUS = ['upcoming', 'campaign', 'voting', 'results', 'aftermath'];
 const DAY = 86400000;
 // Sections that never make the world page; skipping them before scoring saves tokens.
 const SKIP_URL = /\/(sport|sports|football|soccer|cricket|tennis|entertainment|culture|lifestyle|travel|style|food|recipes|fashion|celebrity|showbiz|tv-and-radio|music|film|books|games|horoscopes?)(\/|-|$)/i;
@@ -38,10 +39,10 @@ export async function pollNews() {
 const ScoreSchema = z.object({
   items: z.array(z.object({
     id: z.string(),
-    region: z.enum(REGIONS),
+    region: z.string().describe(REGIONS.join(" | ")),
     country: z.string().describe('Exact name from the country list, or empty string'),
-    topic: z.enum(TOPICS),
-    significance: z.number().int().min(1).max(10),
+    topic: z.string().describe(TOPICS.join(" | ")),
+    significance: z.number().describe("integer 1-10"),
     cluster: z.string().describe('short kebab-case key shared by items about the same event, e.g. germany-oil-policy'),
     headline: z.string().describe('One precise, neutral English sentence, max 90 characters, no clickbait')
   }))
@@ -70,13 +71,18 @@ export async function scoreNews() {
       feature: 'news-score', tier: 'fast', system: SCORE_SYSTEM, maxTokens: 7000, schema: ScoreSchema,
       prompt: asData('news', batch.map(b => ({ id: b.id, source: b.source, hint: b.region, title: b.title, summary: (b.summary || '').slice(0, 220) })))
     });
-    const ids = new Set(batch.map(b => b.id));
+    const byId = new Map(batch.map(b => [b.id, b]));
     db.tx(() => {
       for (const s of out.items) {
-        if (!ids.has(s.id)) continue;                       // ignore anything the model invented
+        if (!byId.has(s.id)) continue;                      // ignore anything the model invented
         const c = COUNTRIES[s.country];
+        // Validate here rather than in the schema: one odd value must not throw away the whole batch.
+        const region = REGIONS.includes(s.region) ? s.region : (c && c.region) || byId.get(s.id).region;
+        if (!REGIONS.includes(region)) continue;
+        const topic = TOPICS.includes(s.topic) ? s.topic : 'other';
+        const significance = Math.max(1, Math.min(10, Math.round(Number(s.significance) || 1)));
         db.run(`UPDATE news_items SET region = ?, country = ?, country_n3 = ?, topic = ?, significance = ?, cluster = ?, headline = ?, scored = 1 WHERE id = ?`,
-          s.region, c ? s.country : null, c ? c.n3 : null, s.topic, s.significance, s.cluster.slice(0, 60), s.headline.slice(0, 120), s.id);
+          region, c ? s.country : null, c ? c.n3 : null, topic, significance, s.cluster.slice(0, 60), s.headline.slice(0, 120), s.id);
         scored++;
       }
       // anything the model skipped is marked so it isn't retried forever
@@ -123,7 +129,7 @@ const DigestSchema = z.object({
   elections: z.array(z.object({
     country: z.string().describe('Exact country name from the stories'),
     kind: z.string().describe('e.g. "Presidential election", "Parliamentary election", "Referendum"'),
-    status: z.enum(['upcoming', 'campaign', 'voting', 'results', 'aftermath']),
+    status: z.string().describe('upcoming | campaign | voting | results | aftermath'),
     when: z.string().describe('Election date as written in the stories (e.g. "12 October"), or empty string if the stories give none'),
     headline: z.string().describe('The current state in one sentence, max 110 characters: who leads, who won, what is at stake'),
     item_ids: z.array(z.string()).min(1)
@@ -169,7 +175,7 @@ Clean, precise, neutral — like a wire service. Merge items about the same even
   const elections = out.elections.map(e => {
     const c = COUNTRIES[e.country];
     return ground(e, {
-      kind: e.kind.slice(0, 40), status: e.status, when: e.when.slice(0, 40), topic: 'elections',
+      kind: e.kind.slice(0, 40), status: ELECTION_STATUS.includes(e.status) ? e.status : 'upcoming', when: e.when.slice(0, 40), topic: 'elections',
       ...(c ? { country: e.country, country_n3: c.n3 } : {})
     });
   }).filter(Boolean);
