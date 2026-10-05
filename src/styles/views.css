@@ -192,9 +192,83 @@
 .story-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c); margin-top: 7px; flex: none; }
 .story.breaking .story-dot { background: var(--flare); box-shadow: 0 0 10px var(--flare); }
 .story-title { color: var(--ink); font-size: var(--fs-sm); line-height: 1.4; display: block; }
-.story-meta { font-size: var(--fs-xs); color: var(--ink-3); margin-top: 2px; }
+.story-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--ink-3); margin-top: 3px; }
+.story-title:hover, .top-headline:hover { color: var(--signal); }
 .stories.compact .story-title { font-size: 13px; }
 .breaking-bar { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); margin-bottom: var(--s-4); border: 1px solid color-mix(in oklab, var(--flare) 50%, transparent); border-radius: var(--r-md); background: color-mix(in oklab, var(--flare) 8%, transparent); }
+.breaking-bar a { color: var(--ink); font-weight: 500; min-width: 0; }
+.breaking-bar .data { color: var(--ink-3); font-size: var(--fs-xs); white-space: nowrap; }
+
+/* topic colours: politics/elections cool, economy gold, conflict red, the rest quieter */
+.news { --topic-politics: var(--signal); --topic-elections: oklch(.74 .13 300); --topic-economy: var(--amber); --topic-conflict: var(--flare);
+  --topic-diplomacy: oklch(.78 .1 185); --topic-climate: var(--pulse); --topic-tech: oklch(.76 .1 240); --topic-society: oklch(.78 .08 40); --topic-health: oklch(.8 .1 150); }
+.topic-tag { --t: var(--ink-3); display: inline-flex; align-items: center; height: 17px; padding: 0 6px; border-radius: var(--r-xs); font-family: var(--font-data); font-size: var(--fs-micro); letter-spacing: .06em; text-transform: uppercase; color: var(--t); background: color-mix(in oklab, var(--t) 13%, transparent); }
+.region-tag { font-family: var(--font-data); font-size: var(--fs-micro); letter-spacing: .1em; text-transform: uppercase; color: var(--c); }
+[data-topic='politics'] { --t: var(--topic-politics); } [data-topic='elections'] { --t: var(--topic-elections); }
+[data-topic='economy'] { --t: var(--topic-economy); } [data-topic='conflict'] { --t: var(--topic-conflict); }
+[data-topic='diplomacy'] { --t: var(--topic-diplomacy); } [data-topic='climate'] { --t: var(--topic-climate); }
+[data-topic='tech'] { --t: var(--topic-tech); } [data-topic='society'] { --t: var(--topic-society); } [data-topic='health'] { --t: var(--topic-health); }
+
+/* market strip */
+.market-strip { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(132px, 1fr); gap: 1px; margin-bottom: var(--s-4); overflow-x: auto; scrollbar-width: none;
+  border: 1px solid var(--seam); border-radius: var(--r-md); background: var(--seam); }
+.market-strip::-webkit-scrollbar { display: none; }
+.quote { display: grid; gap: 2px; padding: var(--s-2) var(--s-3); background: var(--panel-bg); backdrop-filter: blur(var(--panel-blur)); }
+.quote-label { font-size: var(--fs-micro); letter-spacing: var(--track-micro); text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.quote-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); }
+.quote-price { font-family: var(--font-data); font-size: var(--fs-sm); color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.quote-change { font-family: var(--font-data); font-size: var(--fs-micro); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.quote-change.up { color: var(--pulse); } .quote-change.down { color: var(--flare); }
+.spark { width: 100%; height: 20px; }
+.spark polyline { fill: none; stroke-width: 1.3; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.spark.up polyline { stroke: color-mix(in oklab, var(--pulse) 75%, transparent); } .spark.down polyline { stroke: color-mix(in oklab, var(--flare) 75%, transparent); }
+
+/* topic filter */
+.topic-bar { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-bottom: var(--s-4); }
+.topic-bar button { --t: var(--signal); display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: var(--r-pill); border: 1px solid var(--seam); background: color-mix(in oklab, var(--void) 40%, transparent); color: var(--ink-2); font-size: var(--fs-xs); transition: border-color var(--t-fast), background var(--t-fast), color var(--t-fast); }
+.topic-bar button:hover { color: var(--ink); border-color: var(--seam-strong); }
+.topic-bar button i { width: 7px; height: 7px; border-radius: 50%; background: var(--t); }
+.topic-bar button .data { color: var(--ink-3); font-family: var(--font-data); font-size: var(--fs-micro); }
+.topic-bar button[aria-pressed='true'] { border-color: var(--t); color: var(--ink); background: color-mix(in oklab, var(--t) 14%, transparent); }
+.topic-bar .clear { margin-left: auto; color: var(--ink-3); border-style: dashed; }
+.topic-bar .clear svg { width: 12px; height: 12px; }
+
+/* big picture + live wire */
+.world-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: var(--s-4); margin-bottom: var(--s-4); align-items: start; }
+.top-list { display: grid; }
+.top-story { display: flex; gap: var(--s-4); padding: var(--s-4) 0; border-top: 1px solid var(--seam); }
+.top-story:first-child { border-top: 0; padding-top: var(--s-1); }
+.top-rank { font-family: var(--font-dot); font-size: var(--fs-2xl); line-height: 1; color: var(--c); text-shadow: 0 0 14px color-mix(in oklab, var(--c) 45%, transparent); min-width: 2ch; }
+.top-story.breaking .top-rank { color: var(--flare); }
+.top-tags { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-bottom: 6px; }
+.top-headline { display: block; color: var(--ink); font-size: var(--fs-md); font-weight: 600; line-height: var(--lh-tight); letter-spacing: var(--track-tight); }
+.top-story:first-child .top-headline { font-size: var(--fs-lg); }
+.top-brief { margin-top: 6px; color: var(--ink-2); font-size: var(--fs-sm); line-height: var(--lh-body); max-width: 68ch; }
+.wire-panel { max-height: 760px; display: flex; flex-direction: column; }
+.wire-title { display: inline-flex; align-items: center; gap: 8px; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--flare); box-shadow: 0 0 8px var(--flare); animation: blink 1.6s steps(2, jump-none) infinite; }
+.wire { display: grid; overflow-y: auto; margin-right: calc(-1 * var(--s-2)); padding-right: var(--s-2); scrollbar-width: thin; }
+.wire-row { display: flex; gap: var(--s-3); padding: var(--s-2) 0 var(--s-2) var(--s-3); border-left: 2px solid color-mix(in oklab, var(--c) 55%, transparent); }
+.wire-row + .wire-row { margin-top: 2px; }
+.wire-row.breaking { border-left-color: var(--flare); background: color-mix(in oklab, var(--flare) 6%, transparent); }
+.wire-time { font-family: var(--font-data); font-size: var(--fs-micro); color: var(--ink-3); padding-top: 3px; min-width: 5ch; font-variant-numeric: tabular-nums; }
+.sig { font-family: var(--font-data); font-size: var(--fs-micro); color: var(--ink-3); border: 1px solid var(--seam); border-radius: var(--r-xs); height: 18px; min-width: 22px; display: grid; place-items: center; flex: none; }
+.wire-row .sig { color: color-mix(in oklab, var(--c) 80%, var(--ink)); }
+
+/* elections */
+.elections-panel { margin-top: var(--s-4); }
+.elections { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--s-3); }
+.election { display: grid; gap: 4px; align-content: start; padding: var(--s-3); border: 1px solid var(--seam); border-left: 2px solid var(--c); border-radius: var(--r-sm); background: color-mix(in oklab, var(--c) 4%, transparent); }
+.election-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); }
+.election-head b { font-size: var(--fs-md); }
+.election-kind { font-family: var(--font-data); font-size: var(--fs-micro); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+
+@media (max-width: 1100px) { .world-grid { grid-template-columns: 1fr; } .wire-panel { max-height: 520px; } }
+@media (max-width: 600px) {
+  .top-story { gap: var(--s-3); } .top-rank { font-size: var(--fs-xl); }
+  .topic-bar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: -16px; padding-inline: 16px; }
+  .topic-bar button { flex: none; } .topic-bar .clear { margin-left: 0; }
+}
 
 /* ---------- Inbox ---------- */
 .mail-list { display: grid; }

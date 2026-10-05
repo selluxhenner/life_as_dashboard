@@ -93,6 +93,14 @@ export const DEFAULT_FEEDS = [
   ['rnz', 'news', 'RNZ World', 'https://www.rnz.co.nz/rss/world.xml', 'oceania'],
   ['reuters', 'news', 'Reuters (via Google News)', 'https://news.google.com/rss/search?q=when:12h+source:Reuters&hl=en-US&gl=US&ceid=US:en', null],
   ['ap', 'news', 'AP (via Google News)', 'https://news.google.com/rss/search?q=when:12h+source:Associated+Press&hl=en-US&gl=US&ceid=US:en', null],
+  // economy, politics and elections — the classifier assigns region and topic
+  ['bbc-business', 'news', 'BBC Business', 'https://feeds.bbci.co.uk/news/business/rss.xml', null],
+  ['guardian-econ', 'news', 'The Guardian Economics', 'https://www.theguardian.com/business/economics/rss', null],
+  ['economist-fe', 'news', 'The Economist', 'https://www.economist.com/finance-and-economics/rss.xml', null],
+  ['ft-world', 'news', 'Financial Times', 'https://www.ft.com/world?format=rss', null],
+  ['cnbc-world', 'news', 'CNBC World', 'https://www.cnbc.com/id/100727362/device/rss/rss.html', null],
+  ['politico-eu', 'news', 'Politico Europe', 'https://www.politico.eu/feed/', 'europe'],
+  ['elections', 'news', 'Elections (via Google News)', 'https://news.google.com/rss/search?q=%22election%22+(national+OR+presidential+OR+parliamentary+OR+referendum+OR+%22snap+election%22)+when:12h&hl=en-US&gl=US&ceid=US:en', null],
   // AI vendors
   ['ai-openai', 'ai', 'OpenAI', 'https://openai.com/news/rss.xml', 'openai'],
   ['ai-anthropic', 'ai', 'Anthropic', 'https://www.anthropic.com/news#html', 'anthropic'],

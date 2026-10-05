@@ -116,6 +116,23 @@ test('calendar events endpoint validates dates and returns cached events', async
   assert.deepEqual(r.body.events, []);
 });
 
+test('news wire groups one event per cluster with all its outlets', async () => {
+  const { db } = await import('../src/db.js');
+  const now = Date.now();
+  const add = (id, source, sig, topic, ago) => db.run(`INSERT INTO news_items (id, feed_id, source, url, title, published_at, region, topic, significance, cluster, headline, scored, created_at)
+    VALUES (?, 'bbc-world', ?, ?, ?, ?, 'europe', ?, ?, ?, ?, 1, ?)`, id, source, 'https://x.test/' + id, 'T ' + id, now - ago, topic, sig, topic === 'economy' ? 'ecb-rates' : id, 'H ' + id, now);
+  add('w1', 'BBC', 7, 'economy', 60000);
+  add('w2', 'DW', 8, 'economy', 120000);
+  add('w3', 'AP', 4, 'politics', 30000);              // below the wire threshold
+  add('w4', 'AP', 9, 'other', 30000);                 // sport etc. never shows
+  const r = await api('GET', '/api/news/digest/latest');
+  assert.equal(r.status, 200);
+  assert.equal(r.body.digest, null);
+  assert.equal(r.body.wire.length, 1);
+  assert.equal(r.body.wire[0].headline, 'H w2');       // the most significant item leads the cluster
+  assert.deepEqual(r.body.wire[0].sources.sort(), ['BBC', 'DW']);
+});
+
 test('usage reports a monthly cap', async () => {
   const r = await api('GET', '/api/usage');
   assert.equal(r.body.usage.aiCapUsd, 40);

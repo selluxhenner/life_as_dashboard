@@ -8,6 +8,7 @@ import { allSettings, setSetting, getSetting, DEFAULTS } from '../settings.js';
 import { pairDevice } from '../auth.js';
 import { getBriefing, generateBriefing } from '../jobs/briefing.js';
 import { latestDigest } from '../jobs/news.js';
+import { marketPulse } from '../jobs/markets.js';
 import { aiToday } from '../jobs/aimodels.js';
 import { runAgent, decideAction, pendingActions } from '../agent/runner.js';
 import { placeCall, listCalls, phoneSpend } from '../phone/twilio.js';
@@ -43,6 +44,7 @@ misc.get('/briefing/today', c => c.json({ briefing: getBriefing(localDate()) }))
 misc.get('/briefing/:date', c => c.json({ briefing: getBriefing(c.req.param('date')) }));
 misc.post('/briefing/generate', async c => c.json({ briefing: await generateBriefing() }));
 misc.get('/news/digest/latest', c => c.json(latestDigest()));
+misc.get('/markets', async c => c.json(await marketPulse()));
 misc.get('/ai-models/today', c => c.json(aiToday()));
 misc.get('/notes', c => c.json({ notes: db.all('SELECT * FROM notes ORDER BY created_at DESC LIMIT 50') }));
 
