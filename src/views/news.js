@@ -104,6 +104,7 @@ function topCard(s, i) {
 function wireRow(s) {
   return h('li.wire-row' + (s.breaking ? '.breaking' : ''), { style: tone(s) },
     h('time.wire-time', s.publishedAt ? fmt.time(new Date(s.publishedAt)) : ''),
+    h('span.story-dot'),
     h('div.grow',
       h('a.story-title', { href: s.url, target: '_blank', rel: 'noopener' }, s.headline),
       h('div.story-meta', topicTag(s), h('span', [s.country || REGION_LABEL[s.region], (s.sources || []).length > 1 ? s.sources.length + ' outlets' : s.source].filter(Boolean).join(' · ')))),
@@ -115,7 +116,7 @@ function electionCard(e) {
   const [label, t] = STATUS[e.status] || STATUS.upcoming;
   return h('li.election', { style: tone(e) },
     h('div.election-head',
-      h('b', e.country || REGION_LABEL[e.region] || '—'),
+      h('b', h('span.story-dot'), e.country || REGION_LABEL[e.region] || '—'),
       chip(label, t === 'plain' ? '' : t, t === 'plain' ? 'plain' : (e.status === 'voting' ? 'live' : ''))),
     h('div.election-kind', [e.kind, e.when].filter(Boolean).join(' · ')),
     h('a.story-title', { href: e.url, target: '_blank', rel: 'noopener' }, e.headline),
