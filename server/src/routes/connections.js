@@ -7,7 +7,7 @@ import { startUrl, revoke } from '../connectors/google.js';
 import { verifyToken, listChannels } from '../connectors/slack.js';
 import { fetchIcs, expand, normaliseUrl } from '../connectors/ics.js';
 import { push } from '../connectors/gcal.js';
-import { gmailLink } from '../connectors/gmail.js';
+import { gmailLink, fullMessage } from '../connectors/gmail.js';
 import { refreshCalendar, refreshInbox } from '../jobs/refresh.js';
 
 export const connections = new Hono();
@@ -120,6 +120,26 @@ connections.get('/inbox/email', async c => {
     link: gmailLink(r.account, r.thread_id)
   }));
   return c.json({ accounts, emails });
+});
+/* One email with its body, for the reading pane. Kept briefly in memory so flicking back and forth is instant. */
+const mailCache = new Map();
+connections.get('/inbox/email/:id', async c => {
+  const id = c.req.param('id');
+  const row = db.get('SELECT * FROM emails WHERE id = ?', id);
+  if (!row) throw new HttpError(404, 'Email not found');
+  const hit = mailCache.get(id);
+  if (hit && Date.now() - hit.at < 10 * 60000) return c.json(hit.data);
+  const conn = getConnection(row.connection_id);
+  if (!conn) throw new HttpError(404, 'Account not connected');
+  const m = await fullMessage(conn, id.slice(id.indexOf(':') + 1));
+  if (!m) throw new HttpError(502, 'Gmail did not return the message');
+  const data = {
+    id, account: row.account, subject: m.subject || row.subject, fromName: m.from.name || row.from_name, fromAddr: m.from.addr || row.from_addr,
+    to: m.to, receivedAt: m.date || row.received_at, body: m.body, truncated: m.truncated, aiSummary: row.ai_summary, link: gmailLink(row.account, row.thread_id)
+  };
+  mailCache.set(id, { at: Date.now(), data });
+  if (mailCache.size > 40) mailCache.delete(mailCache.keys().next().value);
+  return c.json(data);
 });
 connections.get('/inbox/slack', async c => {
   await maybeRefreshInbox(c.req.query('live') === '1');

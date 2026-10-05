@@ -2,20 +2,22 @@ import { h } from '../core/dom.js';
 import { state, save, notify } from '../core/store.js';
 import { todayKey, fmt, hm } from '../core/dates.js';
 import { panel } from '../components/panel.js';
-import { viewHead, check, removeBtn, addRow, empty, meter, chip, select } from '../components/ui.js';
+import { viewHead, check, removeBtn, addRow, empty, meter, chip } from '../components/ui.js';
+import { dropdown, timePicker } from '../components/overlay.js';
 import {
   planFor, addPlanBlock, removePlanBlock, liveTasks, addTask, toggleTask, deleteTask, PRIORITIES,
-  lastDays, weekCount, currentStreak, toggleHabit, addHabit, routineFor, routineItems, trainingHabit, reflFor, reflHasContent
+  lastDays, weekCount, currentStreak, toggleHabit, addHabit, routineFor, routineItems, trainingHabit
 } from '../core/model.js';
 import { agendaFor } from '../core/agenda.js';
-import { focusTimer } from '../components/timer.js';
-import { go } from '../core/router.js';
 import { phoneQuery, isPhone } from '../core/platform.js';
+import { icon } from '../core/icons.js';
+import { openHabit, openTask } from './details.js';
 
 phoneQuery.addEventListener('change', () => notify());
 
 let todoPrio = 'med';
-let timer = null;
+let blockTime = null;
+const PRIO_COLOR = { high: 'var(--flare)', med: 'var(--amber)', low: 'var(--ink-3)' };
 
 function dayPlan() {
   const tk = todayKey();
@@ -31,7 +33,7 @@ function dayPlan() {
         h('span.time', b.time || '—'),
         h('div.grow', h('div.title', b.label)),
         overdue ? chip('overdue', 'warn') : null,
-        removeBtn(() => removePlanBlock(tk, b.id), 'Remove block')));
+        removeBtn(() => removePlanBlock(tk, b.id), 'Remove block', { what: b.label, kind: 'plan block' })));
     } else {
       rows.append(h('div.row.cal', { style: { '--c': it.color }, title: [it.calendar, it.location].filter(Boolean).join(' · ') },
         h('span.marker'),
@@ -41,11 +43,13 @@ function dayPlan() {
     }
   }
   if (!items.length) rows.append(empty('No blocks yet', 'Give the day a shape: add your first time block below.'));
-  const time = h('input.field.narrow', { type: 'time', value: nextHalfHour(), 'aria-label': 'Start time' });
+  if (blockTime === null) blockTime = nextHalfHour();
+  const time = timePicker({ value: blockTime, onChange: v => { blockTime = v || ''; notify(); }, label: 'Start time' });
+  time.classList.add('narrow');
   const blocks = planFor(tk);
   return panel({ title: 'Day plan', readout: h('span', h('b', `${blocks.filter(b => b.done).length}/${blocks.length}`), ' blocks') },
     rows,
-    h('div', { style: { marginTop: '12px' } }, addRow({ placeholder: 'New block, e.g. Deep work on ServiWeb', before: [time], onSubmit: v => addPlanBlock(time.value || '', v) })));
+    h('div', { style: { marginTop: '12px' } }, addRow({ placeholder: 'New block, e.g. Deep work on ServiWeb', before: [time], onSubmit: v => { addPlanBlock(blockTime || '', v); blockTime = null; } })));
 }
 function nextHalfHour() {
   const d = new Date(); d.setMinutes(d.getMinutes() < 30 ? 30 : 60, 0, 0);
@@ -56,19 +60,21 @@ function habits() {
   const tk = todayKey();
   const days = lastDays(21);
   const list = h('div.habit-list');
-  state.habits.forEach((hb, idx) => {
+  state.habits.forEach(hb => {
     const done = !!hb.history[tk];
-    list.append(h('div.habit',
+    const card = h('div.habit', { dataset: { detail: 'habit:' + hb.id } },
       h('div.habit-top',
         check(done, () => toggleHabit(hb), 'Done today'),
-        h('span.habit-icon', hb.icon),
-        h('div.grow', h('div.title', hb.label), hb.sub ? h('div.sub', hb.sub) : null),
-        h('span.data.muted', hb.mode === 'weekly' ? `${weekCount(hb, tk)}/${hb.target || 1} this week` : `${currentStreak(hb)}d streak`),
-        removeBtn(() => { state.habits.splice(idx, 1); save(); }, 'Remove habit')),
+        h('button.habit-open', { type: 'button', title: 'Open details', onclick: () => openHabit(hb, card) },
+          h('span.habit-icon', hb.icon),
+          h('span.grow', h('span.title', hb.label), hb.sub ? h('span.sub', hb.sub) : null),
+          h('span.data.muted', hb.mode === 'weekly' ? `${weekCount(hb, tk)}/${hb.target || 1} this week` : `${currentStreak(hb)}d streak`),
+          icon('expand', 'open-ico'))),
       h('div.ticks', { style: { '--c': hb.mode === 'weekly' ? 'var(--tone-samerica)' : 'var(--signal)' } },
         days.map(dk => h('i', { role: 'button', tabindex: 0, title: fmt.short(dk), 'aria-label': `${hb.label} on ${fmt.short(dk)}`, 'aria-pressed': String(!!hb.history[dk]),
           class: (hb.history[dk] ? 'on' : '') + (dk === tk ? ' today' : ''),
-          onclick: () => toggleHabit(hb, dk), onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleHabit(hb, dk); } } })))));
+          onclick: () => toggleHabit(hb, dk), onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleHabit(hb, dk); } } }))));
+    list.append(card);
   });
   const doneCount = state.habits.filter(hb => hb.history[tk]).length;
   return panel({ title: 'Habits', readout: h('span', h('b', `${doneCount}/${state.habits.length}`), ' today') },
@@ -86,7 +92,6 @@ function routines() {
     return h('div.row' + (val != null && val !== '' ? '.done-soft' : ''), check(val != null && val !== '', () => input.focus(), label), h('div.grow', h('div.title', label)), input, h('span.data.muted', unit));
   };
   const auto = (label, done, onClick) => h('div.row', check(done, onClick || (() => {}), label), h('div.grow', h('div.title', label)), chip('auto', 'plain'));
-  const refl = reflFor(tk);
   return panel({ title: 'Routines', readout: h('span', h('b', `${items.filter(i => i.done).length}/${items.length}`), ' done') },
     h('div.micro', { style: { margin: '0 0 4px' } }, 'Morning'),
     h('div.rows',
@@ -95,8 +100,7 @@ function routines() {
       h('div.row', check(!!r.noPhone, () => { r.noPhone = !r.noPhone; save(); }, 'No phone first 30 min'), h('div.grow', h('div.title', 'No phone for the first 30 min')))),
     h('div.micro', { style: { margin: '14px 0 4px' } }, 'Evening'),
     h('div.rows',
-      num('Screen time today', 'screen', 'h'),
-      auto('Reflection written', reflHasContent(refl), () => go('reflection'))));
+      num('Screen time today', 'screen', 'h')));
 }
 
 function fitness() {
@@ -113,6 +117,20 @@ function fitness() {
     h('div.hint', `${f.weight.toFixed(1)} → ${f.goal} kg · ${Math.max(0, f.goal - f.weight).toFixed(1)} kg to go`));
 }
 
+/* A task row; the title opens the full task. Shared with Home. */
+export function taskRow(t, { compact = false } = {}) {
+  const row = h('div.row.task-row' + (t.done ? '.done' : ''), { class: 'prio-' + t.priority, dataset: { detail: 'task:' + t.id } },
+    check(t.done, () => toggleTask(t), 'Complete task'),
+    h('button.row-open', { type: 'button', title: 'Open task', onclick: () => openTask(t, row) },
+      h('span.title', t.title),
+      !compact && t.due ? h('span.sub', 'due ' + fmt.short(t.due)) : null,
+      !compact && t.notes ? h('span.sub.note-hint', t.notes.split('\n')[0].slice(0, 80)) : null),
+    compact ? (t.priority === 'high' ? chip('high', 'alert') : t.due ? chip(fmt.short(t.due), 'plain') : null)
+      : t.source && t.source !== 'app' ? chip(t.source, 'plain') : null,
+    compact ? null : removeBtn(() => deleteTask(t), 'Delete task', { what: t.title }));
+  return row;
+}
+
 function tasks() {
   const cols = h('div.todo-cols');
   let open = 0;
@@ -121,17 +139,13 @@ function tasks() {
     open += list.filter(t => !t.done).length;
     cols.append(h('div.todo-col.prio-' + p.key,
       h('div.todo-col-head', h('i'), p.label, h('span.data.muted', String(list.filter(t => !t.done).length))),
-      h('div.rows', list.length ? list.map(t => h('div.row' + (t.done ? '.done' : ''),
-        check(t.done, () => toggleTask(t), 'Complete task'),
-        h('div.grow', h('div.title', t.title), t.due ? h('div.sub', 'due ' + fmt.short(t.due)) : null),
-        t.source && t.source !== 'app' ? chip(t.source, 'plain') : null,
-        removeBtn(() => deleteTask(t), 'Delete task'))) : h('div.hint', 'Nothing here.'))));
+      h('div.rows', list.length ? list.map(t => taskRow(t)) : h('div.hint', 'Nothing here.'))));
   }
   return panel({ title: 'Tasks', readout: h('span', h('b', String(open)), ' open · synced') },
     cols,
     h('div', { style: { marginTop: '14px' } }, addRow({
       placeholder: 'New task, Enter to add',
-      before: [select(PRIORITIES.map(p => ({ value: p.key, label: p.label })), todoPrio, v => { todoPrio = v; }, 'Priority', 'field narrow')],
+      before: [dropdown({ options: PRIORITIES.map(p => ({ value: p.key, label: p.label, color: PRIO_COLOR[p.key] })), value: todoPrio, onChange: v => { todoPrio = v; notify(); }, label: 'Priority', cls: 'narrow' })],
       onSubmit: v => addTask(v, todoPrio)
     })));
 }
@@ -139,21 +153,17 @@ function tasks() {
 export default {
   id: 'today',
   render(root) {
-    // Phone: just the day. Plan, tasks, habits, routines. Focus timer and weight stay on desktop.
+    // Phone: just the day. Plan, tasks, habits, routines. Weight stays on desktop.
     if (isPhone()) {
       root.append(h('div.view.today-phone',
         viewHead('Today', fmt.long(new Date())),
         h('div.stack', dayPlan(), tasks(), habits(), routines())));
       return;
     }
-    timer = focusTimer();
     root.append(h('div.view',
       viewHead('Today', fmt.long(new Date())),
-      h('div.grid.g-today',
-        dayPlan(),
-        h('div.stack', timer.el, routines())),
-      h('div.grid.g-2.today-row', fitness(), habits()),
+      h('div.grid.g-today', dayPlan(), habits()),
+      h('div.grid.g-2.today-row', routines(), fitness()),
       h('div', { style: { marginTop: '16px' } }, tasks())));
-  },
-  unmount() { if (timer) { timer.destroy(); timer = null; } }
+  }
 };

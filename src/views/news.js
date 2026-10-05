@@ -205,8 +205,10 @@ export default {
         ? panel({ title: 'Elections watch', readout: visibleElections.length + ' races', cls: 'elections-panel' },
             h('ul.elections', visibleElections.map(electionCard)))
         : null,
-      hasAny
-        ? h('div.region-cols', REGIONS.filter(r => !activeRegion || r.key === activeRegion).map(r => {
+      hasAny && activeRegion
+        ? regionFocus(activeRegion, [...visibleTop, ...visible, ...visibleWire])
+        : hasAny
+        ? h('div.region-cols', REGIONS.map(r => {
             const list = visible.filter(s => s.region === r.key);
             return panel({ title: r.label, readout: list.length ? list.length + ' stories' : '', cls: 'region-panel', style: { '--c': `var(--tone-${r.key})` } },
               list.length ? h('ul.stories', list.map(storyRow)) : h('div.hint', activeTopic ? 'Nothing on this topic.' : 'Quiet. Nothing significant.'));
@@ -214,6 +216,35 @@ export default {
         : panel({}, empty(connected ? 'No digest yet' : 'Connect the server to get news', connected ? 'The server builds the first digest at the next slot (07:00, 13:00, 19:00).' : 'Settings → Server. The map above already shows where it is day and night right now.'))));
   }
 };
+
+/* One region picked: all of its news across the full width, in three columns by importance. */
+const TIERS = [
+  { key: 'must', label: 'Must know', hint: 'Breaking or significance 8+', test: s => s.breaking || (s.significance || 0) >= 8 },
+  { key: 'notable', label: 'Important', hint: 'Significance 6–7', test: s => (s.significance || 0) >= 6 },
+  { key: 'more', label: 'Also happening', hint: 'Worth a glance', test: () => true }
+];
+function regionFocus(region, list) {
+  const seen = new Set(), stories = [];
+  for (const s of list) { if (!s || !s.url || seen.has(s.url) || s.region !== region) continue; seen.add(s.url); stories.push(s); }
+  stories.sort((a, b) => (b.breaking ? 1 : 0) - (a.breaking ? 1 : 0) || (b.significance || 0) - (a.significance || 0) || new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
+  const cols = TIERS.map(() => []);
+  for (const s of stories) cols[TIERS.findIndex(t => t.test(s))].push(s);
+  const label = REGION_LABEL[region];
+  return h('div.region-focus', { style: { '--c': `var(--tone-${region})` } },
+    h('div.region-focus-head', h('h2', label), h('span.data.muted', stories.length + ' stories'),
+      h('button.btn.sm.ghost', { type: 'button', onclick: () => { activeRegion = null; notify(); } }, icon('x'), 'All regions')),
+    h('div.region-tiers', TIERS.map((t, i) => panel({ title: t.label, readout: cols[i].length ? String(cols[i].length) : '', cls: 'tier-panel tier-' + t.key },
+      cols[i].length ? h('ul.stories.tier-list', cols[i].map(s => tierStory(s, t.key))) : h('div.hint', i === 0 ? 'Nothing major in ' + label + ' right now.' : 'Nothing here.')))));
+}
+function tierStory(s, tier) {
+  return h('li.story.tier-story' + (s.breaking ? '.breaking' : ''), { style: tone(s) },
+    h('span.story-dot'),
+    h('div.grow',
+      h('a.story-title', { href: s.url, target: '_blank', rel: 'noopener' }, s.headline),
+      tier !== 'more' && s.brief ? h('p.top-brief', s.brief) : null,
+      h('div.story-meta', topicTag(s), h('span', sourceLine(s)))),
+    s.breaking ? chip('breaking', 'alert', 'live') : s.significance ? h('span.sig', { title: 'Significance ' + s.significance + '/10' }, String(s.significance)) : null);
+}
 
 function nextSlot() {
   const hr = new Date().getHours();

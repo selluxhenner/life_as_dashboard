@@ -16,51 +16,42 @@ const CATS = [
 let cat = 'overall';
 
 const VENDOR_TONE = { anthropic: 'africa', openai: 'namerica', google: 'europe', github: 'oceania', meta: 'europe', mistral: 'asia', deepseek: 'asia', xai: 'mideast' };
-const toneFor = v => `var(--tone-${VENDOR_TONE[(v || '').toLowerCase()] || 'samerica'})`;
+export const toneFor = v => `var(--tone-${VENDOR_TONE[(v || '').toLowerCase()] || 'samerica'})`;
+const VENDOR_NAME = { openai: 'OpenAI', github: 'GitHub', xai: 'xAI', deepseek: 'DeepSeek', huggingface: 'Hugging Face', meta: 'Meta' };
+export const vendorName = v => VENDOR_NAME[(v || '').toLowerCase()] || (v || '').replace(/^./, c => c.toUpperCase());
 
-/* Minimal markdown: paragraphs, bullets, bold, links. */
-function md(text) {
-  const out = h('div.md');
-  let ul = null;
-  for (const line of (text || '').split('\n')) {
-    const t = line.trim();
-    if (!t) { ul = null; continue; }
-    const node = t.startsWith('- ') || t.startsWith('* ') ? (ul = ul || out.appendChild(h('ul')), ul.appendChild(h('li'))) : (ul = null, out.appendChild(h(t.startsWith('#') ? 'h3' : 'p')));
-    inline(node, t.replace(/^[-*]\s+|^#+\s*/, ''));
-  }
-  return out;
+/* The 8 most important recent changes, each with a short "what really changed". */
+function highlightList(list) {
+  return h('ol.highlights', list.map((u, i) => h('li', { style: { '--c': toneFor(u.vendor) } },
+    h('span.hl-rank.data', String(i + 1)),
+    h('div.hl-head',
+      u.url ? h('a', { href: u.url, target: '_blank', rel: 'noopener' }, u.title) : h('b', u.title),
+      u.importance >= 8 ? chip('major', 'alert') : null),
+    u.what ? h('p.hl-what', u.what) : null,
+    h('div.hl-meta', h('span.u-vendor', vendorName(u.vendor)), u.kind && u.kind !== 'other' ? h('span', u.kind) : null,
+      u.publishedAt ? h('span.data', fmt.ago(new Date(u.publishedAt).getTime())) : null))));
 }
-function inline(node, s) {
-  const re = /\*\*(.+?)\*\*|\[(.+?)\]\((https?:[^)]+)\)/g;
-  let last = 0, m;
-  while ((m = re.exec(s))) {
-    node.append(s.slice(last, m.index));
-    node.append(m[1] ? h('b', m[1]) : h('a', { href: m[3], target: '_blank', rel: 'noopener' }, m[2]));
-    last = re.lastIndex;
-  }
-  node.append(s.slice(last));
-}
+
+const spoken = list => list.map((u, i) => `${i + 1}. ${u.title}. ${u.what || ''}`).join(' ');
+
+export const aiData = () => remote('aimodels', '/api/ai-models/today', 30 * 60000);
 
 export default {
   id: 'ai',
   render(root) {
-    const { data, connected, loading } = remote('aimodels', '/api/ai-models/today', 30 * 60000);
+    const { data, connected, loading } = aiData();
     const d = data || {};
     const best = (d.best || {})[cat] || [];
     const board = ((d.leaderboard || {}).rows || []).filter(r => !r.category || r.category === cat).slice(0, 12);
+    const top = (d.highlights || []).slice(0, 8);
     root.append(h('div.view.ai',
-      viewHead('AI models', d.date ? 'What changed in AI today, and which models lead right now.' : 'Daily tracker for new releases from Anthropic, OpenAI, Google, GitHub Copilot and others.',
-        d.summaryMd ? h('button.btn', { type: 'button', onclick: () => speak(d.summaryMd.replace(/[*#\[\]]|\(http[^)]+\)/g, '')) }, icon('volume'), 'Read aloud') : null,
+      viewHead('AI models', 'The 8 most important changes from the AI labs this week, and which models lead right now.',
+        top.length ? h('button.btn', { type: 'button', onclick: () => speak(spoken(top)) }, icon('volume'), 'Read aloud') : null,
         connected ? btn(loading ? 'Refreshing…' : 'Refresh', () => refresh('aimodels', '/api/ai-models/today'), 'ghost', 'sync') : null),
-      !connected ? panel({}, empty('The tracker runs on the server', 'Pair this device in Settings. The server checks vendor blogs and leaderboards every morning at 07:30.'))
+      !connected ? panel({}, empty('The tracker runs on the server', 'Connect to your server in Settings. It checks vendor blogs and leaderboards every morning at 07:30.'))
       : h('div.grid.g-ai',
-          panel({ title: 'New today', readout: d.date ? fmt.short(d.date) : '' },
-            d.summaryMd ? md(d.summaryMd) : empty('Nothing yet today', 'The daily summary is written at 07:30.'),
-            (d.updates || []).length ? h('ul.updates', d.updates.slice(0, 12).map(u => h('li', { style: { '--c': toneFor(u.vendor) } },
-              h('span.u-vendor', u.vendor),
-              h('a', { href: u.url, target: '_blank', rel: 'noopener' }, u.title),
-              u.importance >= 8 ? chip('major', 'alert') : u.kind ? chip(u.kind, null, 'plain') : null,
-              h('span.data.muted', u.publishedAt ? fmt.ago(new Date(u.publishedAt).getTime()) : '')))) : null),
+          panel({ title: 'What changed', readout: d.date ? 'updated ' + fmt.short(d.date) : '' },
+            top.length ? highlightList(top) : empty('Nothing yet', 'The top changes are picked every morning at 07:30.')),
           h('div.stack',
             panel({ title: 'Best right now', actions: [seg(CATS, cat, v => { cat = v; notify(); }, 'Category')] },
               best.length ? h('ol.podium', best.slice(0, 3).map((b, i) => h('li', { style: { '--c': toneFor(b.vendor) } },

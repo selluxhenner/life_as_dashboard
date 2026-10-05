@@ -2,6 +2,12 @@
 export const SYNC_KEY = 'lifeOsSync';
 export const DEFAULT_SERVER = 'https://agentic-os.serviweb.ch';
 
+/* Your own builds can carry the server and a token (VITE_SYNC_TOKEN in .env.local, see .env.example).
+   Then every device connects by itself on first start: no pairing screen. */
+const env = import.meta.env || {};
+export const BUILT_IN = (env.VITE_SYNC_TOKEN || '').trim()
+  ? { url: (env.VITE_SERVER_URL || DEFAULT_SERVER).trim(), token: env.VITE_SYNC_TOKEN.trim() } : null;
+
 export function apiConfig() {
   try {
     const c = JSON.parse(localStorage.getItem(SYNC_KEY) || 'null');

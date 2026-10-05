@@ -50,9 +50,17 @@ kbd { font-family: var(--font-data); font-size: 10px; line-height: 15px; color: 
 .sug-btn { all: unset; cursor: pointer; color: var(--signal); }
 .sug-btn:hover, .sug-btn:focus-visible { text-decoration: underline; }
 .cap-fields { display: flex; gap: 6px; }
-.cap-fields .field { width: auto; height: 30px; }
-.cap-fields .field[type='date'] { width: 136px; }
-.cap-fields .field[type='time'] { width: 96px; }
+.cap-fields { flex-wrap: wrap; justify-content: flex-end; }
+.cap-fields .dd.date { width: 138px; }
+.cap-fields .dd.time { width: 116px; }
+/* type: a tinted pill in the type's colour */
+.dd.type-dd {
+  width: 118px; border-radius: var(--r-pill);
+  border-color: color-mix(in oklab, var(--c) 45%, var(--seam));
+  background: color-mix(in oklab, var(--c) 10%, transparent);
+}
+.dd.type-dd .dd-dot { box-shadow: 0 0 6px var(--c); }
+.dd.type-dd.mini { width: 100px; height: 24px; flex: none; }
 .cap-actions { display: flex; gap: 2px; align-items: center; justify-content: flex-end; min-width: 64px; }
 .cap-actions .btn.icon.sm.ghost { color: var(--ink-3); }
 .cap-actions .x { border: 0; background: transparent; color: var(--ink-3); width: 28px; height: 28px; border-radius: var(--r-xs); display: grid; place-items: center; opacity: 0; transition: opacity var(--t-fast), color var(--t-fast); }

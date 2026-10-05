@@ -50,6 +50,12 @@ export function toggleTask(t) {
   markDirty(t); save();
 }
 export function deleteTask(t) { t.deleted = true; markDirty(t); save(); }
+export function updateTask(t, patch) {
+  Object.assign(t, patch);
+  if ('done' in patch) t.completedAt = patch.done ? (t.completedAt || Date.now()) : null;
+  markDirty(t); save();
+}
+export function deleteHabit(h) { state.habits = state.habits.filter(x => x.id !== h.id); save(); }
 
 /* ---------- habits ---------- */
 export function streakAsOf(history, dk) { let s = 0, d = dk; while (history[d]) { s++; d = keyOffset(d, -1); } return s; }
@@ -138,14 +144,6 @@ export function updateJob(j, patch) {
 export function jobsAppliedThisWeek() {
   const mon = mondayKeyOf(new Date()), sun = keyOffset(mon, 6);
   return liveJobs().filter(j => j.appliedAt && j.appliedAt >= mon && j.appliedAt <= sun).length;
-}
-
-/* ---------- focus ---------- */
-export function completeFocusSession() {
-  const t = todayKey();
-  state.focus[t] = (state.focus[t] || 0) + 1;
-  state.habits.forEach(h => { if (h.link === 'focus') h.history[t] = true; });
-  save();
 }
 
 /* ---------- day score (shown on the Chronosphere + home) ---------- */

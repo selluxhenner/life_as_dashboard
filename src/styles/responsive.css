@@ -121,3 +121,17 @@
   .captures .type-btn { height: 40px; }
   .today-phone .stack { gap: var(--s-4); }
 }
+
+/* ---------- phone: keep clear of Android's status bar and gesture bar ----------
+   Capacitor injects --safe-area-inset-*; browsers fall back to env(). */
+:root {
+  --sa-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --sa-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+}
+@media (max-width: 860px) {
+  .app { grid-template-rows: calc(48px + var(--sa-top)) 1fr; }
+  .status { padding-top: var(--sa-top); }
+  .status .clock { display: none; }   /* the phone shows the time already */
+  .dock { bottom: calc(var(--s-3) + var(--sa-bottom)); }
+  main { padding-bottom: calc(110px + var(--sa-bottom)); }
+}

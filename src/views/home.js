@@ -4,15 +4,19 @@ import { todayKey, pad2, fmt, parseKey } from '../core/dates.js';
 import { panel } from '../components/panel.js';
 import { createChronosphere } from '../components/chronosphere.js';
 import { check, empty, meter, chip } from '../components/ui.js';
+import { dropdown } from '../components/overlay.js';
 import { agendaFor } from '../core/agenda.js';
 import {
-  liveTasks, toggleTask, weekCount, trainingHabit, dayScore,
+  liveTasks, weekCount, trainingHabit, dayScore,
   liveJobs, jobsAppliedThisWeek, QUOTES, toggleHabit, currentStreak
 } from '../core/model.js';
 import { go } from '../core/router.js';
 import { decode, tick, toast } from '../core/fx.js';
 import { icon } from '../core/icons.js';
-import { TYPES, typeOf, liveCaptures, unsorted, captureText, setType } from '../features/capture/captures.js';
+import { typeOf, liveCaptures, unsorted, captureText, setType } from '../features/capture/captures.js';
+import { typeOptions } from './captures.js';
+import { taskRow } from './today.js';
+import { aiData, toneFor, vendorName } from './ai-models.js';
 import { briefingPanel } from './briefing-panel.js';
 import { worldPulsePanel } from './news.js';
 import { rankCard } from '../features/points/points.js';
@@ -50,8 +54,7 @@ function capturesPanel() {
   list.forEach(c => {
     const t = typeOf(c.type);
     rows.append(h('div.row.cap-mini', { style: { '--c': t.color } },
-      h('label.type-pick.sm', { style: { '--c': t.color } }, h('i'),
-        h('select', { 'aria-label': 'Type of ' + c.text, onchange: e => setType(c, e.target.value) }, TYPES.map(x => h('option', { value: x.key, selected: x.key === c.type }, x.label)))),
+      dropdown({ options: typeOptions(), value: c.type, onChange: v => setType(c, v), label: 'Type of ' + c.text, cls: 'sm type-dd mini' }),
       h('div.grow', h('div.title', c.text), h('div.sub', fmt.ago(c.createdAt) + (c.date ? ' · ' + fmt.short(c.date) + (c.time ? ' ' + c.time : '') : '')))));
   });
   if (!list.length) rows.append(empty('Nothing captured', 'Type anything in the capture box. It lands here unsorted.'));
@@ -87,10 +90,7 @@ const fmtIn = m => m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + pad2(m % 6
 function tasksPanel() {
   const open = liveTasks().filter(t => !t.done).sort((a, b) => ({ high: 0, med: 1, low: 2 }[a.priority] - { high: 0, med: 1, low: 2 }[b.priority]));
   const list = h('div.rows');
-  open.slice(0, isPhone() ? 5 : 7).forEach(t => list.append(h('div.row', { class: 'prio-' + t.priority },
-    check(false, () => toggleTask(t), 'Complete task'),
-    h('div.grow', h('div.title', t.title)),
-    t.priority === 'high' ? chip('high', 'alert') : t.due ? chip(fmt.short(t.due), 'plain') : null)));
+  open.slice(0, isPhone() ? 5 : 7).forEach(t => list.append(taskRow(t, { compact: true })));
   if (!open.length) list.append(empty('Inbox zero for tasks', 'Everything is done.'));
   return panel({ title: 'Tasks', readout: h('span', h('b', String(open.length)), ' open'), actions: [h('button.btn.sm.ghost', { type: 'button', onclick: () => go('today') }, 'All')] }, list,
     open.length > (isPhone() ? 5 : 7) ? h('div.hint', `+ ${open.length - (isPhone() ? 5 : 7)} more on Today`) : null);
@@ -109,19 +109,33 @@ function habitsPanel() {
   return panel({ title: 'Habits', readout: h('span', h('b', `${s.habits[0]}/${s.habits[1]}`), ' daily done') }, list);
 }
 
+/* Bottom of Home: Job hunt and AI. The whole card opens its page (they are not in the sidebar). */
+const launch = (route, label, ...children) => h('a.launch', { href: '#/' + route, 'aria-label': 'Open ' + label }, ...children);
+
 function jobsPulse() {
   const jobs = liveJobs().filter(j => !j.archived);
   const active = jobs.filter(j => !['rejected'].includes(j.status));
   const interviews = jobs.filter(j => j.status === 'interview' || j.status === 'offer').length;
   const due = jobs.filter(j => j.nextActionDate && j.nextActionDate <= todayKey() && j.status !== 'rejected');
-  return panel({ title: 'Job hunt · Berlin', actions: [h('button.btn.sm.ghost', { type: 'button', onclick: () => go('jobs') }, 'Open')] },
+  return launch('jobs', 'Job hunt', panel({ title: h('span.launch-title', icon('briefcase'), 'Job hunt · Berlin'), readout: h('span.launch-go', 'Open', icon('right')) },
     h('div.grid.g-3.mini-stats',
       h('div.stat', h('div.k', 'Active'), h('div.v', String(active.length))),
       h('div.stat', h('div.k', 'Applied this week'), h('div.v', String(jobsAppliedThisWeek()), h('small', '/ 2'))),
       h('div.stat', h('div.k', 'Interviews'), h('div.v', String(interviews)))),
     due.length
       ? h('div.rows', { style: { marginTop: '12px' } }, due.slice(0, 3).map(j => h('div.row', h('div.grow', h('div.title', j.nextAction || 'Follow up'), h('div.sub', j.company)), chip(fmt.short(j.nextActionDate), j.nextActionDate < todayKey() ? 'alert' : 'warn'))))
-      : h('div.hint', { style: { marginTop: '12px' } }, active.length ? 'No follow-ups due.' : 'Add the first Berlin role you want to apply for.'));
+      : h('div.hint', { style: { marginTop: '12px' } }, active.length ? 'No follow-ups due.' : 'Add the first Berlin role you want to apply for.')));
+}
+
+function aiPulse() {
+  const { data, connected } = aiData();
+  const top = ((data && data.highlights) || []).slice(0, 3);
+  return launch('ai', 'AI models', panel({ title: h('span.launch-title', icon('spark'), 'AI models'), readout: h('span.launch-go', 'Open', icon('right')) },
+    top.length
+      ? h('ol.ai-mini', top.map(u => h('li', { style: { '--c': toneFor(u.vendor) } },
+          h('div.ai-mini-head', h('b', u.title), h('span.u-vendor', vendorName(u.vendor))),
+          u.what ? h('p', u.what) : null)))
+      : h('div.hint', connected ? 'The top changes are picked every morning at 07:30.' : 'Connect the server in Settings to track new AI models.')));
 }
 
 function principle() {
@@ -140,13 +154,16 @@ const NARROW = matchMedia('(min-width: 861px)');
 function columns() {
   const P = {
     upNext: upNext(), tasks: tasksPanel(), habits: habitsPanel(), captures: capturesPanel(),
-    world: worldPulsePanel(), jobs: jobsPulse(), extra: state.settings.flags.points ? rankCard() : principle()
+    world: worldPulsePanel(), extra: state.settings.flags.points ? rankCard() : principle()
   };
-  const cols = WIDE.matches ? [['upNext'], ['tasks', 'habits'], ['captures', 'jobs'], ['world', 'extra']]
-    : MID.matches ? [['upNext', 'captures'], ['tasks', 'habits'], ['world', 'jobs', 'extra']]
-    : NARROW.matches ? [['upNext', 'tasks', 'habits'], ['captures', 'world', 'jobs', 'extra']]
-    : [['upNext', 'captures', 'tasks', 'habits', 'world', 'jobs', 'extra']];
-  return h('div.grid.home-grid', { style: { '--cols': cols.length } }, cols.map(c => h('div.stack', c.map(k => P[k]))));
+  const cols = WIDE.matches ? [['upNext'], ['tasks', 'habits'], ['captures'], ['world', 'extra']]
+    : MID.matches ? [['upNext', 'captures'], ['tasks', 'habits'], ['world', 'extra']]
+    : NARROW.matches ? [['upNext', 'tasks', 'habits'], ['captures', 'world', 'extra']]
+    : [['upNext', 'captures', 'tasks', 'habits', 'world', 'extra']];
+  return [
+    h('div.grid.home-grid', { style: { '--cols': cols.length } }, cols.map(c => h('div.stack', c.map(k => P[k])))),
+    h('div.grid.home-launch', jobsPulse(), aiPulse())
+  ];
 }
 
 /* Phone: a short overview only. What's next, what to do, habits. Notes and Today have their own tabs. */
@@ -158,7 +175,7 @@ function phoneOverview(root) {
       title,
       h('div.hero-sub', fmt.long(new Date()) + ' · ' + state.settings.home.city, h('span.day-score.data', 'Day ' + s.score + '%'))),
     captureBar(),
-    h('div.stack', upNext(), briefingPanel(), tasksPanel(), habitsPanel())));
+    h('div.stack', upNext(), briefingPanel(), tasksPanel(), habitsPanel(), jobsPulse(), aiPulse())));
   return title;
 }
 

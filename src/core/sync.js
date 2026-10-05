@@ -1,13 +1,17 @@
 // Sync with the server: todos (POST /api/sync), jobs (/api/jobs/sync) and every other part of the state
 // as documents (/api/docs/sync, see docsync.js). Last-writer-wins on updatedAt; tombstones for deletes.
 import { state, persist, notify, onSave } from './store.js';
-import { apiConfig, apiFetch, setApiConfig } from './api.js';
+import { apiConfig, apiFetch, setApiConfig, BUILT_IN } from './api.js';
+import { platform } from './platform.js';
+import { invalidate } from './remote.js';
+import { scheduleCal } from './calendar-sync.js';
 import { scan, outbox, acknowledge, receive, firstMerge } from './docsync.js';
 import { applyTheme } from './theme.js';
 
 const SYNC_BATCH = 200;
 const TOMBSTONE_TTL = 30 * 86400000;
-let timer = null, busy = false;
+const OPT_OUT = 'lifeOsSyncOff';     // set by "Disconnect", so a built-in server doesn't reconnect by itself
+let timer = null, busy = false, autoAt = 0;
 
 export const syncStatus = { state: 'off', msg: '', latency: null };
 const statusListeners = new Set();
@@ -18,9 +22,33 @@ function setStatus(st, msg = '') {
 }
 
 export function scheduleSync(delay = 800) {
-  if (!apiConfig()) return;
+  if (!apiConfig()) { if (canAutoConnect()) { clearTimeout(timer); timer = setTimeout(autoConnect, delay); } return; }
   clearTimeout(timer);
   timer = setTimeout(runSync, delay);
+}
+
+/* ---------- built-in server: connect without a pairing screen ---------- */
+const optedOut = () => { try { return localStorage.getItem(OPT_OUT) === '1'; } catch { return false; } };
+const canAutoConnect = () => !!BUILT_IN && !optedOut() && Date.now() - autoAt > 60000;   // retry at most once a minute
+
+async function autoConnect() {
+  if (apiConfig() || !canAutoConnect()) return;
+  autoAt = Date.now();
+  try { await pairAndConnect(BUILT_IN.url, BUILT_IN.token); }
+  catch (e) { setStatus(e && e.kind === 'auth' ? 'auth' : 'offline'); }
+}
+
+/* Swap the given token for a device token if it is the master token, then do the first sync. */
+export async function pairAndConnect(url, token) {
+  url = url.trim(); token = token.trim();
+  let deviceToken = token;
+  try {
+    const r = await apiFetch({ url, token }, '/api/devices/pair', { name: platform.deviceName(), platform: platform.kind });
+    if (r && r.token) deviceToken = r.token;
+  } catch (e) { if (e.kind === 'auth') throw e; }   // 403: already a device token, use it as is
+  await connectSync(url, deviceToken);
+  ['news', 'email', 'slack', 'aimodels', 'connections', 'serverSettings', 'usage'].forEach(invalidate);
+  scheduleCal(0, true);
 }
 
 export function mergeRemote(todos) {
@@ -140,6 +168,7 @@ export async function connectSync(url, token) {
   const remoteIds = new Set(remote.map(r => r.id));
   const remoteTitles = new Set(remote.filter(r => !r.deleted).map(r => r.title.trim().toLowerCase()));
   setApiConfig(cfg);
+  try { localStorage.removeItem(OPT_OUT); } catch { /* storage off */ }
   state.sync = { cursor: 0, dirty: {}, lastSync: 0, jobsCursor: 0, jobsDirty: Object.fromEntries((state.jobs || []).map(j => [j.id, true])) };
   state.tasks = state.tasks.filter(t => {
     if (remoteIds.has(t.id)) return true;
@@ -156,6 +185,7 @@ export async function connectSync(url, token) {
 
 export function disconnectSync() {
   setApiConfig(null);
+  try { localStorage.setItem(OPT_OUT, '1'); } catch { /* storage off */ }
   state.sync = { cursor: 0, dirty: {}, lastSync: 0 };
   persist();
   setStatus('off');
@@ -167,6 +197,6 @@ export function initSync() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleSync(0); });
   setInterval(() => { if (!document.hidden) scheduleSync(0); }, 30000);
   onSave(() => scheduleSync(1500));               // any edit goes up a moment later
-  setStatus(apiConfig() ? 'busy' : 'off');
+  setStatus(apiConfig() || canAutoConnect() ? 'busy' : 'off');
   scheduleSync(0);
 }

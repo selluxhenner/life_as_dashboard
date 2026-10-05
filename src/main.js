@@ -15,7 +15,8 @@ import { initCal } from './core/calendar-sync.js';
 import { applyTheme, onTheme } from './core/theme.js';
 import { platform, windowAction } from './core/platform.js';
 import { todayKey, fmt } from './core/dates.js';
-import { createBackdrop, subsolar, sunElevation } from './components/backdrop.js';
+import { createBackdrop } from './components/backdrop.js';
+import { weatherNow, conditionOf } from './core/weather.js';
 import { initPalette, openPalette } from './components/palette.js';
 import { boot } from './components/boot.js';
 import { settle, forgivePenalties, pointsOn, totalPoints, rankView } from './features/points/points.js';
@@ -32,7 +33,6 @@ import news from './views/news.js';
 import ai from './views/ai-models.js';
 import jobs from './views/jobs.js';
 import goals from './views/goals.js';
-import reflection from './views/reflection.js';
 import assistant from './views/assistant.js';
 import settings from './views/settings.js';
 import lab from './views/lab.js';
@@ -47,10 +47,10 @@ const ROUTES = [
   { id: 'calendar', label: 'Calendar', icon: 'calendar', view: calendar, key: 'G C' },
   { id: 'inbox', label: 'Inbox', icon: 'inbox', view: inbox, key: 'G I' },
   { id: 'news', label: 'World', icon: 'globe', view: news, key: 'G W' },
-  { id: 'ai', label: 'AI', icon: 'spark', view: ai, key: 'G A' },
-  { id: 'jobs', label: 'Jobs', icon: 'briefcase', view: jobs, key: 'G J' },
+  // AI and Jobs open from their cards on Home; still reachable with Ctrl K and G A / G J
+  { id: 'ai', label: 'AI', icon: 'spark', view: ai, key: 'G A', nav: false },
+  { id: 'jobs', label: 'Job hunt', icon: 'briefcase', view: jobs, key: 'G J', nav: false },
   { id: 'goals', label: 'Goals', icon: 'target', view: goals },
-  { id: 'reflection', label: 'Reflect', icon: 'journal', view: reflection },
   { id: 'rank', label: 'Rank', icon: 'rank', view: rankView, hidden: () => !pointsOn() },
   { id: 'assistant', label: 'Agent', icon: 'agent', view: assistant, key: 'G .' },
   { id: 'settings', label: 'Settings', icon: 'settings', view: settings, bottom: true },
@@ -64,12 +64,12 @@ const mark = () => h('svg', { viewBox: '0 0 32 32', 'aria-hidden': 'true' },
   h('circle', { cx: 16, cy: 16, r: 3.2, fill: 'var(--signal)' }));
 
 function navLinks(filter, short = false) {
-  return routeList().filter(r => r.id !== 'lab').filter(filter).map(r =>
+  return routeList().filter(r => r.id !== 'lab' && r.nav !== false).filter(filter).map(r =>
     h('a', { href: '#/' + r.id, dataset: { route: r.id }, title: r.label }, icon(r.icon), h('span', short && r.short || r.label)));
 }
 
 const clockEl = h('span.clock.data');
-const sunEl = h('span.hide-m');
+const weatherEl = h('span.hide-m.weather');
 const syncBtn = h('button.sync', { type: 'button', onclick: () => go('settings') });
 const pointsEl = h('span.hide-m');
 const crumb = h('span.crumb');
@@ -103,7 +103,7 @@ function statusBar() {
     h('span.wordmark', 'AGENTIC', h('span', '/'), 'OS'),
     h('span.sep.hide-m'), crumb,
     h('span.push'),
-    sunEl, pointsEl,
+    weatherEl, pointsEl,
     h('button.kbd.hide-m', { type: 'button', onclick: openPalette, title: 'Command palette' }, 'Ctrl K'),
     syncBtn,
     clockEl,
@@ -116,9 +116,10 @@ function statusBar() {
 function paintStatus() {
   const now = new Date();
   clockEl.textContent = fmt.timeSec(now);
-  const { lat, lon } = state.settings.home;
-  const el = sunElevation(lat, lon, subsolar(now));
-  sunEl.textContent = `☀ ${el >= 0 ? '+' : ''}${el.toFixed(1)}°  ·  ${lat.toFixed(2)}N ${lon.toFixed(2)}E`;
+  const { lat, lon, city } = state.settings.home;
+  const w = weatherNow(lat, lon, paintStatus);
+  weatherEl.textContent = w ? `${Math.round(w.temp)}°C  ·  ${city}` : city;
+  weatherEl.title = w ? `${conditionOf(w.code)}, ${w.temp.toFixed(1)} °C in ${city} · updated ${fmt.time(new Date(w.at))}` : 'Weather loads when online';
   pointsEl.textContent = pointsOn() ? `⬢ ${totalPoints()} pts` : '';
 }
 function paintSync(s = syncStatus) {

@@ -73,3 +73,27 @@ test('crypto: encrypt/decrypt round-trip, legacy plain rows readable', async () 
   assert.equal(decrypt(blob), 'xoxp-secret');
   assert.equal(decrypt('plain:abc'), 'abc');
 });
+
+test('AI highlights: only known updates, no duplicates, at most 8, links from our data', async () => {
+  const { cleanHighlights } = await import('../src/jobs/aimodels.js');
+  const updates = Array.from({ length: 12 }, (_, i) => ({ id: 'u' + i, title: 'Update ' + i, url: 'https://lab.example/' + i, vendor: 'anthropic', kind: 'release', importance: 9, published_at: 1000 + i }));
+  const picks = [
+    { id: 'u3', title: 'Model X released', what: 'Faster and cheaper.' },
+    { id: 'u3', title: 'dup', what: 'dup' },
+    { id: 'made-up', title: 'Fake', what: 'Not in the data' },
+    { id: 'u4', title: 'No text', what: '  ' },
+    ...updates.slice(5).map(u => ({ id: u.id, title: '', what: 'Changed ' + u.id }))
+  ];
+  const out = cleanHighlights(picks, updates);
+  assert.equal(out.length, 8);
+  assert.deepEqual(out[0], { title: 'Model X released', what: 'Faster and cheaper.', vendor: 'anthropic', kind: 'release', importance: 9, url: 'https://lab.example/3', publishedAt: 1003 });
+  assert.equal(out[1].title, 'Update 5');               // empty title falls back to the feed title
+  assert.ok(!out.some(h => h.url.endsWith('/4')));
+  assert.equal(cleanHighlights(undefined, updates).length, 0);
+});
+
+test('HTML mail becomes readable text', async () => {
+  const { htmlToText } = await import('../src/connectors/gmail.js');
+  const html = '<html><head><style>p{color:red}</style></head><body><p>Hi Kevin,</p><p>Your interview is on <b>Friday</b>.<br>Details: <a href="https://jobs.example/x">here</a></p><ul><li>CV</li><li>Portfolio</li></ul><p>Tom &amp; Ana&nbsp;&#8212; HR</p></body></html>';
+  assert.equal(htmlToText(html), 'Hi Kevin,\nYour interview is on Friday.\nDetails: here (https://jobs.example/x)\n• CV\n• Portfolio\nTom & Ana — HR');
+});

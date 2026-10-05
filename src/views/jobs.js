@@ -3,6 +3,8 @@ import { state, save, notify } from '../core/store.js';
 import { todayKey, fmt } from '../core/dates.js';
 import { panel } from '../components/panel.js';
 import { viewHead, seg, chip, select, iconBtn, empty, toggle } from '../components/ui.js';
+import { confirmDelete } from '../components/overlay.js';
+import { icon } from '../core/icons.js';
 import { liveJobs, addJob, updateJob, jobsAppliedThisWeek } from '../core/model.js';
 import { JOB_STATUS, JOB_TYPES } from '../core/migrations.js';
 import { tick } from '../core/fx.js';
@@ -54,7 +56,7 @@ function editor(j) {
     h('div.input-row', { style: { marginTop: '14px' } },
       j.link ? h('a.btn', { href: j.link, target: '_blank', rel: 'noopener' }, 'Open posting') : null,
       h('button.btn', { type: 'button', onclick: () => updateJob(j, { archived: !j.archived }) }, j.archived ? 'Unarchive' : 'Archive'),
-      h('button.btn.danger', { type: 'button', onclick: () => { if (confirm('Delete this role?')) { updateJob(j, { deleted: true }); close(); } } }, 'Delete')));
+      h('button.btn.danger', { type: 'button', onclick: () => confirmDelete([j.role, j.company].filter(Boolean).join(' at '), () => { updateJob(j, { deleted: true }); close(); }, { kind: 'role' }) }, icon('trash'), 'Delete')));
 }
 
 function quickAdd() {

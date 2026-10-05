@@ -1,9 +1,9 @@
-// The UI is English. German may only appear in migration code (old data it recognises), capture parsing and voice language detection (German input it recognises) and region names.
+// The UI is English. German may only appear in migration code (old data it recognises), capture and goal-count parsing and voice language detection (German input it recognises) and region names.
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const ALLOW = ['core/migrations.js', 'features/capture/captures.js', 'voice/tts.js'];
+const ALLOW = ['core/migrations.js', 'core/goals.js', 'features/capture/captures.js', 'voice/tts.js'];
 const GERMAN = /[äöüÄÖÜß]|\b(Heute|Woche|Ziele|Bewerbung|Hinzufügen|erledigt|Tagesplan|Speichern|Verbinden|Schliessen|Nächster|offen)\b/;
 
 function files(dir) {

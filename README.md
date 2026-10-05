@@ -79,8 +79,20 @@ the server runs as the Docker container `agentic-os` on `127.0.0.1:3160`, behind
    15 3 * * * /srv/agentic-os/server/deploy/backup.sh
    ```
 
-### 2. Pair your devices
-In the app, open **Settings → Server**. The URL is pre-filled. Paste the `API_TOKEN` and press **Pair this device**.
+### 2. Connect your devices (no login)
+The database is the server's SQLite file (`~/agentic-os/data/`). Every device keeps a full offline copy and syncs with it.
+
+**Without any login screen (recommended):** put a token into your builds once, and every device you install them on connects by itself on first start.
+1. Make a device token just for your builds (revocable under Settings → Devices):
+   ```bash
+   curl -s -X POST https://agentic-os.serviweb.ch/api/devices/pair -H "Authorization: Bearer <API_TOKEN>" -H "Content-Type: application/json" -d '{"name":"My builds","platform":"build"}'
+   ```
+2. Copy [`.env.example`](.env.example) to `.env.local` (git-ignored) and set `VITE_SYNC_TOKEN` to the `token` from step 1.
+3. Build as usual (`npm run desktop:build`, `npm run build:android`). Settings → Server then only shows **Disconnect** / **Connect**.
+
+Only install these builds on your own devices — the token is inside the app.
+
+**By hand instead:** open **Settings → Server**. The URL is pre-filled. Paste the `API_TOKEN` and press **Pair this device**.
 - Each device gets its own revocable token. The master token is not stored on the device.
 - Paired devices share everything: tasks, jobs, plan blocks, week planner, habits, captures, goals, routines, reflections, focus sessions, weight and the theme. Sound and motion stay per device. The newest edit wins per item.
 - A device that already has data keeps it when it is paired: habits with the same name are combined, and plan blocks of the same day are put together.

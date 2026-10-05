@@ -3,9 +3,10 @@
 // capture with one-key choices. Bottom: every capture, filterable by what it became.
 import { h } from '../core/dom.js';
 import { state } from '../core/store.js';
-import { todayKey, keyOffset, fmt, parseKey } from '../core/dates.js';
+import { fmt } from '../core/dates.js';
 import { panel } from '../components/panel.js';
-import { viewHead, seg, select, empty, chip, removeBtn } from '../components/ui.js';
+import { viewHead, seg, empty, chip, removeBtn } from '../components/ui.js';
+import { dropdown, datePicker, timePicker, friendlyDate } from '../components/overlay.js';
 import { icon } from '../core/icons.js';
 import { tick, toast } from '../core/fx.js';
 import {
@@ -40,7 +41,7 @@ const SORTS = [
   { value: 'type', label: 'By type' }
 ];
 
-const dayLabel = dk => dk === todayKey() ? 'Today' : dk === keyOffset(todayKey(), -1) ? 'Yesterday' : dk === keyOffset(todayKey(), 1) ? 'Tomorrow' : fmt.weekday(dk) + ' ' + fmt.short(dk);
+const dayLabel = friendlyDate;
 const createdKey = c => { const d = new Date(c.createdAt); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 
 /* ---------- dump box ---------- */
@@ -58,8 +59,9 @@ function dumpBox() {
     requestAnimationFrame(() => { const again = document.querySelector('textarea[aria-label="Brain dump"]'); again && again.focus(); });
   };
   ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } });
-  return panel({ title: 'Capture', cls: 'dump-panel', readout: 'Enter saves · Shift+Enter new line' },
-    ta, h('div.dump-foot', h('span.hint', isPhone() ? 'Dates like “Fri 15:00” are picked up.' : 'Paste a whole list: every line becomes its own capture.'), h('button.btn.primary', { type: 'button', onclick: submit }, icon('plus'), isPhone() ? 'Save' : 'Capture')));
+  // phones have no Shift: the keyboard's Enter key saves, a list pasted in becomes one capture per line
+  return panel({ title: 'Capture', cls: 'dump-panel', readout: isPhone() ? 'Enter saves' : 'Enter saves · Shift+Enter new line' },
+    ta, h('div.dump-foot', h('span.hint', isPhone() ? 'Dates like “Fri 15:00” are picked up.' : 'Paste a whole list: every line becomes its own capture.')));
 }
 
 /* ---------- sorter ---------- */
@@ -101,18 +103,19 @@ function bindKeys() {
 }
 
 /* ---------- list ---------- */
+export const typeOptions = () => TYPES.map(x => ({ value: x.key, label: x.label, color: x.color, hint: x.hot }));
+const PRIO_COLOR = { high: 'var(--flare)', med: 'var(--amber)', low: 'var(--ink-3)' };
+
 function typeSelect(c) {
-  const t = typeOf(c.type);
-  return h('label.type-pick', { style: { '--c': t.color } }, h('i'),
-    h('select', { 'aria-label': 'Type of ' + c.text, onchange: e => setType(c, e.target.value) },
-      TYPES.map(x => h('option', { value: x.key, selected: x.key === c.type }, x.label))));
+  return dropdown({ options: typeOptions(), value: c.type, onChange: v => setType(c, v), label: 'Type of ' + c.text, cls: 'sm type-dd' });
 }
 
 function fields(c) {
-  const date = h('input.field.sm', { type: 'date', value: c.date || '', 'aria-label': 'Date for ' + c.text, onchange: e => updateCapture(c, { date: e.target.value }) });
-  const time = h('input.field.sm', { type: 'time', value: c.time || '', 'aria-label': 'Time for ' + c.text, onchange: e => updateCapture(c, { time: e.target.value }) });
-  if (c.type === 'task') return [date, select(PRIORITIES.map(p => ({ value: p.key, label: p.label })), c.priority || 'med', v => updateCapture(c, { priority: v }), 'Priority', 'field sm')];
-  if (c.type === 'goal') return [select(HORIZONS, c.horizon || 'woche', v => updateCapture(c, { horizon: v }), 'Goal horizon', 'field sm')];
+  const date = datePicker({ value: c.date || null, onChange: v => updateCapture(c, { date: v || '' }), label: c.type === 'task' ? 'Due date' : 'Date', placeholder: c.type === 'task' ? 'Due date' : 'Add date', cls: 'sm' });
+  const time = timePicker({ value: c.time || null, onChange: v => updateCapture(c, { time: v || '' }), label: 'Time' });
+  time.classList.add('sm');
+  if (c.type === 'task') return [date, dropdown({ options: PRIORITIES.map(p => ({ value: p.key, label: p.label, color: PRIO_COLOR[p.key] })), value: c.priority || 'med', onChange: v => updateCapture(c, { priority: v }), label: 'Priority', cls: 'sm' })];
+  if (c.type === 'goal') return [dropdown({ options: HORIZONS, value: c.horizon || 'woche', onChange: v => updateCapture(c, { horizon: v }), label: 'Goal horizon', cls: 'sm' })];
   if (c.type === 'event' || c.type === 'meeting') return [date, time];
   if (c.type === 'habit') return [];
   return [date];
@@ -144,7 +147,7 @@ function row(c) {
     h('div.cap-actions',
       c.type === 'meeting' ? h('a.btn.sm', { href: meetingLink(c), target: '_blank', rel: 'noopener', title: 'Open Google Calendar to add guests and send the invite' }, 'Invite', icon('ext')) : null,
       h('button.btn.icon.sm.ghost', { type: 'button', 'aria-label': c.archived ? 'Restore' : 'Archive', title: c.archived ? 'Restore' : 'Archive', onclick: () => archiveCapture(c, !c.archived) }, icon(c.archived ? 'reset' : 'archive')),
-      removeBtn(() => { deleteCapture(c); toast('Capture deleted'); }, 'Delete capture')));
+      removeBtn(() => { deleteCapture(c); toast('Capture deleted'); }, 'Delete capture', { what: c.text, detail: 'Whatever it became (task, habit, goal, plan block) stays. Only the capture goes.' })));
 }
 
 function grouped(list) {
@@ -174,7 +177,7 @@ function listPanel() {
   return panel({ title: 'Everything captured', readout: h('span', h('b', String(liveCaptures().length)), ' total') },
     h('div.cap-toolbar',
       seg(FILTERS.map(x => ({ value: x.value, label: x.label + ' ' + state.captures.filter(x.test).length })), filter, v => { filter = v; render(); }, 'Filter'),
-      h('div.cap-tools', search, select(SORTS, sort, v => { sort = v; render(); }, 'Sort', 'field sm narrow'))),
+      h('div.cap-tools', search, dropdown({ options: SORTS, value: sort, onChange: v => { sort = v; render(); }, label: 'Sort', cls: 'sm' }))),
     body);
 }
 

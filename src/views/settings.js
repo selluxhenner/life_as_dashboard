@@ -2,9 +2,10 @@ import { h } from '../core/dom.js';
 import { state, save, notify } from '../core/store.js';
 import { panel } from '../components/panel.js';
 import { viewHead, seg, toggle, btn, chip, empty, select } from '../components/ui.js';
-import { apiConfig, setApiConfig, apiFetch, api, errorText, DEFAULT_SERVER } from '../core/api.js';
-import { connectSync, disconnectSync, runSync, syncStatus } from '../core/sync.js';
-import { remote, refresh, invalidate } from '../core/remote.js';
+import { confirmDialog } from '../components/overlay.js';
+import { apiConfig, api, errorText, DEFAULT_SERVER, BUILT_IN } from '../core/api.js';
+import { pairAndConnect, disconnectSync, runSync, syncStatus } from '../core/sync.js';
+import { remote, refresh } from '../core/remote.js';
 import { applyTheme, THEMES } from '../core/theme.js';
 import { platform } from '../core/platform.js';
 import { toast } from '../core/fx.js';
@@ -24,31 +25,26 @@ function serverPanel() {
   const token = h('input.field', { type: 'password', placeholder: cfg ? '•••••••• (paired)' : 'Pairing token from the server', 'aria-label': 'Pairing token', autocomplete: 'off', value: draft.token, oninput: e => { draft.token = e.target.value; } });
   const msg = h('div.hint', { role: 'status' });
   const pair = async () => {
-    if (!url.value.trim() || !token.value.trim()) { msg.textContent = 'Enter the server URL and the pairing token.'; return; }
-    msg.textContent = 'Pairing…';
+    // a build with a built-in server needs no token: "Connect" uses it
+    const tok = token.value.trim() || (BUILT_IN && !cfg ? BUILT_IN.token : '');
+    if (!url.value.trim() || !tok) { msg.textContent = 'Enter the server URL and the pairing token.'; return; }
+    msg.textContent = 'Connecting…';
     try {
-      let deviceToken = token.value.trim();
-      try {
-        const r = await apiFetch({ url: url.value.trim(), token: deviceToken }, '/api/devices/pair', { name: platform.deviceName(), platform: platform.kind });
-        if (r && r.token) deviceToken = r.token;
-      } catch (e) { if (e.kind === 'auth') throw e; }
-      await connectSync(url.value.trim(), deviceToken);
-      ['news', 'email', 'slack', 'aimodels', 'connections', 'serverSettings', 'usage'].forEach(invalidate);
-      scheduleCal(0, true);
+      await pairAndConnect(url.value, tok);
       draft.url = null; draft.token = '';
-      msg.textContent = 'Paired. This device now syncs with the server.';
-      toast('Device paired', 'pulse');
+      msg.textContent = 'Connected. This device now syncs with the server.';
+      toast('Device connected', 'pulse');
     } catch (e) { msg.textContent = errorText(e); }
   };
   return panel({ title: 'Server', readout: cfg ? h('span', chip(syncStatus.state === 'ok' ? 'connected' : syncStatus.state, syncStatus.state === 'ok' ? 'ok' : 'warn')) : chip('local only', null, 'plain') },
     h('p.dim', { style: { marginBottom: '12px' } }, 'Agentic OS runs its background work (briefing, news, inbox, agent) on your server. This device keeps working offline and syncs when it can.'),
     h('label.label', 'Server URL'), url,
-    h('label.label', cfg ? 'Pair again (optional)' : 'Pairing token'), token,
+    BUILT_IN ? null : [h('label.label', cfg ? 'Pair again (optional)' : 'Pairing token'), token],
     msg,
     h('div.input-row', { style: { marginTop: '12px' } },
-      h('button.btn.primary', { type: 'button', onclick: pair }, cfg ? 'Re-pair' : 'Pair this device'),
+      cfg && BUILT_IN ? null : h('button.btn.primary', { type: 'button', onclick: pair }, cfg ? 'Re-pair' : BUILT_IN ? 'Connect' : 'Pair this device'),
       cfg ? h('button.btn', { type: 'button', onclick: () => runSync() }, 'Sync now') : null,
-      cfg ? h('button.btn.danger', { type: 'button', onclick: () => { disconnectSync(); notify(); } }, 'Unpair') : null),
+      cfg ? h('button.btn.danger', { type: 'button', onclick: () => { disconnectSync(); notify(); } }, BUILT_IN ? 'Disconnect' : 'Unpair') : null),
     cfg && state.sync.lastSync ? h('div.hint', `Last sync ${fmt.ago(state.sync.lastSync)} · ${Object.keys(state.sync.dirty).length} local change(s) waiting`) : null);
 }
 
@@ -94,7 +90,7 @@ function connectionsPanel() {
       reload(); scheduleCal(0, true);
     } catch (e) { toast(errorText(e), 'flare'); }
   };
-  const remove = async c => { if (!confirm(`Disconnect ${c.label || c.account}?`)) return; try { await api.del('/api/connections/' + c.id); reload(); } catch (e) { toast(errorText(e), 'flare'); } };
+  const remove = async c => { if (!await confirmDialog({ title: `Disconnect “${c.label || c.account}”?`, message: c.provider === 'google' ? 'Its calendar events and emails disappear from Agentic OS. You can connect it again any time.' : 'Its data disappears from Agentic OS. You can connect it again any time.', confirm: 'Disconnect' })) return; try { await api.del('/api/connections/' + c.id); reload(); } catch (e) { toast(errorText(e), 'flare'); } };
   const icon = { google: 'G', slack: '#', ics: '▦' };
   return panel({ title: 'Connections', readout: list.length + ' connected' },
     error && !data ? h('div.hint', errorText(error)) : null,

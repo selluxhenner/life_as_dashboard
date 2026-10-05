@@ -2,6 +2,7 @@
 import { h } from '../core/dom.js';
 import { icon } from '../core/icons.js';
 import { tick } from '../core/fx.js';
+import { confirmDelete } from './overlay.js';
 
 export function viewHead(title, sub, ...actions) {
   return h('div.view-head',
@@ -17,8 +18,10 @@ export function check(checked, onToggle, label = 'Done') {
   }, svg);
 }
 
-export function removeBtn(onRemove, label = 'Remove') {
-  return h('button.x', { type: 'button', 'aria-label': label, title: label, onclick: e => { e.stopPropagation(); onRemove(); } }, icon('x'));
+/* Delete button that asks first: removeBtn(fn, 'Remove goal', { what: goal.label }). */
+export function removeBtn(onRemove, label = 'Remove', { what, kind, detail } = {}) {
+  kind = kind || label.replace(/^(remove|delete)\s+/i, '').toLowerCase() || 'item';
+  return h('button.x', { type: 'button', 'aria-label': label, title: label, onclick: e => { e.stopPropagation(); confirmDelete(what, onRemove, { kind, detail }); } }, icon('x'));
 }
 
 export function btn(label, onclick, cls = '', iconName) {

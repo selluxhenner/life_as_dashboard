@@ -72,6 +72,17 @@ test('todo CRUD and sync with last-write-wins', async () => {
   assert.equal((await api('POST', '/api/todos', { title: '' })).status, 400);
 });
 
+test('sync accepts tasks made from captures and skips a bad todo instead of failing the batch', async () => {
+  const now = Date.now();
+  const good = { id: 'cap_task_1', title: 'Call dentist', source: 'capture', updatedAt: now };
+  const bad = { id: 'bad_todo_1', title: 'Weird', priority: 'urgent', updatedAt: now };
+  const r = await api('POST', '/api/sync', { since: 0, upserts: [bad, good] });
+  assert.equal(r.status, 200);
+  assert.ok(r.body.todos.some(t => t.id === 'cap_task_1' && t.source === 'capture'));
+  assert.ok(!r.body.todos.some(t => t.id === 'bad_todo_1'));
+  assert.deepEqual(r.body.rejected.map(x => x.id), ['bad_todo_1']);
+});
+
 test('jobs sync round-trip', async () => {
   const job = { id: 'job_test1', company: 'Trade Republic', role: 'Werkstudent Frontend', type: 'werkstudent', status: 'applied', updatedAt: Date.now() };
   const r = await api('POST', '/api/jobs/sync', { since: 0, upserts: [job] });

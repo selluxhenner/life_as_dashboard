@@ -40,20 +40,47 @@ export async function refreshGmail(conn) {
 
 const decode = s => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
 
-/* Plain-text body of one message, for the agent. Not stored. */
-export async function messageBody(conn, messageId) {
+/* HTML mail → readable text: blocks become line breaks, links keep their address. */
+export function htmlToText(html) {
+  return html
+    .replace(/<(head|style|script|title)\b[\s\S]*?<\/\1>/gi, '')
+    .replace(/<a\b[^>]*href="(https?:[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_, href, text) => {
+      const t = text.replace(/<[^>]+>/g, '').trim();
+      return t && !t.includes(href) && href.length < 120 ? `${t} (${href})` : t || href;
+    })
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|tr|li|h[1-6]|table|blockquote)>/gi, '\n')
+    .replace(/<li\b[^>]*>/gi, '• ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n)).replace(/&amp;/g, '&')
+    .replace(/[ \t ]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/* One message with its plain-text body (reading pane and agent). Not stored. */
+export async function fullMessage(conn, messageId, max = 20000) {
   const res = await gfetch(conn, `${API}/messages/${messageId}?format=full`);
   if (!res || !res.ok) return null;
   const m = await res.json();
-  const parts = [];
+  const plain = [], html = [];
   const walk = p => {
     if (!p) return;
-    if (p.mimeType === 'text/plain' && p.body?.data) parts.push(Buffer.from(p.body.data, 'base64url').toString('utf8'));
+    if (p.body?.data && !p.filename) {
+      const text = Buffer.from(p.body.data, 'base64url').toString('utf8');
+      if (p.mimeType === 'text/plain') plain.push(text); else if (p.mimeType === 'text/html') html.push(text);
+    }
     (p.parts || []).forEach(walk);
   };
   walk(m.payload);
-  if (!parts.length && m.payload?.body?.data) parts.push(Buffer.from(m.payload.body.data, 'base64url').toString('utf8').replace(/<[^>]+>/g, ' '));
-  return parts.join('\n').replace(/\n{3,}/g, '\n\n').slice(0, 8000);
+  const hdr = Object.fromEntries((m.payload?.headers || []).map(x => [x.name.toLowerCase(), x.value]));
+  const body = (plain.length ? plain.join('\n') : htmlToText(html.join('\n'))).replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  return { subject: hdr.subject || '', from: parseFrom(hdr.from), to: hdr.to || '', date: Number(m.internalDate) || null, body: body.slice(0, max), truncated: body.length > max };
+}
+
+/* Plain-text body of one message, for the agent. */
+export async function messageBody(conn, messageId) {
+  const m = await fullMessage(conn, messageId, 8000);
+  return m ? m.body : null;
 }
 
 export function gmailLink(account, threadId) {

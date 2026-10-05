@@ -8,6 +8,8 @@ import { ensureCalRange } from '../core/calendar-sync.js';
 import { createChronosphere } from '../components/chronosphere.js';
 import { addTask } from '../core/model.js';
 import { toast } from '../core/fx.js';
+import { confirmDelete } from '../components/overlay.js';
+import { icon } from '../core/icons.js';
 import * as chrono from 'chrono-node';
 
 const DAY_START = 6 * 60, DAY_END = 24 * 60, HOUR_PX = 52;
@@ -129,14 +131,12 @@ function detail() {
       it.location ? h('div.row', h('span.micro', 'Where'), h('div.grow', it.location)) : null),
     h('div.input-row', { style: { marginTop: '12px' } },
       it.kind === 'plan' ? h('button.btn', { type: 'button', onclick: () => { it.ref.done = !it.ref.done; save(); close(); } }, it.done ? 'Mark not done' : 'Mark done') : null,
-      it.kind === 'plan' ? h('button.btn.danger', { type: 'button', onclick: () => { for (const k of Object.keys(state.dayplan)) state.dayplan[k] = state.dayplan[k].filter(b => b.id !== it.id); save(); close(); } }, 'Delete') : null,
+      it.kind === 'plan' ? h('button.btn.danger', { type: 'button', onclick: () => confirmDelete(it.title, () => { for (const k of Object.keys(state.dayplan)) state.dayplan[k] = state.dayplan[k].filter(b => b.id !== it.id); save(); close(); }, { kind: 'plan block' }) }, icon('trash'), 'Delete') : null,
       it.link ? h('a.btn', { href: it.link, target: '_blank', rel: 'noopener' }, 'Open in Google Calendar') : null));
 }
 
 function planner(monKey) {
   const tk = todayKey();
-  const focus = h('input.field', { value: state.weekFocus[monKey] || '', placeholder: 'Focus of the week', 'aria-label': 'Focus of the week',
-    oninput: e => { state.weekFocus[monKey] = e.target.value; save(); } });
   const board = h('div.week-board');
   for (let i = 0; i < 7; i++) {
     const dk = keyOffset(monKey, i);
@@ -146,10 +146,10 @@ function planner(monKey) {
     board.append(h('div.wb-day' + (dk === tk ? '.today' : ''),
       h('div.wb-head', h('span', fmt.weekday(dk)), h('span.data.muted', fmt.short(dk))),
       h('div.rows', items.map((it, idx) => h('div.row' + (it.done ? '.done' : ''),
-        check(it.done, () => { it.done = !it.done; save(); }), h('div.grow', h('div.title', it.label)), removeBtn(() => { items.splice(idx, 1); save(); })))),
+        check(it.done, () => { it.done = !it.done; save(); }), h('div.grow', h('div.title', it.label)), removeBtn(() => { items.splice(items.indexOf(it), 1); save(); }, 'Remove to-do', { what: it.label })))),
       input));
   }
-  return panel({ title: 'Week planner', readout: 'loose to-dos per day' }, focus, h('div', { style: { height: '14px' } }), board);
+  return panel({ title: 'Week planner', readout: 'loose to-dos per day' }, board);
 }
 
 export default {

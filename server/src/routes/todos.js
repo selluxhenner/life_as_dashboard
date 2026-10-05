@@ -5,7 +5,7 @@ import { db } from '../db.js';
 import { HttpError, body } from '../http.js';
 
 const PRIORITIES = ['high', 'med', 'low'];
-const SOURCES = ['app', 'widget', 'claude', 'api', 'agent', 'voice', 'phone'];
+const SOURCES = ['app', 'widget', 'claude', 'api', 'agent', 'voice', 'phone', 'capture'];
 const MAX_BATCH = 200;
 
 const rowToTodo = r => ({
@@ -139,9 +139,15 @@ todos.post('/sync', async c => {
   const ups = Array.isArray(b?.upserts) ? b.upserts : [];
   if (ups.length > MAX_BATCH) throw new HttpError(400, `At most ${MAX_BATCH} changes per sync`);
   const now = Date.now();
-  const list = ups.map(it => { const v = validate(it); if (!v.id) throw new HttpError(400, 'Sync items need an id'); return complete(v, now, 'app'); });
+  // one bad todo must not block the whole sync (and every other device's notes behind it): skip it and say so
+  const list = [], rejected = [];
+  for (const it of ups) {
+    try { const v = validate(it); if (!v.id) throw new HttpError(400, 'Sync items need an id'); list.push(complete(v, now, 'app')); }
+    catch (e) { if (!(e instanceof HttpError)) throw e; rejected.push({ id: it && it.id, error: e.message }); }
+  }
+  if (rejected.length) console.warn('sync: skipped', rejected.length, 'todo(s):', JSON.stringify(rejected).slice(0, 500));
   if (list.length) db.tx(() => { const rev = bumpRev(); list.forEach(t => upsert(t, rev)); });
   const rows = db.all('SELECT * FROM todos WHERE rev > ? ORDER BY rev', since);
   const cursor = rows.reduce((m, r) => Math.max(m, r.rev), since);
-  return c.json({ todos: rows.map(rowToTodo), cursor });
+  return c.json({ todos: rows.map(rowToTodo), cursor, rejected });
 });
