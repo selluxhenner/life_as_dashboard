@@ -7,6 +7,8 @@ import { fetchFeed, hashUrl } from '../lib/feeds.js';
 import { structured, asData, DATA_RULE } from '../ai/claude.js';
 import { getSetting } from '../settings.js';
 import { notify } from '../notify/index.js';
+import { shapeSpoken, spokenText, spokenScript, MAX_WORDS, TONE_IDS, TONE_RULE } from '../voice/script.js';
+import { localTime } from '../lib/time.js';
 
 const COUNTRIES = JSON.parse(readFileSync(new URL('../data/countries.json', import.meta.url), 'utf8'));
 const COUNTRY_NAMES = Object.keys(COUNTRIES).sort();
@@ -136,6 +138,53 @@ const DigestSchema = z.object({
   })).max(8).describe('National elections and referendums covered in the stories. Skip local races and primaries unless globally significant')
 });
 
+/* The spoken world summary is its own small call: inside the digest schema it made the output grammar too large. */
+const WorldSpokenSchema = z.object({
+  overview: z.string().describe('One sentence, max 14 words: the big picture or the theme of the day'),
+  overviewTone: z.string().describe(TONE_IDS.join(' | ')),
+  items: z.array(z.object({
+    say: z.string().describe('One or two short spoken sentences, max 22 words: what happened and why it matters'),
+    tone: z.string().describe(TONE_IDS.join(' | ')),
+    refs: z.array(z.string()).describe('ids of the stories this line is about')
+  })).max(5),
+  outro: z.string().describe('One short sentence, max 10 words, on what was left out')
+});
+
+const WORLD_SPOKEN_SYSTEM = `You write what Kevin, a student in Berlin, hears when he presses play on the world news: 30 seconds, spoken fast,
+after which he knows what is going on in the world. ${DATA_RULE}
+The input is the finished digest. This is a summary, not the headlines read out:
+- overview: one sentence on the big picture ("A tense day: two wars escalate and markets wobble.").
+- items: the four or five events that matter most, one or two short sentences each: what happened and why it matters. Merge related
+  stories into one line. Prefer "top" and "breaking"; use region lines and elections when they matter more.
+- ${TONE_RULE}
+- outro: what you left out, in a few words ("Elsewhere it's quiet." / "Chile's election is on the page too.").
+Everything together stays under ${MAX_WORDS - 10} words. Lively spoken English for the ear: say the country and the key actor, contractions,
+varied rhythm, no abbreviations, symbols, lists or [bracketed] directions. Never add facts that are not in the digest.
+refs: the ids of the stories each line is based on.`;
+
+/* Writes the spoken summary from the grounded digest; each line keeps the region, country and topic of its lead story. */
+async function writeWorldSpoken({ top, regions, elections, breaking }) {
+  const pool = {};
+  const add = (prefix, list) => list.map((s, i) => {
+    pool[prefix + i] = s;
+    return { id: prefix + i, headline: s.headline, ...(s.brief ? { brief: s.brief } : {}), country: s.country || undefined, topic: s.topic };
+  });
+  const digest = {
+    top: add('top:', top), breaking: add('breaking:', breaking), elections: add('election:', elections),
+    regions: Object.fromEntries(Object.entries(regions).filter(([, l]) => l.length).map(([r, l]) => [r, add(r + ':', l)]))
+  };
+  const out = await structured({ feature: 'news-voice', tier: 'main', schema: WorldSpokenSchema, maxTokens: 3000, effort: 'low', system: WORLD_SPOKEN_SYSTEM, prompt: asData('digest', digest) });
+  const shaped = shapeSpoken({ overview: out.overview, overviewTone: out.overviewTone, outro: out.outro, topics: out.items.map(s => ({ label: '', say: s.say, tone: s.tone, refs: s.refs })) },
+    id => !!pool[id], MAX_WORDS - INTRO_WORDS);
+  return {
+    overview: shaped.overview, overviewTone: shaped.overviewTone, outro: shaped.outro,
+    items: shaped.topics.map(t => {
+      const lead = pool[t.refs[0]];
+      return { say: t.say, tone: t.tone, region: lead.region, country: lead.country, topic: lead.topic || 'other' };
+    })
+  };
+}
+
 /* 4. Digest 3x a day: big-picture briefs, 3-6 clean one-liners per region, an election tracker — all grounded in stored item ids. */
 export async function buildDigest(slot) {
   await newsTick().catch(e => console.error('news tick before digest', e.message));
@@ -179,8 +228,10 @@ Clean, precise, neutral — like a wire service. Merge items about the same even
       ...(c ? { country: e.country, country_n3: c.n3 } : {})
     });
   }).filter(Boolean);
-  db.run('INSERT OR REPLACE INTO news_digests (slot, created_at, regions, top, elections) VALUES (?, ?, ?, ?, ?)',
-    slot, Date.now(), j.str(regions), j.str(top), j.str(elections));
+  const spoken = await writeWorldSpoken({ top, regions, elections, breaking: recentBreaking() })
+    .catch(e => { console.error('news: spoken summary', e.message); return null; });
+  db.run('INSERT OR REPLACE INTO news_digests (slot, created_at, regions, top, elections, spoken) VALUES (?, ?, ?, ?, ?, ?)',
+    slot, Date.now(), j.str(regions), j.str(top), j.str(elections), j.str(spoken));
   return { slot, top: top.length, elections: elections.length, stories: Object.values(regions).reduce((n, l) => n + l.length, 0) };
 }
 
@@ -204,13 +255,42 @@ export function newsWire({ hours = 18, min = 6, limit = 40 } = {}) {
   }));
 }
 
+const recentBreaking = () => db.all(`SELECT headline, url, source, region, country, country_n3, topic, significance, published_at FROM news_items
+                                     WHERE breaking = 1 AND published_at > ? GROUP BY cluster ORDER BY published_at DESC LIMIT 5`, Date.now() - 12 * 3600000)
+  .map(b => ({ ...b, breaking: true, publishedAt: b.published_at }));
+
 export function latestDigest() {
   const d = db.get('SELECT * FROM news_digests ORDER BY created_at DESC LIMIT 1');
-  const breaking = db.all(`SELECT headline, url, source, region, country, country_n3, topic, significance, published_at FROM news_items
-                           WHERE breaking = 1 AND published_at > ? GROUP BY cluster ORDER BY published_at DESC LIMIT 5`, Date.now() - 12 * 3600000)
-    .map(b => ({ ...b, breaking: true, publishedAt: b.published_at }));
+  const breaking = recentBreaking();
   return {
-    digest: d ? { slot: d.slot, createdAt: d.created_at, regions: j.parse(d.regions, {}), top: j.parse(d.top, []), elections: j.parse(d.elections, []) } : null,
+    digest: d ? { slot: d.slot, createdAt: d.created_at, regions: j.parse(d.regions, {}), top: j.parse(d.top, []), elections: j.parse(d.elections, []), spoken: spokenOf(j.parse(d.spoken, null)) } : null,
     breaking, wire: newsWire()
   };
+}
+
+/* Digests before 2026-10-06 stored the spoken lines as a bare list. */
+const spokenOf = sp => (Array.isArray(sp) ? { overview: '', items: sp, outro: '' } : sp && Array.isArray(sp.items) ? sp : { overview: '', items: [], outro: '' });
+const INTRO_WORDS = 5;                                                 // "Here's the world this morning."
+
+/* The spoken world summary of the latest digest as {intro, spoken}; digests written before it existed fall back to their top headlines. */
+function worldSpoken() {
+  const d = latestDigest().digest;
+  if (!d) return null;
+  const spoken = d.spoken.items.length ? { ...d.spoken, topics: d.spoken.items }
+    : { topics: d.top.slice(0, 4).map(s => ({ say: s.headline.replace(/[.!?]?$/, '.') })) };
+  if (!spoken.topics.length) return null;
+  const hour = Number(localTime(new Date(d.createdAt)).slice(0, 2));
+  return { intro: `Here's the world ${hour < 12 ? 'this morning' : hour < 18 ? 'this afternoon' : 'this evening'}.`, spoken };
+}
+
+/** Plain text of the world summary (null without a digest). */
+export function worldSpeech() {
+  const w = worldSpoken();
+  return w ? spokenText(w.spoken, w.intro) : null;
+}
+
+/** The same with delivery directions: what the voice engine is given (and the audio cache key). */
+export function worldScript() {
+  const w = worldSpoken();
+  return w ? spokenScript(w.spoken, w.intro) : null;
 }

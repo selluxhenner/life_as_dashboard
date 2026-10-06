@@ -1,9 +1,11 @@
-// Text-to-speech with a soft voice. English by default; optionally each text in its own language.
-// 1. Premium (server, OpenAI gpt-4o-mini-tts or ElevenLabs): natural, handles English and German natively.
+// Text-to-speech with a quick, lively voice. English by default; optionally each text in its own language.
+// Speed is one setting for every engine: playback rate for server audio, utterance rate for device voices.
+// 1. Premium (server: ElevenLabs Eleven v4 when its key is set, else OpenAI gpt-4o-mini-tts): natural, English and German.
+//    The spoken briefing and world summary come pre-rendered from the server (audioPath), so every device hits one cache.
 // 2. System voice: the best installed voice whose language matches the text ("Online (Natural)" voices
 //    in Edge/WebView2 rank first). A German voice never reads English text, and vice versa.
 // 3. Android app: the native TTS plugin with the detected language.
-import { state } from '../core/store.js';
+import { state, notify } from '../core/store.js';
 import { apiConfig } from '../core/api.js';
 import { toast } from '../core/fx.js';
 
@@ -16,13 +18,17 @@ export const PREMIUM_VOICES = [
   { id: 'cedar', label: 'Cedar', note: 'deep, relaxed' }
 ];
 // language: 'en' speaks everything in English (default); 'auto' matches the language of each text.
-export const VOICE_DEFAULTS = { provider: 'auto', premiumVoice: 'marin', rate: 0.97, language: 'en', system: {} };
+export const VOICE_DEFAULTS = { provider: 'auto', premiumVoice: 'marin', rate: 1.15, language: 'en', system: {} };
+export const SPEEDS = [{ value: 1, label: 'Calm' }, { value: 1.15, label: 'Brisk' }, { value: 1.3, label: 'Fast' }];
+const clampRate = r => Math.max(0.8, Math.min(1.5, Number(r) || VOICE_DEFAULTS.rate));
+/* Roughly how long a text takes at the current speed (~160 words a minute at 1×). */
+export const secondsFor = text => Math.max(5, Math.round((String(text).match(/\S+/g) || []).length / (160 * clampRate(voiceSettings().rate) / 60)));
 export const voiceSettings = () => ({ ...VOICE_DEFAULTS, ...(state.settings.voice || {}), system: { ...((state.settings.voice || {}).system || {}) } });
 
 const LOCALE = { en: 'en-GB', de: 'de-DE' };
 export const VOICE_SAMPLES = {
-  en: 'Good morning, Kevin. Three things today: deep work at nine, a call with Anna at three, and training in the evening.',
-  de: 'Guten Morgen, Kevin. Heute stehen drei Dinge an: Deep Work um neun, ein Anruf mit Anna um drei und am Abend Training.'
+  en: 'Morning, Kevin! Busy one today: deep work at nine, a call with Anna at three, and training tonight. Everything else can wait.',
+  de: 'Guten Morgen, Kevin! Volles Programm heute: Deep Work um neun, ein Anruf mit Anna um drei und am Abend Training.'
 };
 
 /* ---------- language ---------- */
@@ -97,29 +103,35 @@ export async function bestVoice(lang) {
 }
 
 /* ---------- playback ---------- */
-let audio = null, speaking = false, gen = 0;
+let audio = null, speaking = false, gen = 0, playing = null;
 const cache = new Map();          // premium audio, so replaying the briefing is instant and free
 export const isSpeaking = () => speaking;
+/* What is being read right now ('briefing', 'world', 'talk' …), so a view can turn its Listen button into Stop. */
+export const speakingWhat = () => (speaking ? playing : null);
+export function clearVoiceCache() { for (const u of cache.values()) URL.revokeObjectURL(u); cache.clear(); }
 
 export function stopSpeaking() {
   gen++;
-  speaking = false;
+  if (speaking) { speaking = false; playing = null; notify(); }
   if (audio) { audio.pause(); audio = null; }
   if ('speechSynthesis' in window) speechSynthesis.cancel();
   const cap = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
   if (cap) cap.stop().catch(() => {});
 }
 
-async function speakPremium(text, lang, v, my) {
-  const key = v.premiumVoice + '|' + lang + '|' + text;
+async function speakPremium(text, lang, v, my, audioPath) {
+  const key = (audioPath || v.premiumVoice + '|' + lang) + '|' + text;
   let url = cache.get(key);
   if (!url) {
     const cfg = apiConfig();
-    const res = await fetch(cfg.url.replace(/\/+$/, '') + '/api/voice/tts', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + cfg.token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, lang, voice: v.premiumVoice, style: 'soft' })
-    });
+    const base = cfg.url.replace(/\/+$/, '');
+    const res = audioPath
+      ? await fetch(base + audioPath, { headers: { Authorization: 'Bearer ' + cfg.token } })
+      : await fetch(base + '/api/voice/tts', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + cfg.token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, lang, voice: v.premiumVoice })
+      });
     if (!res.ok) throw new Error('tts ' + res.status);
     url = URL.createObjectURL(await res.blob());
     cache.set(key, url);
@@ -128,7 +140,8 @@ async function speakPremium(text, lang, v, my) {
   if (my !== gen) return;
   await new Promise((resolve, reject) => {
     audio = new Audio(url);
-    audio.playbackRate = Math.max(0.8, Math.min(1.2, v.rate / VOICE_DEFAULTS.rate));
+    audio.preservesPitch = true;               // faster, not higher
+    audio.playbackRate = clampRate(v.rate);
     audio.onended = resolve;
     audio.onerror = reject;
     audio.play().catch(reject);
@@ -140,14 +153,15 @@ async function speakSystem(text, lang, v, my) {
   if (!voice) return false;
   for (const part of chunks(text)) {
     if (my !== gen) return true;
-    await new Promise(resolve => {
+    await new Promise((resolve, reject) => {
       const u = new SpeechSynthesisUtterance(part);
       u.voice = voice;
       u.lang = voice.lang;
-      u.rate = v.rate;
+      u.rate = clampRate(v.rate);
       u.pitch = 1;
       u.volume = 0.92;
-      u.onend = u.onerror = resolve;
+      u.onend = resolve;
+      u.onerror = e => (e.error === 'not-allowed' ? reject(Object.assign(new Error('blocked'), { name: 'NotAllowedError' })) : resolve());
       speechSynthesis.speak(u);
     });
   }
@@ -159,12 +173,20 @@ function noVoice(lang) {
   if (warned[lang]) return;
   warned[lang] = true;
   const name = lang === 'de' ? 'German' : 'English';
-  toast(`No ${name} voice on this device. Pair the server for the premium voice, or add one in Windows Settings › Time & language › Speech.`, 'amber');
+  toast(apiConfig()
+    ? `The server voice isn’t reachable or set up (Settings › Voice), and this device has no ${name} voice.`
+    : `No ${name} voice on this device. Pair the server for the natural voice, or add one in Windows Settings › Time & language › Speech.`, 'amber');
 }
 
+const blocked = e => e && e.name === 'NotAllowedError';
+
 /**
- * speak(text, onEnd, {lang}) – lang is detected from the text when not given.
- * onEnd always fires once, also when nothing could be spoken.
+ * speak(text, onEnd, {lang, what, audioPath, onBlocked})
+ * - lang is detected from the text when not given.
+ * - what names the source ('briefing', 'world', …) for speakingWhat().
+ * - audioPath plays server-rendered audio (e.g. '/api/voice/briefing'); text is still used by the device-voice fallback.
+ * - onBlocked fires instead of onEnd when the browser refuses to play without a tap (autoplay policy).
+ * onEnd fires once otherwise, also when nothing could be spoken.
  */
 export async function speak(text, onEnd, opts = {}) {
   stopSpeaking();
@@ -172,19 +194,22 @@ export async function speak(text, onEnd, opts = {}) {
   const clean = speakable(text);
   const v = voiceSettings();
   const lang = opts.lang || (v.language === 'auto' ? detectLang(clean) : 'en');
-  const finish = () => { if (my === gen) { speaking = false; onEnd && onEnd(); } };
+  const finish = () => { if (my === gen) { speaking = false; playing = null; notify(); onEnd && onEnd(); } };
+  const refuse = () => { if (my === gen) { speaking = false; playing = null; notify(); opts.onBlocked ? opts.onBlocked() : onEnd && onEnd(); } };
   if (!clean) return finish();
-  speaking = true;
+  speaking = true; playing = opts.what || 'text'; notify();
   const premiumOn = apiConfig() && (v.provider === 'premium' || v.provider === 'auto');
   if (premiumOn) {
-    try { await speakPremium(clean, lang, v, my); return finish(); } catch { /* fall back to the system voice */ }
+    try { await speakPremium(clean, lang, v, my, lang === 'en' ? opts.audioPath : null); return finish(); }
+    catch (e) { if (blocked(e)) return refuse(); /* else fall back to the device voice */ }
     if (my !== gen) return;
   }
   const cap = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
   if (cap) {
-    try { await cap.speak({ text: clean, lang: LOCALE[lang], rate: v.rate, pitch: 1.0 }); } catch { /* ignore */ }
+    try { await cap.speak({ text: clean, lang: LOCALE[lang], rate: clampRate(v.rate), pitch: 1.0 }); } catch { /* ignore */ }
     return finish();
   }
-  if (!('speechSynthesis' in window) || !(await speakSystem(clean, lang, v, my))) noVoice(lang);
+  try { if (!('speechSynthesis' in window) || !(await speakSystem(clean, lang, v, my))) noVoice(lang); }
+  catch (e) { if (blocked(e)) return refuse(); }
   finish();
 }

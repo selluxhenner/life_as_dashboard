@@ -120,8 +120,19 @@ These keys all go in `/etc/agentic-os.env`.
 - `ANTHROPIC_API_KEY` is needed for the briefing, news digests, AI tracker, inbox triage and the assistant.
   - Models: `claude-sonnet-5-5` writes, `claude-haiku-4-5` classifies.
   - A monthly cap is set in settings (default $40).
-- `OPENAI_API_KEY` is used for push-to-talk speech-to-text and the premium read-aloud voice.
+- `ELEVENLABS_API_KEY` is the natural voice (Eleven v4) and push-to-talk speech-to-text (Scribe v2), all with one key.
+  - The Starter plan ($6/month) covers a daily briefing, World and spoken replies; Creator ($22) is for heavy use or voice cloning.
+  - Pick the voice and model in Settings › Voice. `ELEVENLABS_VOICE_ID` only sets the default voice.
+  - Audio is cached on the server for 14 days (`data/tts/`), so replaying the briefing on another device costs nothing.
+- `OPENAI_API_KEY` (optional) is the fallback voice and transcription when ElevenLabs isn't set or fails.
 - `AA_API_KEY` is a free Artificial Analysis key that powers the "best models" leaderboard.
+
+**Voice agent:**
+- **Morning briefing → Listen:** a 30-second spoken summary written together with the card, never the card read aloud. It opens with one line on the shape of the day, then up to four things that matter and what to do about them, and closes by saying what it left out ("everything else can wait"). It may add what the card doesn't show, such as rain at the times you're out or one world event that matters.
+- **Ask:** tap, speak, tap Send. Claude answers in one to three spoken sentences and knows what you just heard ("tell me more about the second one"). The mic in the status bar does the same from any page. Exchanges also appear in the Agent chat.
+- **World → Listen:** the world in 30 seconds: the big picture in one line, the four or five events that matter and why, and what was left out. With a filter on, the summary lines for that slice (or its top three headlines) and how many more are on the page.
+- **How it sounds:** quick and lively. Eleven v4 gets a quick-pace direction and a tone per sentence (upbeat, serious, urgent …) so it rises and falls like a person talking; Settings › Voice › Speed (Calm / Brisk / Fast, Brisk by default) sets how fast every voice plays.
+- **Automatic:** Settings › Automation › *Play the spoken briefing automatically* plays it the first time the app is in front each morning. If the system blocks sound until you tap, the next tap starts it.
 
 **Notifications:**
 - **Phone:** install the **ntfy** app, subscribe to a long random topic, and put that topic in `NTFY_TOPIC`.
@@ -139,7 +150,7 @@ These keys all go in `/etc/agentic-os.env`.
 | every 30 min, 06–24 | news poll, scoring, breaking-news detection (≥ 9/10 and ≥ 2 outlets) |
 | 07:00 · 13:00 · 19:00 | world digest per continent |
 | 07:30 | AI models daily |
-| 07:50 | morning briefing; you get a notification at 08:00. The time can be changed in Settings |
+| 07:50 | morning briefing (card + 30-second spoken version); you get a notification at 08:00. The time can be changed in Settings |
 | 10:00 | job-hunt follow-ups (+ Berlin role suggestions if switched on) |
 
 Run a job by hand (master token):

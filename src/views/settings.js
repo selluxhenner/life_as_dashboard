@@ -12,7 +12,7 @@ import { toast } from '../core/fx.js';
 import { fmt } from '../core/dates.js';
 import { scheduleCal } from '../core/calendar-sync.js';
 import { icon } from '../core/icons.js';
-import { speak, stopSpeaking, VOICE_SAMPLES, PREMIUM_VOICES, voiceSettings, voiceScore, systemVoices } from '../voice/tts.js';
+import { speak, stopSpeaking, clearVoiceCache, VOICE_SAMPLES, PREMIUM_VOICES, SPEEDS, voiceSettings, voiceScore, systemVoices } from '../voice/tts.js';
 
 const row = (label, hint, control) => h('div.set-row', h('div.grow', h('div.title', label), hint ? h('div.sub', hint) : null), control);
 
@@ -142,7 +142,7 @@ function serverSettingsPanel() {
   const phoneNum = h('input.field', { type: 'tel', value: phone.number || '', placeholder: '+49 …', onchange: e => patch('phone', { ...phone, number: e.target.value }) });
   return panel({ title: 'Automation' },
     row('Morning briefing', 'Generated a few minutes before, then pushed to your devices.', time),
-    row('Read briefing aloud automatically', 'When you open the app for the first time each morning.', toggle(!!voice.autoRead, v => patch('voice', { ...voice, autoRead: v }), 'Auto-read')),
+    row('Play the spoken briefing automatically', 'The 30-second version, the first time the app is in front each morning (until noon).', toggle(!!voice.autoRead, v => patch('voice', { ...voice, autoRead: v }), 'Auto-read')),
     h('div.set-sep'),
     row('Phone check-ins (prototype)', `The assistant can call you to collect answers. Hard cap €${phone.monthlyCapEur || 10}/month.`, toggle(!!phone.enabled, v => patch('phone', { ...phone, enabled: v }), 'Phone calls')),
     phone.enabled ? h('div', row('Your number', 'Verified caller ID on Twilio.', phoneNum),
@@ -151,12 +151,47 @@ function serverSettingsPanel() {
 }
 
 let voicesLoaded = false;
+let previewAudio = null;
+const ELEVEN_HINT = 'Add ELEVENLABS_API_KEY to the server’s .env and restart it. Starter ($6/month) covers a daily briefing, World and spoken replies; Creator ($22) if you talk to it a lot. The same key also does speech-to-text.';
+
+/* ElevenLabs (the natural voice). Voice and model live on the server, so every device sounds the same. */
+function elevenSection(info, paired) {
+  if (!paired || !info) return null;
+  if (!info.eleven) return row('Natural voice', 'ElevenLabs isn’t set up on the server yet. ' + ELEVEN_HINT, chip('not set up', 'warn'));
+  const e = info.eleven;
+  const patchVoice = async patch => {
+    try { await api.patch('/api/settings', { voice: patch }); clearVoiceCache(); refresh('voiceInfo', '/api/voice/info'); refresh('serverSettings', '/api/settings'); }
+    catch (err) { toast(errorText(err), 'flare'); }
+  };
+  const { data, error } = remote('elevenVoices', '/api/voice/voices', 60 * 60000);
+  // your own voices (cloned, designed, saved from the library) first, then the premade ones
+  const voices = ((data && data.voices) || []).slice().sort((a, b) => (a.category === 'premade') - (b.category === 'premade') || a.name.localeCompare(b.name));
+  const acc = e.account;
+  const credits = acc && acc.limit ? `${acc.tier ? acc.tier + ' plan, ' : ''}${acc.used.toLocaleString('en-GB')} of ${acc.limit.toLocaleString('en-GB')} credits used this month` : 'connected';
+  const model = e.models.find(m => m.id === e.model) || e.models[0];
+  const pick = v => {
+    if (previewAudio) previewAudio.pause();
+    if (v.preview) { previewAudio = new Audio(v.preview); previewAudio.play().catch(() => {}); }
+    patchVoice({ elevenVoice: v.id });
+  };
+  return h('div.eleven',
+    row('Natural voice', `ElevenLabs, ${credits}. Model: ${model.note}. Tap a voice to hear its sample; it is then used everywhere.`,
+      seg(e.models.map(m => ({ value: m.id, label: m.label })), e.model, val => patchVoice({ elevenModel: val }), 'ElevenLabs model')),
+    voices.length
+      ? h('div.voice-cards.eleven-voices', voices.map(v => h('button.voice-card' + (v.id === e.voiceId ? '.on' : ''), {
+          type: 'button', 'aria-pressed': String(v.id === e.voiceId), title: v.description || v.name, onclick: () => pick(v)
+        }, h('span.title', v.name), h('span.sub', [v.accent, v.tone, v.gender].filter(Boolean).join(' · ') || v.category))))
+      : h('div.hint', error ? 'Couldn’t load the voices: ' + errorText(error) : 'Loading voices…'));
+}
+
 function voicePanel() {
   const v = voiceSettings();
   const set = patch => { state.settings.voice = { ...v, ...patch }; save(); };
   if (!voicesLoaded) systemVoices().then(() => { voicesLoaded = true; notify(); });
   const all = 'speechSynthesis' in window ? speechSynthesis.getVoices() : [];
   const paired = !!apiConfig();
+  const info = paired ? remote('voiceInfo', '/api/voice/info', 10 * 60000).data : null;
+  const server = info && info.tts;                     // 'elevenlabs' | 'openai' | null
   const test = lang => speak(VOICE_SAMPLES[lang], null, { lang });
   const langRow = (lang, name) => {
     const list = all.map(x => [voiceScore(x, lang), x]).filter(x => x[0] >= 0).sort((a, b) => b[0] - a[0]).map(x => x[1]);
@@ -164,26 +199,28 @@ function voicePanel() {
       ? select([{ value: '', label: 'Best · ' + list[0].name.replace(/^Microsoft |\s*-.*$/g, '') }, ...list.map(x => ({ value: x.name, label: x.name.replace(/^Microsoft |\s*-.*$/g, '') }))],
           v.system[lang] || '', val => set({ system: { ...v.system, [lang]: val } }), name + ' system voice', 'field sm voice-select')
       : chip('none installed', 'warn');
-    return row(name + ' voice', list.length ? 'Used for ' + name + ' text when the premium voice is off or unreachable.' : 'Add one in Windows Settings › Time & language › Speech › Add voices.',
+    return row(name + ' voice', list.length ? 'Used for ' + name + ' text when the server voice is off or unreachable.' : 'Add one in Windows Settings › Time & language › Speech › Add voices.',
       h('div.input-row', control, h('button.btn.sm', { type: 'button', onclick: () => test(lang) }, icon('volume'), 'Test')));
   };
-  return panel({ title: 'Voice', cls: 'voice-panel', readout: paired && v.provider !== 'system' ? 'premium · ' + v.premiumVoice : 'system voice' },
+  const readout = !paired || v.provider === 'system' || !server ? 'device voice' : server === 'elevenlabs' ? 'ElevenLabs' : 'OpenAI · ' + v.premiumVoice;
+  return panel({ title: 'Voice', cls: 'voice-panel', readout },
     row('Language', v.language === 'auto' ? 'Each text is read in its own language: English with an English voice, German with a German one.' : 'Everything is read in English with an English voice.',
       seg([{ value: 'en', label: 'English' }, { value: 'auto', label: 'Match text' }], v.language, val => set({ language: val }), 'Voice language')),
-    row('Engine', paired ? 'Auto uses the soft premium voice from your server and falls back to this device.' : 'Pair the server to unlock the soft premium voice. Until then this device’s voices are used.',
-      seg([{ value: 'auto', label: 'Auto' }, { value: 'premium', label: 'Premium' }, { value: 'system', label: 'Device' }], v.provider, val => set({ provider: val }), 'Voice engine')),
-    v.provider !== 'system' ? h('div.voice-cards', PREMIUM_VOICES.map(p => h('button.voice-card' + (v.premiumVoice === p.id ? '.on' : ''), {
+    row('Engine', paired ? 'Auto uses the natural voice from your server and falls back to this device.' : 'Pair the server to unlock the natural voice. Until then this device’s voices are used.',
+      seg([{ value: 'auto', label: 'Auto' }, { value: 'premium', label: 'Server' }, { value: 'system', label: 'Device' }], v.provider, val => set({ provider: val }), 'Voice engine')),
+    v.provider !== 'system' ? elevenSection(info, paired) : null,
+    v.provider !== 'system' && server === 'openai' ? h('div.voice-cards', PREMIUM_VOICES.map(p => h('button.voice-card' + (v.premiumVoice === p.id ? '.on' : ''), {
       type: 'button', 'aria-pressed': String(v.premiumVoice === p.id), disabled: !paired,
       onclick: () => { set({ premiumVoice: p.id }); speak(VOICE_SAMPLES.en, null, { lang: 'en' }); }
     }, h('span.title', p.label), h('span.sub', p.note)))) : null,
-    row('Speed', 'Soft is a little slower than normal speech.',
-      seg([{ value: 0.9, label: 'Slow' }, { value: 0.97, label: 'Soft' }, { value: 1.05, label: 'Normal' }].map(o => ({ ...o, value: String(o.value) })), String(v.rate), val => set({ rate: parseFloat(val) }), 'Speed')),
+    row('Speed', 'How fast every voice talks. Brisk fits a whole briefing into 30 seconds; Fast if you want it even quicker.',
+      seg(SPEEDS.map(o => ({ ...o, value: String(o.value) })), String(v.rate), val => { set({ rate: parseFloat(val) }); test('en'); }, 'Speed')),
     langRow('en', 'English'),
     v.language === 'auto' ? langRow('de', 'German') : null,
     h('div.input-row', { style: { marginTop: '8px' } },
       h('button.btn.sm', { type: 'button', onclick: () => test('en') }, icon('play'), 'Test English'),
       v.language === 'auto' ? h('button.btn.sm', { type: 'button', onclick: () => test('de') }, icon('play'), 'Test German') : null,
-      h('button.btn.sm.ghost', { type: 'button', onclick: stopSpeaking }, 'Stop')));
+      h('button.btn.sm.ghost', { type: 'button', onclick: () => { stopSpeaking(); if (previewAudio) previewAudio.pause(); } }, 'Stop')));
 }
 
 function usagePanel() {
