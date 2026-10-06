@@ -104,3 +104,8 @@ Home picks its column count in JS (`views/home.js`, 1–4) so panels are redistr
 
 ## Captures
 Everything typed into a capture box lands **unsorted**. Type colours: note `--tone-europe`, task `--signal`, habit `--tone-samerica`, goal `--tone-oceania`, calendar `--amber`, meeting `--tone-asia`.
+
+On Home, the Captures panel lists only unsorted captures, and each one can be dragged onto Tasks, Habits or Up next (`components/drag.js`, pointer events so it works in the Tauri window and with touch: press and hold). While dragging, every target's outline turns into marching dashes in that type's colour, and the target under the pointer fills with a tint and its label. A capture with its own date keeps it; otherwise Up next uses the day it was dropped on.
+
+## Up next
+Shows today. Once today is over (everything timed has ended, or from 20:00) it switches to tomorrow, with anything still open today listed above under "Still today". Tomorrow shows times, end times, places and tasks due. Logic in `core/upnext.js`; the panel rebuilds itself every minute.

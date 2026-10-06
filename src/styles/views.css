@@ -179,7 +179,25 @@
 .tl-title { font-size: var(--fs-sm); }
 .tl-meta { font-size: var(--fs-xs); color: var(--ink-3); }
 .tl-empty { list-style: none; }
+.tl-loc { display: inline-flex; align-items: center; gap: 3px; margin-left: var(--s-2); color: var(--ink-2); }
+.tl-loc svg { width: 12px; height: 12px; flex: none; }
 .allday { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--s-3); }
+/* Up next can show two days (today's rest + tomorrow); each is its own drop target then */
+.un-day { position: relative; margin: 0 calc(var(--s-2) * -1); padding: 0 var(--s-2); border-radius: var(--r-sm); transition: background var(--t-fast), box-shadow var(--t-fast); }
+.un-day + .un-day { margin-top: var(--s-3); }
+.un-head { display: flex; align-items: baseline; gap: var(--s-2); padding: var(--s-2) 0; }
+.un-head::after { content: ''; flex: 1; height: 1px; background: var(--seam); align-self: center; }
+.un-head .micro { color: var(--ink-2); }
+.up-next.rolled .un-day:last-child .un-head .micro { color: var(--signal); }
+.un-date { font-size: var(--fs-xs); color: var(--ink-3); }
+.un-due { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: var(--s-3) 0 var(--s-1); }
+.un-due .micro { margin-right: 2px; }
+html.is-dragging .un-day[data-drop] { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--drop-c) 30%, transparent); }
+.un-day[data-drop].drop-over { background: color-mix(in oklab, var(--drop-c) 10%, transparent); box-shadow: inset 0 0 0 1px var(--drop-c); }
+/* home captures: the row is the handle, the grip only says so */
+.cap-mini .grip { width: 14px; height: 14px; flex: none; stroke-width: 3; color: var(--ink-3); opacity: 0; transition: opacity var(--t-fast); }
+.cap-mini:hover .grip { opacity: .9; }
+@media (hover: none) { .cap-mini .grip { opacity: .5; } }
 
 .habit-chips { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 .habit-chip { display: inline-flex; align-items: center; gap: var(--s-2); height: 36px; padding: 0 var(--s-3); border-radius: var(--r-pill); border: 1px solid var(--seam-strong); background: transparent; color: var(--ink-2); font-size: var(--fs-sm); transition: all var(--t-base) var(--ease-out); }

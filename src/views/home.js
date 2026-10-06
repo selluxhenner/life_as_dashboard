@@ -1,11 +1,13 @@
 import { h } from '../core/dom.js';
 import { state, save, notify } from '../core/store.js';
-import { todayKey, pad2, fmt, parseKey } from '../core/dates.js';
+import { todayKey, keyOffset, pad2, fmt, parseKey, hm } from '../core/dates.js';
 import { panel } from '../components/panel.js';
 import { createChronosphere } from '../components/chronosphere.js';
 import { check, empty, meter, chip } from '../components/ui.js';
-import { dropdown } from '../components/overlay.js';
-import { agendaFor } from '../core/agenda.js';
+import { dropdown, friendlyDate } from '../components/overlay.js';
+import { draggable } from '../components/drag.js';
+import { agendaFor, dueTasksOn } from '../core/agenda.js';
+import { upNextPlan, nextUp } from '../core/upnext.js';
 import {
   liveTasks, weekCount, trainingHabit, dayScore,
   liveJobs, jobsAppliedThisWeek, QUOTES, toggleHabit, currentStreak
@@ -13,7 +15,7 @@ import {
 import { go } from '../core/router.js';
 import { decode, tick, toast } from '../core/fx.js';
 import { icon } from '../core/icons.js';
-import { typeOf, liveCaptures, unsorted, captureText, setType } from '../features/capture/captures.js';
+import { typeOf, liveCaptures, unsorted, captureText, setType, updateCapture } from '../features/capture/captures.js';
 import { typeOptions } from './captures.js';
 import { taskRow } from './today.js';
 import { aiData, toneFor, vendorName } from './ai-models.js';
@@ -48,52 +50,144 @@ function captureBar() {
       h('span.data', String(n)), 'to sort', icon('right')));
 }
 
+/* ---------- sorting by drag: pull a capture onto Tasks, Habits or Up next ---------- */
+const DROP_LABEL = { task: 'Drop to add as a task', habit: 'Drop to track as a daily habit', event: 'Drop to put it on the calendar' };
+let arrived = null;   // { id, at, flashed }: what the last drop created, so its panel shows it
+
+function dropZone(el, kind, day) {
+  el.dataset.drop = kind;
+  el.dataset.dropLabel = DROP_LABEL[kind];
+  if (day) el.dataset.day = day;
+  el.style.setProperty('--drop-c', typeOf(kind).color);
+  return el;
+}
+const dropDay = (c, zone) => c.date || zone.dataset.day;   // a date written in the capture wins
+const when = (dk, time) => friendlyDate(dk) + (time ? ' ' + time : '');
+
+function dropHint(c, zone) {
+  if (!zone) return 'Drop on Tasks, Habits or Up next';
+  return '→ ' + (zone.dataset.drop === 'event' ? 'Calendar · ' + when(dropDay(c, zone), c.time) : typeOf(zone.dataset.drop).label);
+}
+function dropCapture(c, zone) {
+  const kind = zone.dataset.drop;
+  if (kind === 'event') updateCapture(c, { type: 'event', date: dropDay(c, zone) });
+  else if (c.type !== kind) setType(c, kind);
+  arrived = c.ref ? { id: c.ref.id, at: Date.now(), flashed: false } : null;
+  tick('ok');
+  toast(kind === 'task' ? 'Moved to Tasks' : kind === 'habit' ? 'Now a daily habit' : 'On the calendar · ' + when(c.date, c.time), 'pulse');
+}
+/* The item a drop just made stays in view for a minute and lights up once. */
+const isArrival = id => !!arrived && arrived.id === id && Date.now() - arrived.at < 60000;
+function arrive(el, id) {
+  if (isArrival(id) && !arrived.flashed) { el.classList.add('arrived'); arrived.flashed = true; }
+  return el;
+}
+
 function capturesPanel() {
-  const list = liveCaptures().slice().sort((a, b) => b.createdAt - a.createdAt).slice(0, 5);
+  const all = unsorted().sort((a, b) => b.createdAt - a.createdAt);
+  const list = all.slice(0, 5);
   const rows = h('div.rows');
   list.forEach(c => {
     const t = typeOf(c.type);
-    rows.append(h('div.row.cap-mini', { style: { '--c': t.color } },
+    const row = h('div.row.cap-mini', { style: { '--c': t.color } },
       dropdown({ options: typeOptions(), value: c.type, onChange: v => setType(c, v), label: 'Type of ' + c.text, cls: 'sm type-dd mini' }),
-      h('div.grow', h('div.title', c.text), h('div.sub', fmt.ago(c.createdAt) + (c.date ? ' · ' + fmt.short(c.date) + (c.time ? ' ' + c.time : '') : '')))));
+      h('div.grow', h('div.title', c.text), h('div.sub', fmt.ago(c.createdAt) + (c.date ? ' · ' + fmt.short(c.date) + (c.time ? ' ' + c.time : '') : ''))),
+      icon('grip', 'grip'));
+    draggable(row, { label: c.text, color: t.color, hint: z => dropHint(c, z), drop: z => dropCapture(c, z) });
+    rows.append(row);
   });
-  if (!list.length) rows.append(empty('Nothing captured', 'Type anything in the capture box. It lands here unsorted.'));
-  return panel({ title: 'Captures', readout: h('span', h('b', String(unsorted().length)), ' unsorted'), actions: [h('button.btn.sm.ghost', { type: 'button', onclick: () => go('captures') }, 'Sort')] }, rows);
+  if (!list.length) rows.append(liveCaptures().length
+    ? empty('All sorted', 'New captures land here. Drag them onto Tasks, Habits or Up next.')
+    : empty('Nothing captured', 'Type anything in the capture box. It lands here unsorted.'));
+  return panel({ title: 'Captures', readout: h('span', h('b', String(all.length)), ' unsorted'), actions: [h('button.btn.sm.ghost', { type: 'button', onclick: () => go('captures') }, 'Sort')] }, rows,
+    list.length ? h('div.hint', (all.length > list.length ? `+ ${all.length - list.length} more · ` : '') + 'Drag onto Tasks, Habits or Up next to sort.') : null);
+}
+
+/* ---------- Up next: today, and tomorrow once today is over (or from 20:00) ---------- */
+const fmtIn = m => m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + pad2(m % 60);
+const clock = m => pad2(Math.floor(m / 60) % 24) + ':' + pad2(m % 60);
+const nowMinutes = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+
+function tlItem(it, nowMin) {
+  const today = nowMin != null;
+  const past = today && it.end != null && it.end <= nowMin;
+  const live = today && it.start != null && it.start <= nowMin && (it.end ?? it.start + 60) > nowMin;
+  // plan blocks without an explicit end only have a guessed one, so "until" is shown for real ends only
+  const until = it.end != null && (it.kind !== 'plan' || it.ref.end) ? 'until ' + clock(it.end) : '';
+  const what = it.kind === 'plan' ? 'Plan block' : it.kind === 'lesson' ? 'Lesson' : it.calendar || 'Calendar';
+  return arrive(h('li.tl-item' + (past ? '.past' : '') + (live ? '.live' : '') + (it.done ? '.done' : ''), { style: { '--c': it.color } },
+    h('span.tl-time.data', it.time || '—'),
+    h('span.tl-dot'),
+    h('div.tl-body',
+      h('div.tl-title', it.title),
+      h('div.tl-meta', [what, until].filter(Boolean).join(' · '), it.location ? h('span.tl-loc', icon('pin'), it.location) : null)),
+    it.kind === 'plan' && today ? check(it.done, () => { it.ref.done = !it.ref.done; save(); }, 'Mark block done') : null), it.id);
+}
+
+/* One day inside Up next. With two days shown, each one is its own drop target. */
+function dayBlock({ dk, items, nowMin = null, label, date, zone, emptyText }) {
+  const allDay = items.filter(i => i.allDay);
+  const list = h('ol.timeline');
+  items.filter(i => !i.allDay).forEach(it => list.append(tlItem(it, nowMin)));
+  if (!list.children.length) list.append(h('li.tl-empty', empty(...emptyText)));
+  const due = nowMin == null ? dueTasksOn(dk).filter(t => !t.done) : [];
+  const el = h('div.un-day',
+    label ? h('div.un-head', h('span.micro', label), date ? h('span.un-date.data', date) : null) : null,
+    allDay.length ? h('div.allday', allDay.map(a => chip(a.title, null, 'plain'))) : null,
+    list,
+    due.length ? h('div.un-due', h('span.micro', 'Due'), due.slice(0, 3).map(t => chip(t.title, null, 'plain')), due.length > 3 ? h('span.dim', '+' + (due.length - 3)) : null) : null);
+  return zone ? dropZone(el, 'event', dk) : el;
 }
 
 function upNext() {
-  const tk = todayKey();
-  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
-  const items = agendaFor(tk).filter(i => !i.allDay);
-  const allDay = agendaFor(tk).filter(i => i.allDay);
-  const list = h('ol.timeline');
-  if (!items.length) list.append(h('li.tl-empty', empty('Nothing scheduled', 'Capture “09:00 Deep work” and sort it as Calendar.')));
-  for (const it of items) {
-    const past = it.end != null && it.end <= nowMin;
-    const live = it.start != null && it.start <= nowMin && (it.end ?? it.start + 60) > nowMin;
-    list.append(h('li.tl-item' + (past ? '.past' : '') + (live ? '.live' : '') + (it.done ? '.done' : ''), { style: { '--c': it.color } },
-      h('span.tl-time.data', it.time || '—'),
-      h('span.tl-dot'),
-      h('div.tl-body',
-        h('div.tl-title', it.title),
-        h('div.tl-meta', it.kind === 'plan' ? 'Plan block' : it.kind === 'lesson' ? 'Lesson' + (it.location ? ' · ' + it.location : '') : (it.calendar || 'Calendar') + (it.location ? ' · ' + it.location : ''))),
-      it.kind === 'plan' ? check(it.done, () => { it.ref.done = !it.ref.done; save(); }, 'Mark block done') : null));
-  }
-  const nextItem = items.find(i => i.start != null && i.start >= nowMin);
-  const readout = nextItem ? `next ${nextItem.time} · in ${fmtIn(nextItem.start - nowMin)}` : items.length ? 'day complete' : '';
-  return panel({ title: 'Up next', readout, cls: 'up-next' },
-    allDay.length ? h('div.allday', allDay.map(a => chip(a.title, null, 'plain'))) : null,
-    list);
+  const tk = todayKey(), tm = keyOffset(tk, 1);
+  const nowMin = nowMinutes();
+  const plan = upNextPlan(agendaFor(tk), nowMin);
+  const tomorrow = plan.tomorrow ? agendaFor(tm) : [];
+  const days = [];
+  if (!plan.over) days.push({ dk: tk, items: plan.today, nowMin, label: plan.tomorrow ? 'Today' : null, emptyText: ['Nothing scheduled today', 'Drag a capture here, or capture “09:00 Deep work”.'] });
+  else if (plan.today.length) days.push({ dk: tk, items: plan.today, nowMin, label: 'Still today' });
+  if (plan.tomorrow) days.push({ dk: tm, items: tomorrow, label: 'Tomorrow', date: fmt.weekday(tm) + ' ' + fmt.short(tm), emptyText: ['Nothing scheduled tomorrow', 'Drag a capture here to plan it.'] });
+
+  const next = nextUp(plan.today, nowMin);
+  const live = plan.today.find(i => i.start != null && i.start <= nowMin && (i.end ?? i.start + 60) > nowMin);
+  const first = nextUp(tomorrow, 0);
+  const readout = next ? `next ${next.time} · in ${fmtIn(next.start - nowMin)}`
+    : live ? 'now · until ' + clock(live.end ?? live.start + 60)
+    : plan.over ? (first ? 'tomorrow from ' + first.time : 'today done')
+    : '';
+  const el = panel({ title: 'Up next', readout, cls: 'up-next' + (plan.over ? ' rolled' : '') },
+    days.map(d => dayBlock({ ...d, zone: days.length > 1 })));
+  return dropZone(el, 'event', plan.over ? tm : tk);
 }
-const fmtIn = m => m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + pad2(m % 60);
+
+/* The readout counts minutes and the day rolls over at 20:00, so Up next rebuilds itself every minute. */
+let upNextEl = null, clockTimer = 0;
+function liveUpNext() {
+  upNextEl = upNext();
+  let minute = hm(new Date());
+  clearInterval(clockTimer);
+  clockTimer = setInterval(() => {
+    if (hm(new Date()) === minute || !upNextEl || !upNextEl.isConnected) return;
+    minute = hm(new Date());
+    const fresh = upNext();
+    upNextEl.replaceWith(fresh);
+    upNextEl = fresh;
+  }, 10000);
+  return upNextEl;
+}
 
 function tasksPanel() {
   const open = liveTasks().filter(t => !t.done).sort((a, b) => ({ high: 0, med: 1, low: 2 }[a.priority] - { high: 0, med: 1, low: 2 }[b.priority]));
+  const max = isPhone() ? 5 : 7;
+  let shown = open.slice(0, max);
+  const fresh = open.find(t => isArrival(t.id));
+  if (fresh && !shown.includes(fresh)) shown = [...shown.slice(0, max - 1), fresh];   // a dropped task is always visible
   const list = h('div.rows');
-  open.slice(0, isPhone() ? 5 : 7).forEach(t => list.append(taskRow(t, { compact: true })));
+  shown.forEach(t => list.append(arrive(taskRow(t, { compact: true }), t.id)));
   if (!open.length) list.append(empty('Inbox zero for tasks', 'Everything is done.'));
-  return panel({ title: 'Tasks', readout: h('span', h('b', String(open.length)), ' open'), actions: [h('button.btn.sm.ghost', { type: 'button', onclick: () => go('today') }, 'All')] }, list,
-    open.length > (isPhone() ? 5 : 7) ? h('div.hint', `+ ${open.length - (isPhone() ? 5 : 7)} more on Today`) : null);
+  return dropZone(panel({ title: 'Tasks', readout: h('span', h('b', String(open.length)), ' open'), actions: [h('button.btn.sm.ghost', { type: 'button', onclick: () => go('today') }, 'All')] }, list,
+    open.length > max ? h('div.hint', `+ ${open.length - max} more on Today`) : null), 'task');
 }
 
 function habitsPanel() {
@@ -102,11 +196,12 @@ function habitsPanel() {
   state.habits.forEach(hb => {
     const done = !!hb.history[tk];
     const sub = hb.mode === 'weekly' ? `${weekCount(hb, tk)}/${hb.target || 1} wk` : `${currentStreak(hb)}d`;
-    list.append(h('button.habit-chip' + (done ? '.on' : ''), { type: 'button', 'aria-pressed': String(done), onclick: () => toggleHabit(hb) },
-      h('span.hc-icon', hb.icon), h('span.hc-label', hb.label), h('span.hc-sub.data', sub)));
+    list.append(arrive(h('button.habit-chip' + (done ? '.on' : ''), { type: 'button', 'aria-pressed': String(done), onclick: () => toggleHabit(hb) },
+      h('span.hc-icon', hb.icon), h('span.hc-label', hb.label), h('span.hc-sub.data', sub)), hb.id));
   });
+  if (!state.habits.length) list.append(empty('No habits yet', 'Drag a capture here to start tracking it daily.'));
   const s = dayScore();
-  return panel({ title: 'Habits', readout: h('span', h('b', `${s.habits[0]}/${s.habits[1]}`), ' daily done') }, list);
+  return dropZone(panel({ title: 'Habits', readout: h('span', h('b', `${s.habits[0]}/${s.habits[1]}`), ' daily done') }, list), 'habit');
 }
 
 /* Bottom of Home: Job hunt and AI. The whole card opens its page (they are not in the sidebar). */
@@ -153,7 +248,7 @@ const NARROW = matchMedia('(min-width: 861px)');
 [WIDE, MID, NARROW, phoneQuery].forEach(q => q.addEventListener('change', () => notify()));
 function columns() {
   const P = {
-    upNext: upNext(), tasks: tasksPanel(), habits: habitsPanel(), captures: capturesPanel(),
+    upNext: liveUpNext(), tasks: tasksPanel(), habits: habitsPanel(), captures: capturesPanel(),
     world: worldPulsePanel(), extra: state.settings.flags.points ? rankCard() : principle()
   };
   const cols = WIDE.matches ? [['upNext'], ['tasks', 'habits'], ['captures'], ['world', 'extra']]
@@ -175,7 +270,7 @@ function phoneOverview(root) {
       title,
       h('div.hero-sub', fmt.long(new Date()) + ' · ' + state.settings.home.city, h('span.day-score.data', 'Day ' + s.score + '%'))),
     captureBar(),
-    h('div.stack', upNext(), briefingPanel(), tasksPanel(), habitsPanel(), jobsPulse(), aiPulse())));
+    h('div.stack', liveUpNext(), briefingPanel(), tasksPanel(), habitsPanel(), jobsPulse(), aiPulse())));
   return title;
 }
 
@@ -206,5 +301,8 @@ export default {
     const text = greeting() + ', ' + state.name + '.';
     if (!this._greeted) { decode(title, text, 520); this._greeted = true; } else title.textContent = text;
   },
-  unmount() { if (chrono) { chrono.destroy(); chrono = null; } }
+  unmount() {
+    if (chrono) { chrono.destroy(); chrono = null; }
+    clearInterval(clockTimer); upNextEl = null;
+  }
 };
