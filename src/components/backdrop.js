@@ -41,7 +41,9 @@ export function createBackdrop(canvas, opts = {}) {
   const FPS = isMobile ? 24 : 40;
 
   let w = 0, ht = 0, dpr = 1, scale = 1, ox = 0, oy = 0;
-  let colors = {}, pings = [], reveal = opts.boot ? 0 : 1, running = false, last = 0, raf = 0;
+  // Sweep-in: reveal goes 0 → 1 over SWEEP ms. With opts.hold the map waits, blank, until play().
+  const SWEEP = 900;
+  let colors = {}, pings = [], reveal = opts.boot ? 0 : 1, held = !!opts.hold, sweepAt = 0, running = false, last = 0, raf = 0;
   let parallax = { x: 0, y: 0, tx: 0, ty: 0 };
   const home = opts.home || { lat: 52.52, lon: 13.405, label: 'Berlin' };
 
@@ -156,10 +158,15 @@ export function createBackdrop(canvas, opts = {}) {
     sctx.globalAlpha = 1;
   }
 
+  let frameT = -1;
   function frame(t) {
+    if (t === frameT) return;   // one draw per display frame, however many callers asked for it
+    frameT = t;
     raf = 0;
     if (!running) return;
-    if (t - last < 1000 / FPS) { raf = requestAnimationFrame(frame); return; }
+    // The sweep runs at the display's full rate; after it, the live layer is capped.
+    const sweeping = reveal < 1 && !held;
+    if (!sweeping && t - last < 1000 / FPS) { raf = requestAnimationFrame(frame); return; }
     last = t;
     parallax.x += (parallax.tx - parallax.x) * .06;
     parallax.y += (parallax.ty - parallax.y) * .06;
@@ -168,7 +175,7 @@ export function createBackdrop(canvas, opts = {}) {
     ctx.save();
     ctx.translate(parallax.x * dpr, parallax.y * dpr);
     if (reveal < 1) {
-      reveal = Math.min(1, reveal + 1 / (FPS * .9));
+      if (sweeping) { sweepAt = sweepAt || t; reveal = Math.min(1, (t - sweepAt) / SWEEP); }
       const e = 1 - (1 - reveal) ** 3;
       ctx.drawImage(stat, 0, 0, canvas.width * e, canvas.height, 0, 0, canvas.width * e, canvas.height);
       // scan head
@@ -193,7 +200,7 @@ export function createBackdrop(canvas, opts = {}) {
     }
     ctx.restore();
     ctx.globalAlpha = 1;
-    const needsMotion = reveal < 1 || pings.length || Math.abs(parallax.tx - parallax.x) > .1 || Math.abs(parallax.ty - parallax.y) > .1;
+    const needsMotion = (reveal < 1 && !held) || pings.length || Math.abs(parallax.tx - parallax.x) > .1 || Math.abs(parallax.ty - parallax.y) > .1;
     if (needsMotion && !reduced) raf = requestAnimationFrame(frame);
   }
 
@@ -219,6 +226,11 @@ export function createBackdrop(canvas, opts = {}) {
 
   return {
     project,
+    /* Sweep the map in now (the launch handoff); again each time the window is opened. */
+    play() {
+      held = false; sweepAt = 0; reveal = reduced ? 1 : 0;
+      kick(); requestAnimationFrame(frame);
+    },
     refresh() { readColors(); drawStatic(); kick(); requestAnimationFrame(frame); },
     /* pings: [{lon, lat, region, breaking, size}] */
     setPings(list) {

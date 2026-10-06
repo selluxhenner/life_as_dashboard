@@ -8,7 +8,8 @@ import { fmt } from '../core/dates.js';
 import { notify } from '../core/store.js';
 import COUNTRIES from '../assets/country-centroids.json';
 import { go } from '../core/router.js';
-import { speak, stopSpeaking, isSpeaking } from '../voice/tts.js';
+import { speak, stopSpeaking, speakingWhat } from '../voice/tts.js';
+import { talk, toggleTalk, canTalk } from '../voice/talk.js';
 import { icon } from '../core/icons.js';
 
 export const newsData = () => remote('news', '/api/news/digest/latest', 10 * 60000);
@@ -123,20 +124,52 @@ function electionCard(e) {
     h('div.story-meta', h('span', sourceLine({ ...e, country: null }))));
 }
 
-function speechFor(top, stories, label) {
-  const parts = [label];
-  if (top.length) parts.push('The big picture. ' + top.slice(0, 4).map(s => s.headline + (s.brief ? ' ' + s.brief : '')).join(' '));
-  const by = {};
-  stories.forEach(s => (by[s.region] = by[s.region] || []).push(s));
-  for (const r of REGIONS) if (by[r.key]) parts.push(r.label + '. ' + by[r.key].slice(0, 3).map(s => s.headline).join('. ') + '.');
-  return parts.join('\n');
+/* The digest's spoken summary as {overview, items, outro}; older servers send a bare list of items. */
+const spokenOf = d => {
+  const sp = d && d.spoken;
+  return Array.isArray(sp) ? { overview: '', items: sp, outro: '' } : sp && Array.isArray(sp.items) ? sp : { overview: '', items: [], outro: '' };
+};
+
+/* What "Listen" says — never the page read aloud. Unfiltered: the digest's 30-second spoken summary (rendered and
+   cached on the server). Filtered: the summary lines about that slice, else its top three headlines, plus a count of the rest. */
+export function worldSpeech(digest, stories, label = '', matches = () => true) {
+  const sp = spokenOf(digest);
+  if (!label && sp.items.length) {
+    return { text: ['Here’s the world.', sp.overview, ...sp.items.map(s => s.say), sp.outro].filter(Boolean).join(' '), audioPath: '/api/voice/world' };
+  }
+  const seen = new Set();
+  const heads = stories.filter(s => s.headline && !seen.has(s.headline) && seen.add(s.headline)).map(s => s.headline.replace(/[.!?]?$/, '.'));
+  const said = label ? sp.items.filter(matches).map(s => s.say) : [];
+  const lines = said.length ? said.slice(0, 4) : heads.slice(0, 3);
+  if (!lines.length) return null;
+  const rest = heads.length - lines.length;
+  return {
+    text: [label ? `World news, ${label}.` : 'Here’s the world.', ...lines, rest > 0 ? `${rest} more on the page.` : ''].filter(Boolean).join(' '),
+    audioPath: label ? null : '/api/voice/world'
+  };
+}
+
+function listenButton(speech, cls = 'btn') {
+  const on = speakingWhat() === 'world';
+  return h('button.' + cls, {
+    type: 'button', disabled: !speech && !on, title: 'The world in 30 seconds: what matters and why',
+    onclick: () => (on ? stopSpeaking() : speak(speech.text, null, { what: 'world', lang: 'en', audioPath: speech.audioPath }))
+  }, icon(on ? 'pause' : 'volume'), on ? 'Stop' : 'Listen');
+}
+
+function askButton(cls = 'btn') {
+  if (!canTalk()) return null;
+  const asking = talk.state === 'listening' && talk.context === 'world';
+  return h('button.' + cls + (asking ? '.rec' : ''), { type: 'button', 'aria-pressed': String(asking), title: 'Ask about the news by voice', onclick: () => toggleTalk('world') },
+    icon('mic'), asking ? 'Send' : 'Ask');
 }
 
 export function worldPulsePanel() {
   const { data, connected } = newsData();
   const top = (data && data.digest && data.digest.top) || [];
   const stories = top.length ? top : digestStories(data).sort((a, b) => (b.breaking - a.breaking) || (b.significance || 0) - (a.significance || 0));
-  return panel({ title: 'World pulse', readout: data && data.digest ? fmt.ago(new Date(data.digest.createdAt).getTime()) : '', actions: [h('button.btn.sm.ghost', { type: 'button', onclick: () => go('news') }, 'Open')] },
+  const speech = stories.length ? worldSpeech(data && data.digest, stories) : null;
+  return panel({ title: 'World pulse', readout: data && data.digest ? fmt.ago(new Date(data.digest.createdAt).getTime()) : '', actions: [speech ? listenButton(speech, 'btn.sm.ghost') : null, h('button.btn.sm.ghost', { type: 'button', onclick: () => go('news') }, 'Open')] },
     stories.length
       ? h('ul.stories.compact', stories.slice(0, 4).map(storyRow))
       : empty(connected ? 'First digest is on its way' : 'News needs the server', connected ? 'Digests arrive at 07:00, 13:00 and 19:00.' : 'Pair this device in Settings to get the world digest.'));
@@ -169,10 +202,8 @@ export default {
     const mapStories = [...visible, ...visibleWire.filter(w => !visible.some(s => s.url === w.url)).map(w => ({ ...w, ...place(w) }))];
     const filterLabel = [activeTopic && TOPIC_LABEL[activeTopic], activeRegion && REGION_LABEL[activeRegion]].filter(Boolean).join(' · ');
 
-    const readBtn = h('button.btn', {
-      type: 'button',
-      onclick: () => { if (isSpeaking()) stopSpeaking(); else speak(speechFor(visibleTop, visible, filterLabel ? 'World news: ' + filterLabel : 'Your world news')); }
-    }, icon('volume'), 'Read aloud');
+    const sorted = [...visibleTop, ...[...visible].sort((a, b) => (b.breaking - a.breaking) || (b.significance || 0) - (a.significance || 0))];
+    const readBtn = listenButton(worldSpeech(digest, sorted, filterLabel ? filterLabel.replace(' · ', ', ') : '', matches));
     const reload = () => { refresh('news', '/api/news/digest/latest'); refresh('markets', '/api/markets'); };
 
     const topicBar = h('div.topic-bar', { role: 'group', 'aria-label': 'Filter by topic' },
@@ -186,7 +217,7 @@ export default {
 
     root.append(h('div.view.news',
       viewHead('World', digest.createdAt ? `Digest of ${fmt.time(new Date(digest.createdAt))} · live wire every 30 min · next digest ${nextSlot()}` : 'Politics, economy, elections and conflict — the events that move the world, three digests a day plus a live wire.',
-        readBtn, connected ? btn(loading ? 'Refreshing…' : 'Refresh', reload, 'ghost', 'sync') : null),
+        readBtn, connected ? askButton() : null, connected ? btn(loading ? 'Refreshing…' : 'Refresh', reload, 'ghost', 'sync') : null),
       breaking.length ? h('div.breaking-bar', chip('breaking', 'alert', 'live'),
         h('a.grow', { href: breaking[0].url, target: '_blank', rel: 'noopener' }, breaking[0].headline),
         breaking.length > 1 ? h('span.data', `+${breaking.length - 1} more`) : null) : null,
@@ -219,9 +250,9 @@ export default {
 
 /* One region picked: all of its news across the full width, in three columns by importance. */
 const TIERS = [
-  { key: 'must', label: 'Must know', hint: 'Breaking or significance 8+', test: s => s.breaking || (s.significance || 0) >= 8 },
-  { key: 'notable', label: 'Important', hint: 'Significance 6–7', test: s => (s.significance || 0) >= 6 },
-  { key: 'more', label: 'Also happening', hint: 'Worth a glance', test: () => true }
+  { key: 'must', label: 'Top stories', test: s => s.breaking || (s.significance || 0) >= 8 },
+  { key: 'notable', label: 'Important', test: s => (s.significance || 0) >= 6 },
+  { key: 'more', label: 'Also happening', test: () => true }
 ];
 function regionFocus(region, list) {
   const seen = new Set(), stories = [];
@@ -229,6 +260,8 @@ function regionFocus(region, list) {
   stories.sort((a, b) => (b.breaking ? 1 : 0) - (a.breaking ? 1 : 0) || (b.significance || 0) - (a.significance || 0) || new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
   const cols = TIERS.map(() => []);
   for (const s of stories) cols[TIERS.findIndex(t => t.test(s))].push(s);
+  // a quiet day still leads with the region's strongest stories
+  while (cols[0].length < 2 && cols[1].length) cols[0].push(cols[1].shift());
   const label = REGION_LABEL[region];
   return h('div.region-focus', { style: { '--c': `var(--tone-${region})` } },
     h('div.region-focus-head', h('h2', label), h('span.data.muted', stories.length + ' stories'),

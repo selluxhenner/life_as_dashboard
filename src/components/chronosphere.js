@@ -30,6 +30,8 @@ function weekProgress(d) { return (((d.getDay() + 6) % 7) * 1440 + minOf(d)) / (
 /* The boot sequence plays once per app start; views re-render on every store change. */
 let booted = false;
 const INTRO_MS = 2400;
+/* The launch animation calls this when the window is opened again, so the next clock plays its intro. */
+export function replayIntro() { booted = false; }
 
 /** A digit that rolls to its next value: old glyph leaves upward, new one rises in. */
 function digitSlot() {

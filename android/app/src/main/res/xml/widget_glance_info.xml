@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- keyguard: phones that allow lock-screen widgets can place it there too. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="70dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="3"
+    android:maxResizeWidth="600dp"
+    android:maxResizeHeight="500dp"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_glance"
+    android:initialKeyguardLayout="@layout/widget_glance"
+    android:previewLayout="@layout/widget_glance"
+    android:previewImage="@mipmap/ic_launcher"
+    android:description="@string/widget_description"
+    android:widgetCategory="home_screen|keyguard" />

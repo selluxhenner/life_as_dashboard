@@ -473,4 +473,61 @@ html.is-dragging .panel[data-drop] > .frame path:first-child {
   .detail-grid { grid-template-columns: 1fr; }
   .detail-field .dd { min-width: 0; }
   .heatmap { --cell: 16px; --gap: 3px; }
+  .detail-field { flex-wrap: wrap; }
+  .detail-field > .seg { width: 100%; }
+  .detail-field > .seg button { flex: 1; }
 }
+
+/* ---------- voice bar (components/voice-pill.js) ----------
+   Floats above everything while the agent listens, thinks or speaks. The orb is four
+   bars: red and breathing while listening, blinking while thinking, dancing while speaking. */
+.voice-pill-host {
+  position: fixed; left: 50%; bottom: var(--s-5); transform: translateX(-50%);
+  z-index: var(--z-overlay); width: min(560px, calc(100vw - 32px)); pointer-events: none;
+}
+.voice-pill {
+  pointer-events: auto; display: flex; align-items: center; gap: var(--s-3);
+  padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4);
+  background: color-mix(in oklab, var(--hull-2) 92%, transparent);
+  backdrop-filter: blur(var(--panel-blur)); -webkit-backdrop-filter: blur(var(--panel-blur));
+  border: 1px solid var(--seam-strong); border-radius: var(--r-md);
+  box-shadow: 0 16px 48px rgb(0 0 0 / .55);
+  animation: toast-in var(--t-base) var(--ease-out);
+}
+.voice-pill[data-state="listening"] { border-color: color-mix(in oklab, var(--flare) 55%, var(--seam-strong)); }
+.vp-main { flex: 1; min-width: 0; }
+.vp-head { display: flex; align-items: baseline; gap: var(--s-2); flex-wrap: wrap; }
+.vp-label { font-size: var(--fs-sm); color: var(--ink); }
+.vp-head .micro { color: var(--ink-3); }
+.vp-heard { margin-top: 2px; font-size: var(--fs-sm); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vp-reply {
+  margin-top: var(--s-1); font-size: var(--fs-sm); color: var(--ink-2); line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+}
+.vp-close {
+  flex: none; display: grid; place-items: center; width: 28px; height: 28px;
+  background: none; border: 0; border-radius: var(--r-sm); color: var(--ink-3);
+}
+.vp-close:hover { color: var(--ink); background: var(--seam); }
+.vp-orb { flex: none; display: flex; align-items: center; justify-content: center; gap: 3px; width: 26px; height: 26px; }
+.vp-orb i { width: 3px; height: 8px; border-radius: 2px; background: var(--signal); transform-origin: center; }
+.voice-pill[data-state="listening"] .vp-orb i { background: var(--flare); animation: vp-breathe 1.2s ease-in-out infinite; }
+.voice-pill[data-state="thinking"] .vp-orb i { height: 3px; animation: vp-blink 1s ease-in-out infinite; }
+.voice-pill[data-state="speaking"] .vp-orb i { animation: vp-dance .9s ease-in-out infinite; }
+.vp-orb i:nth-child(2) { animation-delay: .12s !important; }
+.vp-orb i:nth-child(3) { animation-delay: .24s !important; }
+.vp-orb i:nth-child(4) { animation-delay: .36s !important; }
+@keyframes vp-breathe { 50% { transform: scaleY(1.8); opacity: .7; } }
+@keyframes vp-blink { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+@keyframes vp-dance { 0%, 100% { transform: scaleY(.6); } 40% { transform: scaleY(2.2); } 70% { transform: scaleY(1.1); } }
+@media (prefers-reduced-motion: reduce) { .voice-pill, .vp-orb i { animation: none !important; } }
+@media (max-width: 860px) { .voice-pill-host { bottom: calc(64px + var(--s-3) * 2 + env(safe-area-inset-bottom)); } }
+
+/* Status-bar talk button: the global way into the voice agent. */
+.status .talk {
+  display: grid; place-items: center; width: 30px; height: 26px;
+  background: none; border: 1px solid var(--seam); border-radius: var(--r-pill); color: var(--ink-2);
+}
+.status .talk:hover { border-color: var(--seam-strong); color: var(--ink); }
+.status .talk[aria-pressed="true"] { border-color: var(--flare); color: var(--flare); }
+.status .talk svg { width: 14px; height: 14px; }

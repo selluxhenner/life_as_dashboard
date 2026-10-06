@@ -29,7 +29,7 @@ export function freshState() {
       jahr: [{ id: uid(), label: 'Ship Agentic OS v2', done: false }]
     },
     habits: [
-      { id: uid(), label: 'Deep work block', sub: 'At least one 25-min focus session', icon: '🧠', history: {}, mode: 'daily', link: 'focus', createdAt: today },
+      { id: uid(), label: 'Deep work block', sub: 'At least one distraction-free block', icon: '🧠', history: {}, mode: 'daily', createdAt: today },
       { id: uid(), label: 'Training', sub: 'Strength or sport session', icon: '💪', history: {}, mode: 'weekly', target: 6, createdAt: today },
       { id: uid(), label: 'Meals + protein', sub: 'Breakfast, lunch, dinner + shake', icon: '🥩', history: {}, mode: 'daily', createdAt: today }
     ],
@@ -39,7 +39,7 @@ export function freshState() {
     meta: {
       createdAt: today, lastSettledDay: today,
       habitRework20260731: true, bewImport20260729: true, noPenalties20260924: true,
-      english20261005: true, jobHunt20261005: true
+      english20261005: true, jobHunt20261005: true, briskVoice20261006: true
     },
     dayplan: {}, weekplan: {}, weekFocus: {}, reflections: {},
     ledger: [], focus: {}, routines: {},
@@ -77,6 +77,7 @@ export function migrate(s) {
   s.settings.flags = { ...defaultSettings().flags, ...(s.settings.flags || {}) };
   english(s);
   jobHunt(s);
+  briskVoice(s);
   return s;
 }
 
@@ -165,6 +166,14 @@ export function english(s) {
     const en = HABIT_EN[h.label];
     if (en) { h.label = en[0]; h.sub = en[1]; }
   });
+}
+
+/* 2026-10-06: the voice speaks briskly. The old Slow / Soft / Normal speeds (0.9–1.05) all become Brisk once. */
+export function briskVoice(s) {
+  if (s.meta.briskVoice20261006) return;
+  s.meta.briskVoice20261006 = true;
+  const v = s.settings && s.settings.voice;
+  if (v && typeof v.rate === 'number' && v.rate < 1.1) v.rate = 1.15;
 }
 
 /* 2026-10-05: Bewerbungen (Swiss internships) -> Job Hunt (Berlin). Old entries are archived, not deleted. */

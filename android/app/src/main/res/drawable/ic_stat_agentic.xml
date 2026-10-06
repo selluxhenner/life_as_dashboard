@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status bar / tile icon: the planet with its sun on the orbit (white; Android tints it). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="2"
+        android:pathData="M12,3.5a8.5,8.5 0 1,1 0,17a8.5,8.5 0 1,1 0,-17z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M12,8.6a3.4,3.4 0 1,1 0,6.8a3.4,3.4 0 1,1 0,-6.8z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M18.3,3.4a2.3,2.3 0 1,1 0,4.6a2.3,2.3 0 1,1 0,-4.6z" />
+</vector>

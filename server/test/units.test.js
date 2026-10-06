@@ -97,3 +97,42 @@ test('HTML mail becomes readable text', async () => {
   const html = '<html><head><style>p{color:red}</style></head><body><p>Hi Kevin,</p><p>Your interview is on <b>Friday</b>.<br>Details: <a href="https://jobs.example/x">here</a></p><ul><li>CV</li><li>Portfolio</li></ul><p>Tom &amp; Ana&nbsp;&#8212; HR</p></body></html>';
   assert.equal(htmlToText(html), 'Hi Kevin,\nYour interview is on Friday.\nDetails: here (https://jobs.example/x)\n• CV\n• Portfolio\nTom & Ana — HR');
 });
+
+test('spoken script: grounded topics only, two sentences each, fits the 30-second budget', async () => {
+  const { shapeSpoken, cleanSay, spokenText, spokenScript, stripTags, words, MAX_WORDS } = await import('../src/voice/script.js');
+  assert.equal(cleanSay('The DAX fell 2.5% today. Lessons start at 9.30. A third sentence is cut.'), 'The DAX fell 2.5% today. Lessons start at 9.30.');
+  assert.equal(cleanSay('**Rain** from 4 pm · take a jacket'), 'Rain from 4 pm, take a jacket.');
+  assert.equal(cleanSay('[excited] See [the post](https://x.y) now'), 'See the post now.');
+  const say = n => Array.from({ length: n }, (_, i) => 'word' + i).join(' ') + '.';
+  const out = shapeSpoken({
+    greeting: 'Good morning, Kevin.',
+    overview: 'Busy morning, free afternoon.',
+    overviewTone: 'bright',
+    topics: [
+      { label: 'First up', say: say(20), tone: 'urgent', refs: ['ev:1'] },
+      { label: 'Made up', say: say(5), refs: ['ev:999'] },          // not in the data: dropped
+      { label: 'Inbox', say: say(20), tone: 'shouty', refs: ['mail:1', 'ev:999'] },  // the bad ref is removed, the topic stays
+      { label: 'Rain', say: say(20), tone: 'relaxed', refs: ['weather'] },
+      { label: 'World', say: say(20), refs: ['world:0'] },
+      { label: 'Jobs', say: say(20), refs: ['job:1'] }
+    ],
+    outro: 'Everything else can wait.'
+  }, r => r !== 'ev:999');
+  assert.deepEqual(out.topics.map(t => t.label), ['First up', 'Inbox', 'Rain']);
+  assert.deepEqual(out.topics[1].refs, ['mail:1']);
+  assert.equal(out.topics[1].tone, undefined);                       // unknown tones are dropped, not passed to the voice
+  assert.ok(out.words <= MAX_WORDS && out.seconds <= 30, `${out.words} words, ${out.seconds} s`);
+  assert.equal(words(spokenText(out)), out.words);
+  assert.ok(spokenText(out).startsWith('Good morning, Kevin. Busy morning, free afternoon. word0'));
+  assert.ok(spokenText(out).endsWith('Everything else can wait.'));
+  // the voice gets the same words with a quick pace up front and a tone per line
+  const script = spokenScript(out);
+  assert.ok(script.startsWith('[Quick, lively, energetic pace, bright, upbeat] Good morning, Kevin. [bright, upbeat] Busy morning'));
+  assert.ok(script.includes('[focused, urgent] word0'));
+  assert.ok(script.endsWith('[relaxed, easy] Everything else can wait.'));
+  assert.equal(stripTags(script), spokenText(out));
+  // over budget: topics go first, then the outro, then the overview
+  const tight = shapeSpoken({ greeting: 'Hi.', overview: say(10), topics: [{ say: say(30), refs: ['a'] }], outro: say(8) }, () => true, 42);
+  assert.equal(tight.outro, '');
+  assert.ok(tight.overview);
+});

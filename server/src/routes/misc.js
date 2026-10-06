@@ -6,14 +6,16 @@ import { config } from '../config.js';
 import { HttpError, body, str } from '../http.js';
 import { allSettings, setSetting, getSetting, DEFAULTS } from '../settings.js';
 import { pairDevice } from '../auth.js';
-import { getBriefing, generateBriefing } from '../jobs/briefing.js';
-import { latestDigest } from '../jobs/news.js';
+import { getBriefing, generateBriefing, ensureSpoken, briefingSpeech } from '../jobs/briefing.js';
+import { latestDigest, worldSpeech } from '../jobs/news.js';
 import { marketPulse } from '../jobs/markets.js';
 import { aiToday } from '../jobs/aimodels.js';
 import { runAgent, decideAction, pendingActions } from '../agent/runner.js';
 import { placeCall, listCalls, phoneSpend } from '../phone/twilio.js';
-import { monthSpend } from '../ai/claude.js';
+import { monthSpend, asData } from '../ai/claude.js';
 import { notificationsSince } from '../notify/index.js';
+import { fcmReady } from '../notify/fcm.js';
+import { glance } from '../jobs/glance.js';
 import { runJob, JOBS } from '../jobs/scheduler.js';
 import { localDate, monthKey } from '../lib/time.js';
 import { uid } from '../lib/crypto.js';
@@ -43,12 +45,26 @@ misc.delete('/devices/:id', c => { db.run('UPDATE devices SET revoked = 1 WHERE 
 misc.get('/briefing/today', c => c.json({ briefing: getBriefing(localDate()) }));
 misc.get('/briefing/:date', c => c.json({ briefing: getBriefing(c.req.param('date')) }));
 misc.post('/briefing/generate', async c => c.json({ briefing: await generateBriefing() }));
+/* Adds the spoken version to today's briefing when it was written before voice existed. */
+misc.post('/briefing/spoken', async c => {
+  const b = await c.req.json().catch(() => ({}));
+  return c.json({ briefing: await ensureSpoken(localDate(), { force: b.force === true }) });
+});
 misc.get('/news/digest/latest', c => c.json(latestDigest()));
 misc.get('/markets', async c => c.json(await marketPulse()));
 misc.get('/ai-models/today', c => c.json(aiToday()));
 misc.get('/notes', c => c.json({ notes: db.all('SELECT * FROM notes ORDER BY created_at DESC LIMIT 50') }));
 
 /* ---------- agent ---------- */
+/* What Kevin was just listening to, so a spoken follow-up like "tell me more about the second one" makes sense. */
+function voiceContext(kind) {
+  const heard = kind === 'briefing' ? briefingSpeech() : kind === 'world' ? worldSpeech() : null;
+  if (!heard) return '';
+  return (kind === 'briefing'
+    ? 'Kevin just listened to his spoken morning briefing (below). He may ask follow-ups about it; look details up with tools.\n'
+    : 'Kevin just listened to the spoken world news summary (below). For details use get_news.\n') + asData(kind + '_heard', heard);
+}
+
 misc.post('/agent/chat', async c => {
   const b = await body(c);
   const message = str(b.message, 4000);
@@ -58,7 +74,7 @@ misc.post('/agent/chat', async c => {
     const send = ev => stream.writeSSE({ data: JSON.stringify(ev) });
     await send({ type: 'start', conversationId });
     try {
-      await runAgent({ message, conversationId, trigger: b.channel === 'voice' ? 'voice' : 'chat', onEvent: send });
+      await runAgent({ message, conversationId, trigger: b.channel === 'voice' ? 'voice' : 'chat', onEvent: send, extraSystem: voiceContext(b.context) });
     } catch (e) {
       await send({ type: 'error', message: e.message });
     }
@@ -88,6 +104,17 @@ misc.get('/usage', c => {
   return c.json({ month, usage: { aiUsd: monthSpend(month) - voiceUsd, voiceUsd, aiCapUsd: getSetting('ai').monthlyCapUsd, phoneEur: phoneSpend(month), phoneCapEur: getSetting('phone').monthlyCapEur, byFeature } });
 });
 misc.get('/notifications', c => c.json({ notifications: notificationsSince(Number(c.req.query('since') || 0)) }));
+/* What the phone shows outside the app: morning notification, home-screen widget, Quick Settings tile. */
+misc.get('/glance', c => c.json({ ...glance(), instant: fcmReady() }));
+/* The Android app registers its Firebase token here (null to stop); used only to say "check now". */
+misc.post('/push/register', async c => {
+  const { deviceId } = c.get('user');
+  if (deviceId === 'master') throw new HttpError(400, 'Pair this device first; the master token has no device row');
+  const b = await body(c);
+  const token = b.token == null ? null : str(b.token, 4096);
+  db.run('UPDATE devices SET push_token = ? WHERE id = ?', token || null, deviceId);
+  return c.json({ ok: true, instant: fcmReady() && !!token });
+});
 misc.get('/jobs-status', c => c.json({ runs: db.all('SELECT * FROM job_runs ORDER BY started_at DESC LIMIT 40') }));
 
 /* ---------- dev: run a scheduled job by hand ---------- */

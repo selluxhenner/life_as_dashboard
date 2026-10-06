@@ -147,6 +147,20 @@
 .brief-sec li { font-size: var(--fs-sm); color: var(--ink-2); padding-left: 12px; position: relative; }
 .brief-sec li::before { content: ''; position: absolute; left: 0; top: .62em; width: 5px; height: 1px; background: var(--ink-3); }
 .brief-focus { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; margin-top: var(--s-4); }
+/* The spoken briefing's topics, in the order you hear them. */
+.brief-air { display: flex; align-items: baseline; gap: var(--s-3); margin: calc(var(--s-2) * -1) 0 var(--s-4); font-size: var(--fs-sm); color: var(--ink-2); }
+.brief-air .micro { color: var(--ink-3); flex: none; }
+.brief-air-list { display: flex; flex-wrap: wrap; gap: 2px var(--s-2); }
+.brief-air .dot-sep { color: var(--ink-3); }
+.briefing .btn .data.muted { color: inherit; opacity: .7; font-size: var(--fs-xs); }
+/* Phones: Listen / Ask / regenerate get their own row instead of pushing the page wider. */
+@media (max-width: 860px) {
+  .briefing .panel-head { flex-wrap: wrap; row-gap: var(--s-2); }
+  .briefing .panel-head > div { margin-left: 0 !important; flex-basis: 100%; }
+}
+/* A voice button that is recording (Ask on the briefing, Ask on the World page). */
+.btn.rec { background: var(--flare); --b: var(--flare); border-color: var(--flare); color: #fff; animation: rec-pulse 1.2s infinite; }
+@media (prefers-reduced-motion: reduce) { .btn.rec { animation: none; } }
 
 .home-grid { align-items: start; }
 /* Job hunt + AI: whole card is the link to its page */
@@ -255,6 +269,25 @@ html.is-dragging .un-day[data-drop] { box-shadow: inset 0 0 0 1px color-mix(in o
 .cal-legend { display: flex; gap: 6px; }
 .cal-layout { display: grid; gap: var(--s-4); }
 .cal-layout.with-side { grid-template-columns: minmax(0, 1fr) 360px; }
+/* phone week: seven stacked days */
+.week-agenda { display: flex; flex-direction: column; gap: var(--s-2); }
+.wa-day { background: var(--panel-bg); border: 1px solid var(--seam); border-radius: var(--r-md); overflow: hidden; }
+.wa-day.today { border-color: color-mix(in oklab, var(--signal) 55%, var(--seam)); box-shadow: inset 2px 0 0 var(--signal); }
+.wa-day.past { opacity: .62; }
+.wa-head { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: var(--s-2); width: 100%; min-height: 48px; padding: 0 var(--s-4); }
+.wa-head:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }
+.wa-wd { font-size: var(--fs-sm); color: var(--ink-2); width: 34px; }
+.wa-dn { font-size: var(--fs-lg); }
+.wa-count { margin-left: auto; font-size: var(--fs-xs); color: var(--ink-3); }
+.wa-head svg { width: 16px; height: 16px; color: var(--ink-3); }
+.wa-items { display: flex; flex-direction: column; border-top: 1px solid var(--seam); }
+.wa-item { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 56px 1fr; gap: 0 var(--s-3); padding: var(--s-2) var(--s-4); box-shadow: inset 3px 0 0 var(--c); cursor: pointer; }
+.wa-item + .wa-item { border-top: 1px solid var(--seam); }
+.wa-item.task { cursor: default; }
+.wa-item.done .wa-title { color: var(--ink-3); text-decoration: line-through; }
+.wa-time { font-size: var(--fs-xs); color: var(--ink-3); padding-top: 2px; }
+.wa-title { font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.wa-loc { grid-column: 2; font-size: var(--fs-xs); color: var(--ink-3); }
 .cal-side { position: sticky; top: 76px; }
 .cal-panel { overflow: hidden; }
 .cal-grid { --gut: 56px; }
@@ -330,8 +363,9 @@ html.is-dragging .un-day[data-drop] { box-shadow: inset 0 0 0 1px color-mix(in o
 .region-panel .panel-head h2 { color: var(--c); }
 /* one region picked: three columns by importance across the full width */
 .region-focus { margin-top: var(--s-4); }
-.region-focus-head { display: flex; align-items: baseline; gap: var(--s-3); margin-bottom: var(--s-3); }
+.region-focus-head { display: flex; align-items: baseline; gap: var(--s-3); margin-bottom: var(--s-3); padding: var(--s-2) var(--s-3); border-radius: var(--r-md); background: color-mix(in oklab, var(--void) 78%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .region-focus-head h2 { font-size: var(--fs-xl); font-weight: 500; color: var(--c); }
+.region-focus-head .muted { color: var(--ink-2); }
 .region-focus-head .btn { margin-left: auto; }
 .region-tiers { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-4); align-items: start; }
 .tier-must { box-shadow: var(--panel-edge), inset 0 2px 0 var(--flare); }
@@ -430,16 +464,18 @@ html.is-dragging .un-day[data-drop] { box-shadow: inset 0 0 0 1px color-mix(in o
 /* ---------- Inbox ---------- */
 .mail-list { display: grid; }
 .mail, .slack-msg { display: flex; gap: var(--s-3); padding: var(--s-3) var(--s-2); margin: 0 calc(var(--s-2) * -1); border-radius: var(--r-sm); color: var(--ink); text-decoration: none; align-items: flex-start; }
-button.mail { border: 0; background: transparent; font: inherit; text-align: left; width: calc(100% + var(--s-4)); cursor: pointer; }
+.mail-list > * { min-width: 0; }
+button.mail { border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer; }
 button.mail:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }
 .mail.selected { background: color-mix(in oklab, var(--signal) 9%, var(--hull-2)); box-shadow: inset 2px 0 0 var(--c); }
 .mail:hover, .slack-msg:hover { background: var(--hull-2); text-decoration: none; }
 /* list on the left, the open message on the right (and Slack on very wide screens) */
 .inbox-grid { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); gap: var(--s-4); align-items: start; }
 .inbox-grid.three { grid-template-columns: minmax(300px, 380px) minmax(0, 1fr) minmax(300px, 380px); }
-.mail-list-panel .mail-list, .inbox-grid .slack-panel .mail-list { max-height: calc(100vh - 260px); overflow: auto; overscroll-behavior: contain; padding: 0 var(--s-2); margin: 0 calc(var(--s-2) * -1); }
+.mail-list-panel .mail-list, .inbox-grid .slack-panel .mail-list { max-height: calc(100vh - 260px); overflow: hidden auto; overscroll-behavior: contain; padding: 0 var(--s-2); margin: 0 calc(var(--s-2) * -1); }
 .mail-reader { position: sticky; top: 68px; max-height: calc(100vh - 92px); overflow: auto; box-shadow: var(--panel-edge), inset 0 2px 0 var(--c, var(--signal)); }
 .reader-head { display: flex; align-items: flex-start; gap: var(--s-3); padding-bottom: var(--s-4); border-bottom: 1px solid var(--seam); }
+.reader-head > .grow { flex: 1; min-width: 0; }
 .reader-subj { font-size: var(--fs-xl); font-weight: 500; line-height: var(--lh-tight); overflow-wrap: anywhere; }
 .reader-from { display: flex; gap: var(--s-3); align-items: center; margin-top: var(--s-3); font-size: var(--fs-sm); }
 .reader-from .muted { color: var(--ink-3); }

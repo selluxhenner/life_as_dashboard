@@ -30,7 +30,7 @@ const when = ms => {
 const fullWhen = ms => new Date(ms).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 function emailRow(m, color) {
-  const pick = () => { selectedId = m.id; phoneReading = true; notify(); };
+  const pick = () => { selectedId = m.id; phoneReading = isPhone(); notify(); };
   return h('button.mail' + (m.unread ? '.unread' : '') + (m.id === selectedId && !isPhone() ? '.selected' : ''), {
     type: 'button', style: { '--c': color || 'var(--signal)' }, 'aria-current': m.id === selectedId ? 'true' : null, onclick: pick
   },

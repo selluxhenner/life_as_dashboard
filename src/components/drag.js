@@ -4,6 +4,7 @@
 // A drop zone is any element with data-drop="<kind>"; the innermost one under the pointer wins.
 import { h } from '../core/dom.js';
 import { reducedMotion } from '../core/fx.js';
+import { scrollRoot } from '../core/platform.js';
 
 const THRESHOLD = 6;   // px a mouse has to travel before a press becomes a drag
 const HOLD = 320;      // ms a finger has to rest on the item before it lifts
@@ -56,7 +57,7 @@ function session(down, el, opts) {
   /* Near the top or bottom edge the page scrolls, faster the closer the pointer gets. */
   function scroll() {
     const v = y < EDGE ? -(EDGE - y) : y > innerHeight - EDGE ? y - (innerHeight - EDGE) : 0;
-    if (v) { window.scrollBy(0, Math.round(v / 3)); track(); }
+    if (v) { scrollRoot().scrollBy(0, Math.round(v / 3)); track(); }
     frame = requestAnimationFrame(scroll);
   }
 

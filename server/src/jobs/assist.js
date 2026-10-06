@@ -25,7 +25,7 @@ export async function meetingPrep() {
       trigger: 'meeting-prep', allowed: ['read', 'internal'],
       message: `"${ev.title}" starts at ${at}${ev.location ? ' (' + ev.location + ')' : ''}. Look for related emails, Slack messages, todos and job entries. If you find something useful, save a short prep note with add_note (title: "Prep: ${ev.title}"). Then answer in at most two sentences what Kevin should know.`
     });
-    await notify({ title: `${at} · ${ev.title}`, body: r.text.slice(0, 280) || 'Starts in about 30 minutes.', url: '#/calendar' });
+    await notify({ title: `${at} · ${ev.title}`, body: r.text.slice(0, 280) || 'Starts in about 30 minutes.', url: '#/calendar', kind: 'calendar', ref: 'prep:' + ev.id });
     n++;
   }
   return n;
@@ -38,7 +38,7 @@ export async function jobNudge() {
   const due = jobs.filter(j => j.status !== 'rejected' && j.status !== 'offer' && j.nextActionDate && j.nextActionDate <= today);
   const stale = jobs.filter(j => j.status === 'applied' && j.appliedAt && j.appliedAt <= new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10) && !j.nextActionDate);
   const lines = [...due.map(j => `${j.nextAction || 'Follow up'} · ${j.company}`), ...stale.map(j => `No reply for 10+ days · ${j.company}`)];
-  if (lines.length) await notify({ title: `Job hunt: ${lines.length} thing${lines.length > 1 ? 's' : ''} to do`, body: lines.slice(0, 4).join('\n'), url: '#/jobs' });
+  if (lines.length) await notify({ title: `Job hunt: ${lines.length} thing${lines.length > 1 ? 's' : ''} to do`, body: lines.slice(0, 4).join('\n'), url: '#/jobs', kind: 'jobs' });
   if (getSetting('flags').jobsAi) await suggestJobs().catch(e => console.error('job suggestions', e.message));
   return lines.length;
 }
@@ -68,6 +68,6 @@ export async function suggestJobs() {
     saveJob({ company: x.company_name, role: x.title, type, link: x.url, location: 'Berlin', status: 'saved', source: 'suggested', notes: 'Suggested: ' + p.reason });
     added++;
   }
-  if (added) await notify({ title: `${added} new Berlin role${added > 1 ? 's' : ''} suggested`, body: 'Have a look in Jobs → Saved.', url: '#/jobs' });
+  if (added) await notify({ title: `${added} new Berlin role${added > 1 ? 's' : ''} suggested`, body: 'Have a look in Jobs → Saved.', url: '#/jobs', kind: 'jobs' });
   return added;
 }

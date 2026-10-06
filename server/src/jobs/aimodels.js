@@ -5,6 +5,8 @@ import { config } from '../config.js';
 import { fetchFeed, hashUrl } from '../lib/feeds.js';
 import { structured, asData, DATA_RULE } from '../ai/claude.js';
 import { localDate } from '../lib/time.js';
+import { getSetting } from '../settings.js';
+import { notify, alertedRecently } from '../notify/index.js';
 
 export async function pollAiFeeds() {
   const feeds = db.all("SELECT * FROM feeds WHERE kind = 'ai' AND enabled = 1");
@@ -26,7 +28,7 @@ const ClassSchema = z.object({ items: z.array(z.object({
   id: z.string(),
   vendor: z.string().describe('lowercase company: anthropic, openai, google, github, mistral, meta, deepseek, xai, huggingface, other'),
   kind: z.enum(['release', 'feature', 'pricing', 'research', 'other']),
-  importance: z.number().int().min(1).max(10).describe('10 = new frontier model from a major lab; 7-8 = notable model/product launch; 1-3 = minor post'),
+  importance: z.number().int().min(1).max(10).describe('10 = new frontier model from a major lab; 9 = a launch a developer who builds with AI must know about today (new flagship model version, big Claude Code / Copilot / Codex / Gemini capability, large price cut); 7-8 = notable model/product launch; 1-3 = minor post'),
   summary: z.string().describe('What concretely changed, 1-2 sentences, max 220 chars: the new capability, model, numbers or availability. Do not just repeat the title.')
 })) });
 
@@ -88,6 +90,38 @@ const DailySchema = z.object({
   })).describe('The 8 most important recent changes, most important first. One entry per change; merge duplicates from several sources.'),
   best: z.object({ overall: z.array(Pick).max(3), coding: z.array(Pick).max(3), fast: z.array(Pick).max(3), open: z.array(Pick).max(3) })
 });
+
+const VENDOR_NAME = { openai: 'OpenAI', github: 'GitHub', xai: 'xAI', deepseek: 'DeepSeek', huggingface: 'Hugging Face', meta: 'Meta', google: 'Google', anthropic: 'Anthropic', mistral: 'Mistral' };
+const vendorName = v => VENDOR_NAME[v] || (v || 'AI').replace(/^./, c => c.toUpperCase());
+
+/* Major AI news as it happens: releases, features and price changes from the last day at or above the alert threshold.
+   One alert per vendor per 12 hours (a launch shows up on the blog, the changelog and the docs). Everything looked at is
+   marked, so switching alerts on later never replays old news. */
+export async function detectAiAlerts(now = Date.now()) {
+  const { ai, aiThreshold } = getSetting('alerts');
+  const rows = db.all(`SELECT id, vendor, title, summary, importance FROM ai_updates
+                       WHERE classified = 1 AND alerted = 0 AND published_at > ? ORDER BY importance DESC, published_at DESC`, now - 86400000);
+  if (!rows.length) return 0;
+  db.tx(() => { for (const r of rows) db.run('UPDATE ai_updates SET alerted = 1 WHERE id = ?', r.id); });
+  if (!ai) return 0;
+  let sent = 0;
+  const seen = new Set();
+  for (const r of rows) {
+    if ((r.importance || 0) < aiThreshold || seen.has(r.vendor)) continue;
+    seen.add(r.vendor);
+    const ref = 'ai:' + (r.vendor || 'other');
+    if (alertedRecently(ref, 12 * 3600000)) continue;
+    if (await notify({ title: `${vendorName(r.vendor)}: ${r.title}`.slice(0, 110), body: (r.summary || r.title).slice(0, 280), url: '#/ai', priority: 4, kind: 'ai', ref })) sent++;
+  }
+  return sent;
+}
+
+/* Hourly from 06:00: new vendor posts are classified (only new items cost tokens) and checked for alerts. */
+export async function aiWatch() {
+  const added = await pollAiFeeds();
+  const classified = added ? await classify() : 0;
+  return { added, classified, alerts: await detectAiAlerts() };
+}
 
 export async function aiDaily() {
   await pollAiFeeds();

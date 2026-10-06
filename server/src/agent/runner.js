@@ -43,7 +43,7 @@ async function runTool(name, input, ctx) {
     db.run(`INSERT INTO agent_actions (id, run_id, tool, input, risk, status, summary, created_at) VALUES (?, ?, ?, ?, 'outward', 'pending', ?, ?)`,
       actionId, ctx.runId, name, j.str(parsed.data), t.summary(parsed.data), Date.now());
     ctx.onEvent?.({ type: 'tool', name, status: 'pending', summary: t.summary(parsed.data) });
-    if (ctx.trigger !== 'chat' && ctx.trigger !== 'voice') await notify({ title: 'Needs your approval', body: t.summary(parsed.data), url: '#/assistant' });
+    if (ctx.trigger !== 'chat' && ctx.trigger !== 'voice') await notify({ title: 'Needs your approval', body: t.summary(parsed.data), url: '#/assistant', kind: 'agent' });
     return { content: `Queued for Kevin's approval (action ${actionId}). It has NOT been executed.` };
   }
   try {

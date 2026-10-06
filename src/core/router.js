@@ -3,11 +3,13 @@
 import { subscribe } from './store.js';
 import { setPanelIntro } from '../components/panel.js';
 import { clear } from './dom.js';
+import { scrollRoot } from './platform.js';
 
 let routes = [];
 let current = null;
 let root = null;
 let pending = false;
+let held = false, stale = false, holdTimer = 0;
 const listeners = new Set();
 
 export function onRoute(fn) { listeners.add(fn); }
@@ -40,12 +42,12 @@ export function render(intro = false) {
   }
   pending = false;
   setPanelIntro(intro);
-  const y = window.scrollY;
+  const y = scrollRoot().scrollTop;
   if (current.view.unmount) current.view.unmount();   // views release timers before every rebuild
   clear(root);
   current.view.render(root);
   setPanelIntro(false);
-  if (!intro) window.scrollTo(0, y);
+  if (!intro) scrollRoot().scrollTop = y;
   if (restore) {
     const el = root.querySelector(restore.key);
     if (el) {
@@ -63,15 +65,24 @@ function resolve() {
   current = next;
   document.title = next.label + ' · Agentic OS';
   render(true);
-  window.scrollTo(0, 0);
+  scrollRoot().scrollTop = 0;
   listeners.forEach(fn => fn(next));
+}
+
+/* While the launch animation plays, store changes (a sync landing, weather, news) wait instead of rebuilding
+   the view under its intro. They render once when the hold ends: after ms, or holdRenders(0). */
+export function holdRenders(ms) {
+  clearTimeout(holdTimer);
+  held = ms > 0;
+  if (held) holdTimer = setTimeout(() => holdRenders(0), ms);
+  else if (stale) { stale = false; render(); }
 }
 
 export function initRouter(rootEl, routeTable) {
   root = rootEl;
   routes = routeTable;
-  window.addEventListener('hashchange', resolve);
+  window.addEventListener('hashchange', () => { stale = false; holdRenders(0); resolve(); });   // navigating renders anyway
   root.addEventListener('focusout', () => setTimeout(() => { if (pending && !editing()) render(); }, 0));
-  subscribe(() => render());
+  subscribe(() => { if (held) stale = true; else render(); });
   resolve();
 }

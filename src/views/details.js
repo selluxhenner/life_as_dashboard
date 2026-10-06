@@ -46,7 +46,9 @@ function heatmap(hb) {
       }));
     }
   }
-  return h('div.heatmap', h('div.hm-wd', ['Mon', '', 'Wed', '', 'Fri', '', 'Sun'].map(d => h('span', d))), h('div.hm-main', months, grid));
+  const el = h('div.heatmap', h('div.hm-wd', ['Mon', '', 'Wed', '', 'Fri', '', 'Sun'].map(d => h('span', d))), h('div.hm-main', months, grid));
+  setTimeout(() => { el.scrollLeft = el.scrollWidth; }, 0);   // narrow screens: start at this week
+  return el;
 }
 
 function habitBody(id) {

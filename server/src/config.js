@@ -26,10 +26,13 @@ export const config = {
   openaiKey: e.OPENAI_API_KEY || '',
   elevenKey: e.ELEVENLABS_API_KEY || '',
   elevenVoice: e.ELEVENLABS_VOICE_ID || '',
+  elevenApi: (e.ELEVENLABS_API_URL || 'https://api.elevenlabs.io').replace(/\/+$/, ''),   // override only for tests / EU residency
   aaKey: e.AA_API_KEY || '',
   twilio: { sid: e.TWILIO_ACCOUNT_SID || '', token: e.TWILIO_AUTH_TOKEN || '', from: e.TWILIO_FROM || '' },
-  ntfy: { url: (e.NTFY_URL || 'https://ntfy.sh').replace(/\/+$/, ''), topic: e.NTFY_TOPIC || '' }
+  ntfy: { url: (e.NTFY_URL || 'https://ntfy.sh').replace(/\/+$/, ''), topic: e.NTFY_TOPIC || '' },
+  fcmCredentials: ''                     // set below, once dataDir is known
 };
+config.fcmCredentials = resolve(ROOT, e.FCM_CREDENTIALS || resolve(config.dataDir, 'fcm-service-account.json'));
 
 if (!config.apiToken) {
   console.error('API_TOKEN is not set. Put it in server/.env (see .env.example).');

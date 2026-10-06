@@ -23,6 +23,9 @@ import { settle, forgivePenalties, pointsOn, totalPoints, rankView } from './fea
 import { remote } from './core/remote.js';
 import { newsData, digestStories } from './views/news.js';
 import { pendingActions } from './views/assistant.js';
+import { autoReadBriefing } from './views/briefing-panel.js';
+import { talk, toggleTalk } from './voice/talk.js';
+import { mountVoicePill } from './components/voice-pill.js';
 import COUNTRIES from './assets/country-centroids.json';
 
 import home from './views/home.js';
@@ -73,6 +76,10 @@ const weatherEl = h('span.hide-m.weather');
 const syncBtn = h('button.sync', { type: 'button', onclick: () => go('settings') });
 const pointsEl = h('span.hide-m');
 const crumb = h('span.crumb');
+/* The voice agent from anywhere. On Home it knows the briefing, on World the news digest. */
+const talkContext = () => ({ home: 'briefing', news: 'world' })[currentRoute() && currentRoute().id] || null;
+const talkBtn = h('button.talk', { type: 'button', 'aria-label': 'Talk to the assistant', title: 'Talk to the assistant', onclick: () => toggleTalk(talkContext()) }, icon('mic'));
+const paintTalk = () => talkBtn.setAttribute('aria-pressed', String(talk.state === 'listening'));
 const rail = h('nav.rail', { 'aria-label': 'Main' });
 const dock = h('nav.dock', { 'aria-label': 'Main' });
 
@@ -105,6 +112,7 @@ function statusBar() {
     h('span.push'),
     weatherEl, pointsEl,
     h('button.kbd.hide-m', { type: 'button', onclick: openPalette, title: 'Command palette' }, 'Ctrl K'),
+    talkBtn,
     syncBtn,
     clockEl,
     h('div.win',
@@ -157,7 +165,7 @@ async function start() {
   const canvas = h('canvas#backdrop', { 'aria-hidden': 'true' });
   const main = h('main#main', { tabindex: -1 });
   document.body.prepend(canvas, h('div.vignette'), h('div.grain'));
-  document.body.append(h('div.app', rail, statusBar(), main), dock);
+  document.body.append(h('div.app', rail, statusBar(), main), dock, mountVoicePill());
 
   forgivePenalties();
   settle();
@@ -171,7 +179,7 @@ async function start() {
   initRouter(main, ROUTES);
   buildNav();
   onRoute(markCurrent);
-  subscribe(() => { updatePings(); markCurrent(); if (pointsOn() !== !!routeList().find(r => r.id === 'rank')) buildNav(); paintStatus(); });
+  subscribe(() => { updatePings(); markCurrent(); if (pointsOn() !== !!routeList().find(r => r.id === 'rank')) buildNav(); paintStatus(); paintTalk(); });
   onSyncStatus(paintSync);
   paintSync();
   paintStatus();
@@ -188,6 +196,11 @@ async function start() {
   initPalette();
   initNotifications();
   updatePings();
+
+  // Spoken morning briefing (if switched on): now, and whenever the window comes back to front later in the morning.
+  autoReadBriefing();
+  window.addEventListener('focus', autoReadBriefing);
+  document.addEventListener('visibilitychange', autoReadBriefing);
 
   if ('serviceWorker' in navigator && platform.kind === 'web' && import.meta.env.PROD) {
     navigator.serviceWorker.register('sw.js').catch(() => {});

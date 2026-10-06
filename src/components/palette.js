@@ -1,19 +1,23 @@
 // Command palette (Ctrl/⌘+K): jump anywhere, capture a task, ask the assistant, switch theme.
 import { h } from '../core/dom.js';
 import { icon } from '../core/icons.js';
-import { routeList, go } from '../core/router.js';
+import { routeList, go, currentRoute } from '../core/router.js';
 import { addTask } from '../core/model.js';
 import { captureText } from '../features/capture/captures.js';
 import { state, save } from '../core/store.js';
 import { applyTheme, THEMES } from '../core/theme.js';
 import { tick, toast } from '../core/fx.js';
+import { toggleTalk } from '../voice/talk.js';
+import { playBriefing } from '../views/briefing-panel.js';
 
 let open = false;
 
 function commands(q) {
   const list = [
     ...routeList().map(r => ({ label: 'Go to ' + r.label, icon: r.icon, k: r.key || '', run: () => go(r.id) })),
-    ...THEMES.map(t => ({ label: 'Theme: ' + t.name, icon: 'settings', run: () => { state.settings.theme = t.id; applyTheme(t.id); save(); } }))
+    ...THEMES.map(t => ({ label: 'Theme: ' + t.name, icon: 'settings', run: () => { state.settings.theme = t.id; applyTheme(t.id); save(); } })),
+    { label: 'Talk to the assistant', icon: 'mic', run: () => toggleTalk(({ home: 'briefing', news: 'world' })[currentRoute() && currentRoute().id] || null) },
+    { label: 'Play the morning briefing', icon: 'volume', run: () => playBriefing() }
   ];
   if (q.trim()) {
     list.unshift({ label: `Ask assistant: “${q}”`, icon: 'agent', run: () => { sessionStorage.setItem('agenticAsk', q); go('assistant'); } });

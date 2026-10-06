@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shortcut: ask by voice (microphone). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:fillColor="#FF05070A" android:pathData="M24,0a24,24 0 1,1 0,48a24,24 0 1,1 0,-48z" />
+    <path android:fillColor="#FF4FE3FF" android:pathData="M24,12a4,4 0 0,1 4,4v8a4,4 0 0,1 -8,0v-8a4,4 0 0,1 4,-4z" />
+    <path android:fillColor="#00000000" android:strokeColor="#FF4FE3FF" android:strokeWidth="2"
+        android:pathData="M17,23v1a7,7 0 0,0 14,0v-1M24,31v5M20,36h8" />
+</vector>
