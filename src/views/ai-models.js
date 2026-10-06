@@ -4,7 +4,7 @@ import { fmt } from '../core/dates.js';
 import { panel } from '../components/panel.js';
 import { viewHead, empty, chip, seg, btn } from '../components/ui.js';
 import { remote, refresh } from '../core/remote.js';
-import { speak } from '../voice/tts.js';
+import { speak, stopSpeaking, speakingWhat } from '../voice/tts.js';
 import { icon } from '../core/icons.js';
 
 const CATS = [
@@ -32,7 +32,19 @@ function highlightList(list) {
       u.publishedAt ? h('span.data', fmt.ago(new Date(u.publishedAt).getTime())) : null))));
 }
 
-const spoken = list => list.map((u, i) => `${i + 1}. ${u.title}. ${u.what || ''}`).join(' ');
+// Listen: the biggest changes in about 30 seconds, not the page. Each title, with its first sentence while there's room.
+const firstSentence = t => (String(t || '').split(/(?<=[.!?])\s+/)[0] || '').trim();
+const wordCount = t => (t.match(/\S+/g) || []).length;
+function spoken(list) {
+  const top = list.slice(0, 5), lines = ['The biggest changes in AI.'];
+  let n = 6 + top.reduce((k, u) => k + wordCount(u.title), 0);
+  for (const u of top) {
+    const more = firstSentence(u.what), add = more && n + wordCount(more) <= 85;
+    if (add) n += wordCount(more);
+    lines.push([u.title.replace(/[.!?]?$/, '.'), add ? more : ''].filter(Boolean).join(' '));
+  }
+  return lines.join(' ');
+}
 
 export const aiData = () => remote('aimodels', '/api/ai-models/today', 30 * 60000);
 
@@ -46,7 +58,8 @@ export default {
     const top = (d.highlights || []).slice(0, 8);
     root.append(h('div.view.ai',
       viewHead('AI models', 'The 8 most important changes from the AI labs this week, and which models lead right now.',
-        top.length ? h('button.btn', { type: 'button', onclick: () => speak(spoken(top)) }, icon('volume'), 'Read aloud') : null,
+        top.length ? h('button.btn', { type: 'button', onclick: () => (speakingWhat() === 'ai' ? stopSpeaking() : speak(spoken(top), null, { what: 'ai', lang: 'en' })) },
+          icon(speakingWhat() === 'ai' ? 'pause' : 'volume'), speakingWhat() === 'ai' ? 'Stop' : 'Listen') : null,
         connected ? btn(loading ? 'Refreshing…' : 'Refresh', () => refresh('aimodels', '/api/ai-models/today'), 'ghost', 'sync') : null),
       !connected ? panel({}, empty('The tracker runs on the server', 'Connect to your server in Settings. It checks vendor blogs and leaderboards every morning at 07:30.'))
       : h('div.grid.g-ai',

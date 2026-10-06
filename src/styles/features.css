@@ -113,6 +113,7 @@ kbd { font-family: var(--font-data); font-size: 10px; line-height: 15px; color: 
 .voice-card .title { font-size: var(--fs-sm); font-weight: 500; }
 .voice-card .sub { font-size: 11px; color: var(--ink-3); }
 .voice-select { max-width: 220px; }
+.eleven-voices { max-height: 300px; overflow-y: auto; padding-right: 2px; overscroll-behavior: contain; }
 .voice-panel { container-type: inline-size; }
 @container (max-width: 560px) {
   .voice-panel .set-row { flex-wrap: wrap; }

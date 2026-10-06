@@ -7,6 +7,7 @@ import { join } from 'node:path';
 
 process.env.API_TOKEN = 'test-master-token';
 process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), 'agentic-')), 'test.db');
+process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'agentic-data-'));       // voice audio cache
 process.env.PUBLIC_URL = 'http://test.local';
 process.env.NO_SCHEDULER = '1';
 
@@ -165,4 +166,83 @@ test('docs sync: last write wins, tombstones, paging cursor', async () => {
   const c = await api('POST', '/api/docs/sync', { since: b.body.cursor, upserts: [{ key: 'habit:h1', deleted: true, updatedAt: t + 1 }] });
   assert.deepEqual(c.body.docs.map(d => [d.key, d.deleted]), [['habit:h1', true]]);
   assert.equal((await api('POST', '/api/docs/sync', { since: 0, upserts: [{ key: 'bad key!', value: 1, updatedAt: t }] })).status, 400);
+});
+
+test('voice: without keys the server says so, and spoken briefing/world audio are 404 until written', async () => {
+  const info = await api('GET', '/api/voice/info');
+  assert.equal(info.status, 200);
+  assert.equal(info.body.tts, null);
+  assert.equal(info.body.eleven, null);
+  assert.equal((await api('GET', '/api/voice/briefing')).status, 404);
+  assert.equal((await api('POST', '/api/voice/tts', { text: 'Hello' })).status, 503);
+  assert.equal((await api('GET', '/api/voice/voices')).status, 503);
+  assert.deepEqual((await api('POST', '/api/briefing/spoken', {})).body, { briefing: null });
+});
+
+test('voice: a stored spoken briefing is returned and becomes the follow-up context', async () => {
+  const { db, j } = await import('../src/db.js');
+  const { localDate } = await import('../src/lib/time.js');
+  const { briefingSpeech } = await import('../src/jobs/briefing.js');
+  const spoken = { greeting: 'Good morning, Kevin.', topics: [{ label: 'First up', say: 'Your lesson starts at 9:15.', refs: ['ev:1'] }], words: 9, seconds: 3 };
+  db.run('INSERT OR REPLACE INTO briefings (date, created_at, model, headline, sections, focus, spoken) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    localDate(), Date.now(), 'test', 'School day.', '[]', '[]', j.str(spoken));
+  const b = await api('GET', '/api/briefing/today');
+  assert.deepEqual(b.body.briefing.spoken, spoken);
+  assert.equal(briefingSpeech(), 'Good morning, Kevin. Your lesson starts at 9:15.');
+  // already has a spoken version: nothing is regenerated (no AI key needed)
+  assert.deepEqual((await api('POST', '/api/briefing/spoken', {})).body.briefing.spoken, spoken);
+  // audio needs a voice engine; without keys it is a clear 503, not a crash
+  assert.equal((await api('GET', '/api/voice/briefing')).status, 503);
+});
+
+test('voice: engine choice follows the keys, settings can only pick a configured one', async () => {
+  const { ttsEngine } = await import('../src/voice/speech.js');
+  const { config } = await import('../src/config.js');
+  const saved = { ...config };
+  try {
+    assert.equal(ttsEngine({ engine: 'auto' }), null);
+    config.openaiKey = 'sk-test';
+    assert.equal(ttsEngine({ engine: 'elevenlabs' }), 'openai');
+    config.elevenKey = 'xi-test';
+    assert.equal(ttsEngine({ engine: 'auto' }), 'elevenlabs');
+    assert.equal(ttsEngine({ engine: 'openai' }), 'openai');
+  } finally { Object.assign(config, saved); }
+});
+
+test('world: spoken summary falls back to the top headlines for older digests', async () => {
+  const { db, j } = await import('../src/db.js');
+  const { worldSpeech, worldScript } = await import('../src/jobs/news.js');
+  db.run('INSERT OR REPLACE INTO news_digests (slot, created_at, regions, top, elections) VALUES (?, ?, ?, ?, ?)',
+    'test-old', new Date('2026-10-06T05:00:00Z').getTime(), '{}', j.str([{ headline: 'EU agrees gas price cap' }, { headline: 'Japan holds snap election' }]), '[]');
+  assert.equal(worldSpeech(), "Here's the world this morning. EU agrees gas price cap. Japan holds snap election.");
+  db.run('UPDATE news_digests SET spoken = ? WHERE slot = ?', j.str([{ say: 'The EU agreed a cap on gas prices.' }]), 'test-old');
+  assert.equal(worldSpeech(), "Here's the world this morning. The EU agreed a cap on gas prices.");
+  // current digests: a one-line overview, the stories with a tone each, and what was left out
+  db.run('UPDATE news_digests SET spoken = ? WHERE slot = ?', j.str({
+    overview: 'Energy dominates the day.', overviewTone: 'serious', outro: 'Elsewhere it is quiet.',
+    items: [{ say: 'The EU agreed a cap on gas prices.', tone: 'serious', region: 'europe', topic: 'economy' }]
+  }), 'test-old');
+  assert.equal(worldSpeech(), "Here's the world this morning. Energy dominates the day. The EU agreed a cap on gas prices. Elsewhere it is quiet.");
+  assert.equal(worldScript(), "[Quick, lively, energetic pace, bright, upbeat] Here's the world this morning. [serious, steady] Energy dominates the day. "
+    + '[serious, steady] The EU agreed a cap on gas prices. [relaxed, easy] Elsewhere it is quiet.');
+  assert.equal((await api('GET', '/api/news/digest/latest')).body.digest.spoken.items.length, 1);
+});
+
+test('voice: audio keeps the CORS header (the apps play it cross-origin) and is cached on disk', async () => {
+  const { config } = await import('../src/config.js');
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+  config.openaiKey = 'sk-test';
+  globalThis.fetch = async (url, opts) => (String(url).startsWith('https://api.openai.com/') ? (calls++, new Response(Buffer.from('ID3-fake-mp3'))) : realFetch(url, opts));
+  try {
+    const text = 'CORS check ' + Date.now();
+    const r = await api('POST', '/api/voice/tts', { text }, 'test-master-token', { Origin: 'http://tauri.localhost' });
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get('content-type'), 'audio/mpeg');
+    assert.equal(r.headers.get('access-control-allow-origin'), 'http://tauri.localhost');
+    assert.equal(r.text, 'ID3-fake-mp3');
+    const again = await api('POST', '/api/voice/tts', { text });
+    assert.equal(again.headers.get('x-voice-cached'), '1');
+    assert.equal(calls, 1);
+  } finally { globalThis.fetch = realFetch; config.openaiKey = ''; }
 });

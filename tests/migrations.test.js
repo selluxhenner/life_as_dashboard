@@ -44,6 +44,15 @@ describe('migrate', () => {
     expect(map['Kernbrand']).toBe('rejected');
   });
 
+  it('moves an old slow voice speed to Brisk once, then leaves the choice alone', () => {
+    const st = v3State();
+    st.settings = { voice: { rate: 0.97, provider: 'auto' } };
+    const s = migrate(st);
+    expect(s.settings.voice.rate).toBe(1.15);
+    s.settings.voice.rate = 1;                        // picked Calm afterwards: kept
+    expect(migrate(s).settings.voice.rate).toBe(1);
+  });
+
   it('is idempotent', () => {
     const once = migrate(v3State());
     const twice = migrate(JSON.parse(JSON.stringify(once)));

@@ -5,7 +5,8 @@ export const DEFAULTS = {
   flags: { points: false, jobsAi: false, phone: false, push: true },
   briefing: { time: '08:00' },
   news: { digestTimes: ['07:00', '13:00', '19:00'], breakingThreshold: 9 },
-  voice: { autoRead: false, provider: 'openai', voice: 'marin' },
+  // engine: auto (ElevenLabs when its key is set, else OpenAI) | elevenlabs | openai. voice = OpenAI voice.
+  voice: { autoRead: false, engine: 'auto', voice: 'marin', elevenVoice: '', elevenModel: 'eleven_v4' },
   phone: { enabled: false, number: '', monthlyCapEur: 10, quietHours: ['21:30', '08:30'], maxSeconds: 180 },
   ai: { monthlyCapUsd: 40 },
   jobs: { profile: 'Student in Berlin. Looking for Werkstudent, part-time or startup roles in web development, product, design or marketing. Max 20 h/week.' }

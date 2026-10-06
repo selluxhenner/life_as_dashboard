@@ -22,7 +22,8 @@
         "decorations": false,
         "transparent": false,
         "backgroundColor": "#05070A",
-        "resizable": true
+        "resizable": true,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required"
       }
     ],
     "security": {

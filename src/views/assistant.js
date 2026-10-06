@@ -18,10 +18,14 @@ const persistConv = () => localStorage.setItem(CONV_KEY, JSON.stringify({ id: co
 
 export const pendingActions = () => remote('actions', '/api/agent/actions?status=pending', 60000);
 
-async function send(text, { viaVoice = false } = {}) {
-  if (!text.trim() || streaming) return;
+/**
+ * Sends a message to the agent and streams the reply into the shared chat. Returns the reply text (null if not sent).
+ * context = what Kevin just listened to ('briefing' | 'world'); speakReply defaults to "came in by voice or Speak replies on".
+ */
+export async function sendToAgent(text, { viaVoice = false, context = null, speakReply } = {}) {
+  if (!text.trim() || streaming) return null;
   const cfg = apiConfig();
-  if (!cfg) { toast('Pair this device in Settings to talk to the assistant.', 'amber'); return; }
+  if (!cfg) { toast('Pair this device in Settings to talk to the assistant.', 'amber'); return null; }
   conv.messages.push({ role: 'user', text, at: Date.now() });
   const reply = { role: 'assistant', text: '', tools: [], at: Date.now() };
   conv.messages.push(reply);
@@ -30,7 +34,7 @@ async function send(text, { viaVoice = false } = {}) {
     const res = await fetch(cfg.url.replace(/\/+$/, '') + '/api/agent/chat', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + cfg.token, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify({ conversationId: conv.id, message: text, channel: viaVoice ? 'voice' : 'chat' })
+      body: JSON.stringify({ conversationId: conv.id, message: text, channel: viaVoice ? 'voice' : 'chat', context })
     });
     if (!res.ok || !res.body) throw { kind: res.status === 401 ? 'auth' : 'server', msg: 'HTTP ' + res.status };
     const reader = res.body.getReader();
@@ -60,9 +64,11 @@ async function send(text, { viaVoice = false } = {}) {
     persistConv();
     notify();
     if (reply.tools.length) { runSync(); refresh('actions', '/api/agent/actions?status=pending'); }
-    if ((viaVoice || voiceReply) && reply.text) speak(reply.text);
+    if ((speakReply ?? (viaVoice || voiceReply)) && reply.text) speak(reply.text, null, { what: 'talk' });
   }
+  return reply.text;
 }
+const send = (text, opts) => sendToAgent(text, opts);
 
 async function toggleRecord(btnEl) {
   if (!recording) {
