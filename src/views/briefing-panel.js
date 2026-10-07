@@ -133,15 +133,27 @@ export async function autoReadBriefing() {
     keep(res.briefing);
     if (!cache.spoken) await addSpoken();
     localStorage.setItem(AUTO_KEY, tk);
-    playBriefing({
-      onBlocked: () => {
-        toast('Tap anywhere to hear your briefing.', 'signal');
-        const go = () => { window.removeEventListener('pointerdown', go, true); window.removeEventListener('keydown', go, true); playBriefing(); };
-        window.addEventListener('pointerdown', go, true);
-        window.addEventListener('keydown', go, true);
-      }
-    });
+    playBriefing({ onBlocked: tapToPlay });
   } catch { /* offline: try again next time */ } finally { autoBusy = false; }
+}
+
+/* The system blocks sound until the first tap: the next tap anywhere starts it. */
+function tapToPlay() {
+  toast('Tap anywhere to hear your briefing.', 'signal');
+  const go = () => { window.removeEventListener('pointerdown', go, true); window.removeEventListener('keydown', go, true); playBriefing(); };
+  window.addEventListener('pointerdown', go, true);
+  window.addEventListener('keydown', go, true);
+}
+
+/* "Listen" on the phone's morning notification, lock-screen card or app shortcut: fetch today's briefing, then play it. */
+export async function listenNow() {
+  if (apiConfig()) {
+    try {
+      const res = await api.get('/api/briefing/today');
+      if (res && res.briefing) { keep(res.briefing); await addSpoken(); }
+    } catch { /* offline: the cached or local version */ }
+  }
+  playBriefing({ onBlocked: tapToPlay });
 }
 
 export function briefingPanel() {

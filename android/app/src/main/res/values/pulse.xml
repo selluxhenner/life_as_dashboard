@@ -5,6 +5,8 @@
     <string name="tile_label">Briefing</string>
     <string name="widget_name">Agentic OS · Today</string>
     <string name="widget_description">Your briefing, the world\'s top stories and the biggest AI news</string>
+    <string name="day_widget_name">Agentic OS · Day plan</string>
+    <string name="day_widget_description">The lesson that is on now or next and its room, then the rest of your day</string>
     <string name="sc_briefing_short">Briefing</string>
     <string name="sc_briefing_long">Listen to today\'s briefing</string>
     <string name="sc_world_short">World</string>

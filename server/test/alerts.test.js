@@ -169,3 +169,38 @@ test('push: a paired device registers its FCM token; FCM gets a content-free "ch
     assert.equal(db.get('SELECT push_token FROM devices WHERE id = ?', dev.id).push_token, null);
   } finally { globalThis.fetch = realFetch; setFcmCredentials(null); }
 });
+
+test('day plan: Fuxam titles shortened to the subject, rooms kept short', async () => {
+  const { lessonTitle, roomOf } = await import('../src/jobs/glance.js');
+  assert.deepEqual(lessonTitle('[LU] OS: Explore – Introduction to Software Engineering (OS_01) - Practice Session (Group 2) '),
+    { tag: 'LU', title: 'Introduction to Software Engineering', detail: 'Practice Session · Group 2' });
+  assert.deepEqual(lessonTitle('[Workshop] OS: Explore – Workshops (Track 1)'), { tag: 'Workshop', title: 'Workshops', detail: 'Track 1' });
+  assert.deepEqual(lessonTitle('[LU] OS: STS Essentials - Group 1'), { tag: 'LU', title: 'STS Essentials', detail: 'Group 1' });
+  assert.deepEqual(lessonTitle('Mathe'), { tag: '', title: 'Mathe', detail: '' });
+  assert.equal(roomOf('Ris'), 'Ris');
+  assert.equal(roomOf('Raum 2.04, Campus Nord'), '2.04');
+  assert.equal(roomOf('https://meet.google.com/abc-defg-hij'), 'Online');
+  assert.equal(roomOf(null, 'https://zoom.us/j/1'), 'Online');
+  assert.equal(roomOf(null, null), '');
+});
+
+test('day plan: lessons with rooms, meetings and plan blocks in time order; done and untimed blocks left out', async () => {
+  const { dayPlan } = await import('../src/jobs/glance.js');
+  const { zonedInstant } = await import('../src/lib/time.js');
+  const date = '2026-10-08', at = t => zonedInstant(date, t).getTime();
+  const ev = (id, kind, title, from, to, location = null) => db.run(`INSERT OR REPLACE INTO calendar_events (id, connection_id, kind, title, start, end, all_day, location, updated_at)
+    VALUES (?, 'c1', ?, ?, ?, ?, 0, ?, ?)`, id, kind, title, new Date(at(from)).toISOString(), new Date(at(to)).toISOString(), location, Date.now());
+  ev('l1', 'lesson', '[LU] OS: STS Essentials - Group 1', '09:00', '10:45', 'Ris');
+  ev('m1', 'meeting', 'N26 interview', '14:00', '15:00', 'https://meet.google.com/x');
+  db.run(`INSERT OR REPLACE INTO docs (user_id, key, value, updated_at, deleted, rev) VALUES (1, ?, ?, ?, 0, 1)`, 'dayplan:' + date,
+    j.str([{ id: 'b1', label: 'Lunch with Ana', time: '12:00' }, { id: 'b2', label: 'Prep N26 case', time: '13:00' }, { id: 'b3', label: 'Old', time: '08:00', done: true }, { id: 'b4', label: 'Someday' }]), Date.now());
+  const items = dayPlan(date);
+  assert.deepEqual(items.map(i => [i.kind, i.title, i.room]), [
+    ['lesson', 'STS Essentials', 'Ris'], ['plan', 'Lunch with Ana', ''], ['plan', 'Prep N26 case', ''], ['meeting', 'N26 interview', 'Online']]);
+  assert.equal(items[0].start, at('09:00'));
+  assert.equal(items[0].end, at('10:45'));
+  assert.equal(items[1].end, at('13:00'), 'a block runs until the next one');
+  assert.equal(items[2].end, at('14:00'), 'the last block gets an hour');
+  const g = (await api('GET', '/api/glance')).body;
+  assert.ok(Array.isArray(g.day.today.items) && Array.isArray(g.day.tomorrow.items));
+});

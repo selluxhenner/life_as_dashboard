@@ -12,6 +12,7 @@ import { toast } from '../core/fx.js';
 import { fmt } from '../core/dates.js';
 import { scheduleCal } from '../core/calendar-sync.js';
 import { icon } from '../core/icons.js';
+import { native, nativeStatus, nativeCall, onNativeStatus } from '../core/native.js';
 import { speak, stopSpeaking, clearVoiceCache, VOICE_SAMPLES, PREMIUM_VOICES, SPEEDS, voiceSettings, voiceScore, systemVoices } from '../voice/tts.js';
 
 const row = (label, hint, control) => h('div.set-row', h('div.grow', h('div.title', label), hint ? h('div.sub', hint) : null), control);
@@ -138,7 +139,11 @@ function serverSettingsPanel() {
   const briefing = ss.briefing || { time: '08:00' };
   const phone = ss.phone || {};
   const voice = ss.voice || {};
-  const time = h('input.field.narrow', { type: 'time', value: briefing.time, onchange: e => patch('briefing', { ...briefing, time: e.target.value }) });
+  // the phone moves its morning alarm when it next reads the glance: make that now
+  const time = h('input.field.narrow', { type: 'time', value: briefing.time, onchange: async e => {
+    await patch('briefing', { ...briefing, time: e.target.value });
+    if (native) nativeCall('checkNow', { glance: true }).catch(() => {});
+  } });
   const phoneNum = h('input.field', { type: 'tel', value: phone.number || '', placeholder: '+49 …', onchange: e => patch('phone', { ...phone, number: e.target.value }) });
   return panel({ title: 'Automation' },
     row('Morning briefing', 'Generated a few minutes before, then pushed to your devices.', time),
@@ -148,6 +153,84 @@ function serverSettingsPanel() {
     phone.enabled ? h('div', row('Your number', 'Verified caller ID on Twilio.', phoneNum),
       row('Quiet hours', 'No calls in this window.', h('span.data', (phone.quietHours || ['21:30', '08:30']).join(' → '))),
       h('div.input-row', h('button.btn', { type: 'button', onclick: async () => { try { await api.post('/api/phone/call', { purpose: 'test', questions: ['Is this a good moment to test the call?'] }); toast('Calling you…', 'pulse'); } catch (e) { toast(errorText(e), 'flare'); } } }, 'Test call'))) : null);
+}
+
+/* ---------- notifications ----------
+   What reaches you is set on the server (it applies to every device and to ntfy). On Android this panel also shows
+   whether the phone can actually receive it: permission, the exact morning alarm, battery, plus tile, widget and card. */
+const AI_LEVELS = [{ value: 10, label: 'Frontier only' }, { value: 9, label: 'Big launches' }, { value: 8, label: 'Notable' }];
+const PER_DAY = [{ value: 3, label: '3' }, { value: 6, label: '6' }, { value: 10, label: '10' }];
+const CHANNEL_NAMES = { briefing: 'Morning briefing', breaking: 'Breaking world news', ai: 'Major AI news', calendar: 'Meeting prep', jobs: 'Job hunt', agent: 'Assistant', general: 'Other', pinned: 'Lock-screen card' };
+let watchingNative = false;
+
+function whenText(t) {
+  const d = new Date(t), now = new Date();
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const day = d.toDateString() === now.toDateString() ? 'today' : d.toDateString() === tomorrow.toDateString() ? 'tomorrow' : d.toLocaleDateString('en-GB', { weekday: 'short' });
+  return day + ' at ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+async function phoneAct(method, args, done) {
+  try { const r = await native[method](args); if (done) done(r); await nativeCall('status'); }
+  catch (e) { toast(String((e && e.message) || e), 'flare'); }
+}
+
+function phoneSection() {
+  if (!watchingNative) { watchingNative = true; onNativeStatus(() => notify()); }
+  const st = nativeStatus;
+  if (!st) { nativeCall('status').catch(() => {}); return h('div.hint', 'Checking this phone…'); }
+  const allowed = st.notifications === 'granted';
+  const muted = (st.channelsOff || []).map(id => CHANNEL_NAMES[id] || id);
+  const allow = () => phoneAct(st.notifications === 'prompt' ? 'requestNotifications' : 'openSettings', { what: 'notifications' });
+  const test = kind => phoneAct('test', { kind }, () => toast(kind === 'morning' ? 'Morning notification sent' : 'Test notification sent', 'pulse'));
+  const tileAdded = r => { if (r && (r.result === 'added' || r.result === 'already')) toast('Tile ready. Pull down on the lock screen and tap Briefing.', 'pulse'); };
+  return h('div',
+    row('This phone', !allowed ? 'Notifications are blocked, so nothing can reach you.'
+      : muted.length ? 'Allowed, but muted here: ' + muted.join(', ') + '.' : 'Allowed. Every kind has its own channel in Android settings.',
+      allowed ? btn('Channels', () => phoneAct('openSettings', { what: 'notifications' }), 'sm ghost') : btn('Allow', allow, 'sm primary')),
+    row('Morning alarm', st.nextMorningAt
+      ? `Next ${whenText(st.nextMorningAt)}${st.exactAlarms ? ', on the minute.' : '. Exact alarms are off, so it may come a few minutes late.'}`
+      : 'Not set yet: connect to your server first.',
+      st.exactAlarms ? chip('exact', 'ok') : btn('Allow exact', () => phoneAct('openSettings', { what: 'alarms' }), 'sm')),
+    row('Background checks', `Every 15 minutes${st.pushRegistered ? ' and instantly by push' : ''}. Last check ${st.lastCheckAt ? fmt.ago(st.lastCheckAt) : 'not yet'}.`
+      + (st.lastError ? ' ' + st.lastError : '') + (st.batteryUnrestricted ? '' : ' Android may delay them while the phone sleeps.'),
+      st.batteryUnrestricted ? chip('never asleep', 'ok') : btn('Keep awake', () => phoneAct('openSettings', { what: 'battery' }), 'sm')),
+    row('Lock-screen card', 'Today’s headline with Briefing, World and Ask, pinned to the lock screen and the shade.',
+      toggle(!!st.pinned, v => phoneAct('setPinned', { on: v }), 'Pin today to the lock screen')),
+    h('div.input-row', { style: { marginTop: '8px', flexWrap: 'wrap' } },
+      st.canAddTile ? btn('Add Quick Settings tile', () => phoneAct('addTile', {}, tileAdded), 'sm') : null,
+      st.canAddWidget ? btn(st.dayWidgets ? 'Add another day plan' : 'Add day plan widget', () => phoneAct('addWidget', { which: 'day' }), 'sm') : null,
+      st.canAddWidget ? btn(st.widgets ? 'Add another briefing widget' : 'Add briefing widget', () => phoneAct('addWidget', { which: 'glance' }), 'sm') : null),
+    h('div.hint', 'The tile works on the lock screen: pull down, tap Briefing and read today without unlocking.'),
+    h('div.input-row', { style: { marginTop: '8px', flexWrap: 'wrap' } },
+      btn('Test morning', () => test('morning'), 'sm ghost'), btn('Test breaking', () => test('breaking'), 'sm ghost'), btn('Test AI', () => test('ai'), 'sm ghost')),
+    h('div.set-sep'));
+}
+
+function notificationsPanel() {
+  const { data, connected } = remote('serverSettings', '/api/settings', 5 * 60000);
+  const ss = (data && data.settings) || {};
+  const a = { briefing: true, breaking: true, ai: true, calendar: true, jobs: true, agent: true, aiThreshold: 9, homeCountry: 'Germany', maxPerDay: 6, ...(ss.alerts || {}) };
+  const patch = async v => {
+    try { await api.patch('/api/settings', { alerts: { ...a, ...v } }); refresh('serverSettings', '/api/settings'); toast('Saved'); }
+    catch (e) { toast(errorText(e), 'flare'); }
+  };
+  const st = nativeStatus;
+  const readout = !native || !st ? null
+    : st.notifications === 'granted' && st.configured && !st.lastError ? chip('ready', 'ok') : chip('check', 'warn');
+  return panel({ title: 'Notifications', readout },
+    native ? phoneSection() : null,
+    !connected || !data ? empty('Pair this device first', 'Alerts are raised by your server.') : h('div',
+      row('Morning briefing', `At ${(ss.briefing || {}).time || '08:00'} (set under Automation). If it isn’t written yet, a reminder that today’s update is on the page.`,
+        toggle(!!a.briefing, v => patch({ briefing: v }), 'Morning briefing notification')),
+      row('Breaking world news', `Major events reported by several outlets. News about ${a.homeCountry || 'your country'} counts one step earlier.`,
+        toggle(!!a.breaking, v => patch({ breaking: v }), 'Breaking news')),
+      row('Major AI news', 'New models and big launches, at most one per company in 12 hours.', toggle(!!a.ai, v => patch({ ai: v }), 'Major AI news')),
+      a.ai ? row('AI alert level', null, seg(AI_LEVELS, a.aiThreshold, v => patch({ aiThreshold: v }), 'AI alert level')) : null,
+      a.breaking || a.ai ? row('News alerts per day', 'Breaking and AI together; the rest waits on the World and AI pages.',
+        seg(PER_DAY, a.maxPerDay, v => patch({ maxPerDay: v }), 'News alerts per day')) : null,
+      row('Meeting prep', 'A short prep note 30 minutes before a meeting.', toggle(!!a.calendar, v => patch({ calendar: v }), 'Meeting prep')),
+      row('Job hunt and assistant', 'Due follow-ups, approvals and call summaries.', toggle(!!(a.jobs && a.agent), v => patch({ jobs: v, agent: v }), 'Job hunt and assistant'))));
 }
 
 let voicesLoaded = false;
@@ -258,7 +341,7 @@ export default {
     root.append(h('div.view.settings',
       viewHead('Settings', 'Server, connections, appearance and automation.'),
       h('div.grid.g-2',
-        h('div.stack', serverPanel(), connectionsPanel(), serverSettingsPanel()),
+        h('div.stack', serverPanel(), notificationsPanel(), connectionsPanel(), serverSettingsPanel()),
         h('div.stack', appearancePanel(), voicePanel(), featuresPanel(), usagePanel(), dataPanel()))));
   }
 };

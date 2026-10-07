@@ -33,7 +33,7 @@ npm run desktop:dev
 npm run desktop:build
 ```
 
-**Android:** runs the build and `cap sync`, then open `android/` in Android Studio and press Run.
+**Android:** runs the build and `cap sync`, then open `android/` in Android Studio and press Run. The native parts (notifications, morning alarm, widgets, Quick Settings tile, shortcuts) live in `android/app/src/main/java/com/kevinschmid/lifeos/pulse/`; the web app talks to them through `src/core/native.js`.
 ```bash
 npm run build:android
 ```
@@ -135,8 +135,34 @@ These keys all go in `/etc/agentic-os.env`.
 - **Automatic:** Settings › Automation › *Play the spoken briefing automatically* plays it the first time the app is in front each morning. If the system blocks sound until you tap, the next tap starts it.
 
 **Notifications:**
-- **Phone:** install the **ntfy** app, subscribe to a long random topic, and put that topic in `NTFY_TOPIC`.
+Settings › Notifications picks what reaches you. These are server settings, so they apply to every device.
+- the morning briefing
+- breaking world news: ≥ 9/10 and ≥ 2 outlets. News about Germany counts at ≥ 8.
+- major AI news: one alert per company in 12 hours. Level: frontier models only, big launches (default) or notable.
+- meeting prep
+- job hunt and assistant
+
+Breaking and AI news share a daily cap (default 6).
+
+- **Android (native, in the app itself):** the app posts its own notifications, each kind on its own channel, also while the app is closed.
+  - **Every morning at the briefing time:** an exact alarm (on the minute, also in Doze) shows today's briefing: headline, overview and the spoken points, with **Listen** and **World** buttons. If the briefing isn't written yet, you get a reminder that today's update is on the page; the briefing replaces it quietly when it arrives.
+  - **Every 15 minutes:** a background check (WorkManager) fetches new alerts. It survives reboots and app updates.
+  - **Lock screen:**
+    - All notifications show their text on the lock screen. It is news, not private mail.
+    - The **Briefing** Quick Settings tile: pull down on the lock screen, tap it, and today's briefing opens right there without unlocking.
+    - An optional pinned **lock-screen card** with Briefing · World · Ask.
+    - Two **home-screen widgets**. On phones that allow lock-screen widgets, they can go there too.
+      - **Day plan:** the lesson that is on now or next with its **room** in a big badge and a live countdown, the rest of the day (lessons, meetings, plan blocks) with rooms, and where tomorrow starts. From 20:00, or after the last item, it shows tomorrow. Make it small for just "next lesson + room".
+      - **Briefing:** the briefing headline, the world's top stories and the top AI news.
+    - Long-press the app icon for the **Briefing / World / AI news / Ask** shortcuts. On Samsung you can also put the app itself into the lock-screen shortcuts (Settings › Lock screen › Shortcuts).
+  - **Setup on the phone:** Settings › Notifications. Allow notifications (asked on first start), press **Keep awake** so Android never delays the checks, then **Add Quick Settings tile** and **Add day plan widget** / **Add briefing widget**. Use the **Test** buttons to see each kind.
+  - **Optional instant push** (seconds instead of up to 15 minutes): the server sends Firebase a content-free "check now", and the phone fetches the alert itself.
+    1. Create a free Firebase project at console.firebase.google.com.
+    2. Add an Android app with package `com.kevinschmid.lifeos`, download `google-services.json` into `android/app/` (git-ignored), and rebuild the APK.
+    3. Under Project settings › Service accounts › *Generate new private key*, save the file on the server as `~/agentic-os/data/fcm-service-account.json`, or set `FCM_CREDENTIALS` to its path.
+    4. Settings › Notifications then shows "instantly by push".
 - **Desktop:** notifications show natively in the desktop app.
+- **ntfy (optional, any device):** install the **ntfy** app, subscribe to a long random topic, and put that topic in `NTFY_TOPIC`.
 
 **Phone check-ins (prototype):**
 1. Create a Twilio account, verify your own number and buy or choose a caller ID.
@@ -149,8 +175,9 @@ These keys all go in `/etc/agentic-os.env`.
 | every 15 min | Gmail + Slack refresh, inbox triage, meeting prep 30 min before events |
 | every 30 min, 06–24 | news poll, scoring, breaking-news detection (≥ 9/10 and ≥ 2 outlets) |
 | 07:00 · 13:00 · 19:00 | world digest per continent |
+| hourly at :20, 06–24 | AI watch: new vendor posts classified; major launches raise an alert |
 | 07:30 | AI models daily |
-| 07:50 | morning briefing (card + 30-second spoken version); you get a notification at 08:00. The time can be changed in Settings |
+| 07:50 | morning briefing (card + 30-second spoken version); the phone shows it at 08:00 on the minute. The time can be changed in Settings |
 | 10:00 | job-hunt follow-ups (+ Berlin role suggestions if switched on) |
 
 Run a job by hand (master token):

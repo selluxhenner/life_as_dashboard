@@ -602,6 +602,7 @@ button.mail:focus-visible { outline: 2px solid var(--signal); outline-offset: -2
 
 /* ---------- Settings ---------- */
 .set-row { display: flex; gap: var(--s-4); align-items: center; padding: var(--s-3) 0; }
+.set-row > :not(.grow) { flex-shrink: 0; white-space: nowrap; }   /* the text wraps, the control keeps its size */
 .set-row + .set-row { border-top: 1px solid var(--seam); }
 .set-row .title { font-size: var(--fs-sm); }
 .set-row .sub { font-size: var(--fs-xs); color: var(--ink-3); }

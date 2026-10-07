@@ -23,7 +23,7 @@ import { settle, forgivePenalties, pointsOn, totalPoints, rankView } from './fea
 import { remote } from './core/remote.js';
 import { newsData, digestStories } from './views/news.js';
 import { pendingActions } from './views/assistant.js';
-import { autoReadBriefing } from './views/briefing-panel.js';
+import { autoReadBriefing, listenNow } from './views/briefing-panel.js';
 import { talk, toggleTalk } from './voice/talk.js';
 import { mountVoicePill } from './components/voice-pill.js';
 import COUNTRIES from './assets/country-centroids.json';
@@ -42,12 +42,13 @@ import lab from './views/lab.js';
 import captures from './views/captures.js';
 import { unsorted } from './features/capture/captures.js';
 import { initNotifications } from './core/notifications.js';
+import { initNative, onNativeAction } from './core/native.js';
 
 const ROUTES = [
   { id: 'home', label: 'Home', short: 'Overview', icon: 'home', view: home, dock: true, key: 'G H' },
   { id: 'captures', label: 'Captures', short: 'Notes', icon: 'capture', view: captures, dock: true, key: 'G N' },
   { id: 'today', label: 'Today', icon: 'today', view: today, dock: true, key: 'G T' },
-  { id: 'calendar', label: 'Calendar', icon: 'calendar', view: calendar, key: 'G C' },
+  { id: 'calendar', label: 'Calendar', icon: 'calendar', view: calendar, dock: true, key: 'G C' },
   { id: 'inbox', label: 'Inbox', icon: 'inbox', view: inbox, key: 'G I' },
   { id: 'news', label: 'World', icon: 'globe', view: news, key: 'G W' },
   // AI and Jobs open from their cards on Home; still reachable with Ctrl K and G A / G J
@@ -195,6 +196,10 @@ async function start() {
   initCal();
   initPalette();
   initNotifications();
+  // Android: notification taps, widget, tile and shortcuts can say "listen" (play the briefing) or "ask" (talk)
+  onNativeAction('listen', listenNow);
+  onNativeAction('ask', () => { if (talk.state === 'idle') toggleTalk(); });
+  initNative();
   updatePings();
 
   // Spoken morning briefing (if switched on): now, and whenever the window comes back to front later in the morning.
