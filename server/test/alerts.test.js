@@ -177,7 +177,16 @@ test('day plan: Fuxam titles shortened to the subject, rooms kept short', async 
   assert.deepEqual(lessonTitle('[Workshop] OS: Explore – Workshops (Track 1)'), { tag: 'Workshop', title: 'Workshops', detail: 'Track 1' });
   assert.deepEqual(lessonTitle('[LU] OS: STS Essentials - Group 1'), { tag: 'LU', title: 'STS Essentials', detail: 'Group 1' });
   assert.deepEqual(lessonTitle('Mathe'), { tag: '', title: 'Mathe', detail: '' });
+  // more shapes seen in the real Fuxam feed
+  assert.deepEqual(lessonTitle('EXURSION: OS:EXPLORE–Introduction to BME'), { tag: 'EXURSION', title: 'Introduction to BME', detail: '' });
+  assert.deepEqual(lessonTitle('[LU] OS: Explore  – Introduction to Software Engineering (OS_01) - Input (Group 1)'),
+    { tag: 'LU', title: 'Introduction to Software Engineering', detail: 'Input · Group 1' });
+  assert.deepEqual(lessonTitle('[LU] OS: Explore – Introduction to Digital Design and Innovation - Group 1 (OS_02)'),
+    { tag: 'LU', title: 'Introduction to Digital Design and Innovation', detail: 'Group 1' });
+  assert.equal(lessonTitle('Product Management – Basics').title, 'Product Management – Basics', 'only a one-word track is dropped');
   assert.equal(roomOf('Ris'), 'Ris');
+  assert.equal(roomOf("CODE-1-Han's Zimmer | B.12 (1)"), 'B.12');
+  assert.equal(roomOf('Merantix AI Campus, Max-Urich-Straße 3, 13355 Berlin, Germany'), 'Merantix AI');
   assert.equal(roomOf('Raum 2.04, Campus Nord'), '2.04');
   assert.equal(roomOf('https://meet.google.com/abc-defg-hij'), 'Online');
   assert.equal(roomOf(null, 'https://zoom.us/j/1'), 'Online');

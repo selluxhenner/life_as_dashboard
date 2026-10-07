@@ -19,12 +19,12 @@ const HHMM = /^\d{2}:\d{2}$/;
 export function lessonTitle(raw) {
   let s = String(raw || '').replace(/\s+/g, ' ').trim();
   let tag = '';
-  const t = s.match(/^\[([^\]]{1,24})\]\s*/);
+  const t = s.match(/^\[([^\]]{1,24})\]\s*/) || s.match(/^([A-Z]{3,12}):\s+/);   // "[LU] …" or "EXURSION: …"
   if (t) { tag = t[1].trim(); s = s.slice(t[0].length); }
-  s = s.replace(/^[A-Z]{1,6}:\s*/, '')                 // programme prefix "OS: "
+  s = s.replace(/^[A-Z]{1,6}:\s*/, '')                 // programme prefix "OS: " / "OS:"
     .replace(/\s*\([A-Z]{2,}_\w+\)/g, '');             // course codes "(OS_01)"
-  const track = s.split(/\s+[–—]\s+/);                 // "Explore – Workshops": the track name goes
-  if (track.length > 1) s = track.slice(1).join(' – ');
+  const track = s.match(/^(\S+)\s*[–—]\s*(.+)$/);      // "Explore – Workshops", "EXPLORE–Intro …": the one-word track goes
+  if (track) s = track[2];
   const parts = s.split(/\s+-\s+/);
   let title = parts[0];
   const extra = parts.slice(1);
@@ -34,12 +34,18 @@ export function lessonTitle(raw) {
   return { tag, title: title.trim() || String(raw || '').trim(), detail };
 }
 
-/* The room as it should stand on the widget: "Ris", "Jungle"; video calls become "Online". */
+/* The room as it should stand on the widget: Fuxam rooms as they are ("Ris", "Jungle"), Google room resources by their
+   number ("CODE-1-Han's Zimmer | B.12 (1)" → "B.12"), venues by name ("Merantix AI Campus, Max-Urich-Straße 3 …" →
+   "Merantix AI"); video calls become "Online". At most 14 characters, cut at a word. */
 export function roomOf(location, link) {
-  const s = String(location || '').trim();
+  let s = String(location || '').trim();
   if (!s) return link ? 'Online' : '';
   if (/^https?:|meet\.google|zoom\.us|teams\.(microsoft|live)/i.test(s)) return 'Online';
-  return s.replace(/^(raum|room|rm\.?)\s+/i, '').split(/[,(;]/)[0].trim().slice(0, 14);
+  if (s.includes(' | ')) s = s.split(' | ').pop();
+  s = s.replace(/^(raum|room|rm\.?)\s+/i, '').split(/[,(;]/)[0].trim();
+  if (s.length <= 14) return s;
+  const cut = s.slice(0, 15).lastIndexOf(' ');
+  return (cut > 3 ? s.slice(0, cut) : s.slice(0, 14)).trim();
 }
 
 /**
