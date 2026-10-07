@@ -63,12 +63,18 @@ Stacked from back to front:
 ## Motion
 - **Timing:** `--t-fast 120ms` (feedback), `--t-base 220ms` (state), `--t-slow 480ms` (enter), `--t-draw 650ms` (panel outline). `--ease-spring` is used for toggles and toasts.
 - **Ambient (no user action):**
-  - the boot sequence, once per day;
+  - the launch (`components/launch.js`), every time the window opens from closed: the mark draws itself on the void (~0.55 s), then pushes towards the viewer and dissolves while the app settles in from 96.5% scale and the map from 105%; the map sweep, the panel outlines and the clock's intro start on that beat. Closing fades the app to the void (180 ms) before the window hides, so the next open starts clean. Opening with the hotkey after the hotkey hid it is instant;
   - the map sweeping in;
   - pings for news;
   - the clock's second ring.
 - **Never animate:** layout properties.
 - **Reduced motion:** both `prefers-reduced-motion` and Settings → Motion → Calm zero the durations.
+
+## Desktop window
+- Frameless. The status bar is the title bar: drag it, double-click to maximise, right-click for the system menu.
+- Caption buttons sit flush in the top-right corner like Windows' own: 46px wide, the full bar height, 10px glyphs on 1px lines, maximise turns into restore. Close hovers in `--caption-close`, the one platform colour.
+- Only `<main>` scrolls on desktop, so the bar reaches the window edge and the scrollbar starts below it.
+- The window starts hidden and appears on the launch's first frame; the store waits with re-renders until the intro is done (or the first click).
 
 ## Signature components
 - **World backdrop** (`components/backdrop.js`):

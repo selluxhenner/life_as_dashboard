@@ -10,7 +10,8 @@
     "build:android": "vite build && npx cap sync android",
     "world-dots": "node scripts/build-world-dots.mjs",
     "desktop:dev": "tauri dev",
-    "desktop:build": "tauri build"
+    "desktop:build": "tauri build",
+    "installer:preview": "node scripts/installer-preview.mjs"
   },
   "repository": {
     "type": "git",

@@ -36,6 +36,7 @@
   .grid, .stack { gap: var(--s-3); }
   .view-head { margin-bottom: var(--s-4); }
   .cal-side { top: 60px; }
+  .is-tauri .cal-side { top: var(--s-4); }
 
   .hero { gap: var(--s-6); margin-bottom: var(--s-3); }
   .hero-side { gap: var(--s-3); padding-top: 0; }

@@ -9,16 +9,17 @@ import './styles/responsive.css';
 import { h, $ } from './core/dom.js';
 import { icon } from './core/icons.js';
 import { state, save, subscribe } from './core/store.js';
-import { initRouter, onRoute, routeList, go, currentRoute } from './core/router.js';
+import { initRouter, onRoute, routeList, go, currentRoute, render, holdRenders } from './core/router.js';
 import { initSync, onSyncStatus, syncStatus } from './core/sync.js';
 import { initCal } from './core/calendar-sync.js';
 import { applyTheme, onTheme } from './core/theme.js';
-import { platform, windowAction } from './core/platform.js';
+import { platform, windowAction, onMaximized, launchReady, onShellEvent } from './core/platform.js';
 import { todayKey, fmt } from './core/dates.js';
 import { createBackdrop } from './components/backdrop.js';
 import { weatherNow, conditionOf } from './core/weather.js';
 import { initPalette, openPalette } from './components/palette.js';
-import { boot } from './components/boot.js';
+import { mountLaunch, playLaunch, playClose } from './components/launch.js';
+import { replayIntro } from './components/chronosphere.js';
 import { settle, forgivePenalties, pointsOn, totalPoints, rankView } from './features/points/points.js';
 import { remote } from './core/remote.js';
 import { newsData, digestStories } from './views/news.js';
@@ -106,8 +107,26 @@ function openSheet() {
   markCurrent();
 }
 
+/* Caption buttons drawn like Windows' own: 10px glyphs on 1px lines. */
+const CAPTION = {
+  min: 'M0 5.5h10',
+  max: 'M.5.5h9v9h-9z',
+  restore: 'M2.5 2.5V.5h7v7h-2M.5 2.5h7v7h-7z',
+  close: 'M0 0l10 10M10 0 0 10'
+};
+const glyph = name => h('svg', { viewBox: '0 0 10 10', 'aria-hidden': 'true' }, h('path', { d: CAPTION[name] }));
+const capBtn = (cls, label, name, onclick) =>
+  h('button' + cls, { type: 'button', tabindex: -1, 'aria-label': label, title: label, onclick }, glyph(name));
+const maxBtn = capBtn('.max', 'Maximize', 'max', () => windowAction('max'));
+function paintMaximized(on) {
+  document.documentElement.classList.toggle('is-maximized', on);
+  maxBtn.replaceChildren(glyph(on ? 'restore' : 'max'));
+  maxBtn.title = on ? 'Restore down' : 'Maximize';
+  maxBtn.setAttribute('aria-label', maxBtn.title);
+}
+
 function statusBar() {
-  return h('header.status', { 'data-tauri-drag-region': '' },
+  return h('header.status', { 'data-tauri-drag-region': 'deep' },
     h('span.wordmark', 'AGENTIC', h('span', '/'), 'OS'),
     h('span.sep.hide-m'), crumb,
     h('span.push'),
@@ -117,9 +136,9 @@ function statusBar() {
     syncBtn,
     clockEl,
     h('div.win',
-      h('button', { type: 'button', 'aria-label': 'Minimise', onclick: () => windowAction('min') }, icon('min')),
-      h('button', { type: 'button', 'aria-label': 'Maximise', onclick: () => windowAction('max') }, icon('max')),
-      h('button.close', { type: 'button', 'aria-label': 'Hide window', onclick: () => windowAction('close') }, icon('x'))));
+      capBtn('.min', 'Minimize', 'min', () => windowAction('min')),
+      maxBtn,
+      capBtn('.close', 'Close', 'close', closeWindow)));
 }
 
 function paintStatus() {
@@ -153,32 +172,92 @@ function updatePings() {
   backdrop.setPings(pings.slice(0, 24));
 }
 
-/* ---------- boot ---------- */
+/* ---------- launch, close, reopen ----------
+   The window opens on the launch cover (components/launch.js). Everything heavy (map, shell, fonts) is
+   built underneath before it shows, the view renders on the handoff beat, and syncing starts once the
+   cover is gone. Closing fades to the void and hides to the tray; opening it again replays the launch. */
+let phase = 'open';            // closed (cover up) · opening · open · closing
+let routerReady = false;
+let mainEl = null;
+const HOLD = 2600;             // ms store changes wait after the handoff (the clock's intro runs 2.4 s)
+
+function showView() {
+  // The rail and dock list the router's routes, so they are built once the router has them.
+  if (!routerReady) { routerReady = true; initRouter(mainEl, ROUTES); buildNav(); }
+  else { replayIntro(); render(true); }
+}
+
+async function openWindow() {
+  if (phase !== 'closed') return;
+  phase = 'opening';
+  await playLaunch(() => {
+    holdRenders(HOLD);
+    showView();
+    backdrop.play();
+  });
+  phase = 'open';
+}
+
+async function closeWindow() {
+  if (!platform.isTauri || phase === 'closing' || phase === 'closed') return;
+  phase = 'closing';
+  await playClose();
+  phase = 'closed';
+  await windowAction('close');
+}
+
+/* Fonts are local files; wait for them (briefly) so no text re-flows during the reveal. */
+function fontsReady() {
+  const faces = ['400 15px "Space Grotesk Variable"', '400 13px "JetBrains Mono Variable"', '300 40px Doto', '700 40px Doto'];
+  const loads = Promise.all(faces.map(f => document.fonts.load(f).catch(() => {})));
+  return Promise.race([loads, new Promise(r => setTimeout(r, 1200))]);
+}
+
+/* Sync, calendar, reminders and the spoken briefing start after the launch, so their work and
+   re-renders never land in the middle of it. */
+let servicesStarted = false;
+function startServices() {
+  if (servicesStarted) return;
+  servicesStarted = true;
+  initSync();
+  initCal();
+  initNotifications();
+  // Android: notification taps, widget, tile and shortcuts can say "listen" (play the briefing) or "ask" (talk)
+  onNativeAction('listen', listenNow);
+  onNativeAction('ask', () => { if (talk.state === 'idle') toggleTalk(); });
+  initNative();
+  updatePings();
+  // Spoken morning briefing (if switched on): now, and whenever the window comes back to front later in the morning.
+  autoReadBriefing();
+  window.addEventListener('focus', autoReadBriefing);
+  document.addEventListener('visibilitychange', autoReadBriefing);
+}
+
 async function start() {
   applyTheme(state.settings.theme);
   document.documentElement.dataset.motion = state.settings.motion;
   document.documentElement.classList.toggle('is-tauri', platform.isTauri);
   document.documentElement.classList.toggle('is-android', platform.isCapacitor);
 
-  const firstToday = state.meta.lastOpened !== todayKey();
   state.meta.lastOpened = todayKey();
 
+  // The launch plays on every cold start (and on every reopen from the tray); a reload in the same session skips it.
+  const launch = sessionStorage.getItem('booted') !== '1';
+  sessionStorage.setItem('booted', '1');
+
   const canvas = h('canvas#backdrop', { 'aria-hidden': 'true' });
-  const main = h('main#main', { tabindex: -1 });
+  mainEl = h('main#main', { tabindex: -1 });
   document.body.prepend(canvas, h('div.vignette'), h('div.grain'));
-  document.body.append(h('div.app', rail, statusBar(), main), dock, mountVoicePill());
+  document.body.append(h('div.app', rail, statusBar(), mainEl), dock, mountVoicePill());
+  if (launch) mountLaunch();
 
   forgivePenalties();
   settle();
   save();
 
-  await boot({ skip: !firstToday && sessionStorage.getItem('booted') === '1' });
-  sessionStorage.setItem('booted', '1');
-  backdrop = createBackdrop(canvas, { boot: true, home: { lat: state.settings.home.lat, lon: state.settings.home.lon, label: state.settings.home.city } });
+  backdrop = createBackdrop(canvas, { boot: true, hold: launch, home: { lat: state.settings.home.lat, lon: state.settings.home.lon, label: state.settings.home.city } });
   onTheme(() => { backdrop.refresh(); updatePings(); });
 
-  initRouter(main, ROUTES);
-  buildNav();
   onRoute(markCurrent);
   subscribe(() => { updatePings(); markCurrent(); if (pointsOn() !== !!routeList().find(r => r.id === 'rank')) buildNav(); paintStatus(); paintTalk(); });
   onSyncStatus(paintSync);
@@ -192,20 +271,33 @@ async function start() {
   setInterval(rollover, 30000);
   window.addEventListener('focus', rollover);
 
-  initSync();
-  initCal();
   initPalette();
-  initNotifications();
-  // Android: notification taps, widget, tile and shortcuts can say "listen" (play the briefing) or "ask" (talk)
-  onNativeAction('listen', listenNow);
-  onNativeAction('ask', () => { if (talk.state === 'idle') toggleTalk(); });
-  initNative();
-  updatePings();
 
-  // Spoken morning briefing (if switched on): now, and whenever the window comes back to front later in the morning.
-  autoReadBriefing();
-  window.addEventListener('focus', autoReadBriefing);
-  document.addEventListener('visibilitychange', autoReadBriefing);
+  // Desktop window: maximize/restore glyph, buttons dim while the window is inactive, Alt+F4 closes like
+  // the close button, and a window that was closed replays the launch when it is opened again.
+  onMaximized(paintMaximized);
+  window.addEventListener('blur', () => document.documentElement.classList.add('win-blurred'));
+  window.addEventListener('focus', () => document.documentElement.classList.remove('win-blurred'));
+  onShellEvent('os://close', closeWindow);
+  onShellEvent('os://shown', openWindow);
+  // The first click or key ends the render hold, so the user's own changes show at once.
+  for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => holdRenders(0), { capture: true });
+
+  if (!launch) {
+    showView();
+    backdrop.play();
+    startServices();
+    launchReady();
+  } else {
+    await fontsReady();
+    phase = 'closed';
+    if (await launchReady()) {
+      await openWindow();
+    } else {
+      showView();   // autostart keeps the window in the tray: prepare the view; the launch plays when it opens
+    }
+    startServices();
+  }
 
   if ('serviceWorker' in navigator && platform.kind === 'web' && import.meta.env.PROD) {
     navigator.serviceWorker.register('sw.js').catch(() => {});

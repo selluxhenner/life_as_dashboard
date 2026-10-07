@@ -23,8 +23,7 @@
         "decorations": false,
         "transparent": false,
         "backgroundColor": "#05070A",
-        "resizable": true,
-        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required"
+        "resizable": true
       }
     ],
     "security": {
@@ -40,7 +39,10 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "startMenuFolder": "Agentic OS"
+        "startMenuFolder": "Agentic OS",
+        "installerIcon": "icons/icon.ico",
+        "template": "installer/installer.nsi",
+        "installerHooks": "installer/theme.nsh"
       }
     }
   }

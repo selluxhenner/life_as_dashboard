@@ -168,7 +168,23 @@ Rules:
 
 export function getBriefing(date = localDate()) {
   const b = db.get('SELECT * FROM briefings WHERE date = ?', date);
-  return b ? { date: b.date, createdAt: b.created_at, headline: b.headline, sections: j.parse(b.sections, []), focus: j.parse(b.focus, []), spoken: j.parse(b.spoken, null) } : null;
+  return b ? { date: b.date, createdAt: b.created_at, headline: b.headline, sections: withEnds(j.parse(b.sections, [])), focus: j.parse(b.focus, []), spoken: j.parse(b.spoken, null) } : null;
+}
+
+/* So the card can cross lines off: every bullet about calendar events gets `until`, the end of the last of them
+   (all-day events end at midnight). Tasks are checked on the device by id, where "done" is instant. */
+function withEnds(sections) {
+  const ids = [...new Set(sections.flatMap(s => s.bullets.flatMap(x => (x.refs || []).filter(r => r.startsWith('ev:')).map(r => r.slice(3)))))];
+  if (!ids.length) return sections;
+  const ends = Object.fromEntries(db.all(`SELECT id, end, all_day FROM calendar_events WHERE id IN (${ids.map(() => '?').join(',')})`, ...ids)
+    .map(e => [e.id, e.all_day ? zonedInstant(e.end, '00:00').toISOString() : new Date(e.end).toISOString()]));
+  return sections.map(s => ({
+    ...s,
+    bullets: s.bullets.map(x => {
+      const evs = (x.refs || []).filter(r => r.startsWith('ev:')).map(r => ends[r.slice(3)]);
+      return evs.length && evs.every(Boolean) ? { ...x, until: evs.sort().at(-1) } : x;
+    })
+  }));
 }
 
 export async function briefingJob() {

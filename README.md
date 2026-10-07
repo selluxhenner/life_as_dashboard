@@ -33,6 +33,16 @@ npm run desktop:dev
 npm run desktop:build
 ```
 
+The installer has its own design: a logo splash with a soft chime, the dot-matrix globe, the app's fonts and a dark theme on every page, including the uninstaller. It lives in `src-tauri/installer/`:
+- `installer.nsi` is Tauri's template with small `AOS:` hooks.
+- `theme.nsh` holds the styling.
+- `art/make_art.py` renders the artwork at 100–200 % into `assets/`.
+
+**Preview the installer design** without installing anything (add `-- --uninstall` for the uninstaller, `-- --art` to re-render the artwork first):
+```bash
+npm run installer:preview
+```
+
 **Android:** runs the build and `cap sync`, then open `android/` in Android Studio and press Run. The native parts (notifications, morning alarm, widgets, Quick Settings tile, shortcuts) live in `android/app/src/main/java/com/kevinschmid/lifeos/pulse/`; the web app talks to them through `src/core/native.js`.
 ```bash
 npm run build:android

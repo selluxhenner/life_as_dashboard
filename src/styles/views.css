@@ -146,6 +146,9 @@
 .brief-sec ul { display: grid; gap: 4px; }
 .brief-sec li { font-size: var(--fs-sm); color: var(--ink-2); padding-left: 12px; position: relative; }
 .brief-sec li::before { content: ''; position: absolute; left: 0; top: .62em; width: 5px; height: 1px; background: var(--ink-3); }
+/* Done or already over: crossed off and quieter, so what is still open stands out. */
+.brief-sec li.done { color: var(--ink-3); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--ink-3) 80%, transparent); text-decoration-thickness: 1px; }
+.brief-sec li.done::before { background: var(--seam-strong); }
 .brief-focus { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; margin-top: var(--s-4); }
 /* The spoken briefing's topics, in the order you hear them. */
 .brief-air { display: flex; align-items: baseline; gap: var(--s-3); margin: calc(var(--s-2) * -1) 0 var(--s-4); font-size: var(--fs-sm); color: var(--ink-2); }
