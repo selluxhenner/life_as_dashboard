@@ -1,7 +1,8 @@
 .claude
 node_modules
 www
-android
+# android/ is tracked (native alerts, widget, tile); android/.gitignore drops its build outputs
+android/app/google-services.json
 *.apk
 src-tauri/target
 src-tauri/gen

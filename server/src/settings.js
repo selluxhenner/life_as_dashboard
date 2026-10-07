@@ -5,6 +5,9 @@ export const DEFAULTS = {
   flags: { points: false, jobsAi: false, phone: false, push: true },
   briefing: { time: '08:00' },
   news: { digestTimes: ['07:00', '13:00', '19:00'], breakingThreshold: 9 },
+  // Which notifications reach the devices. ai: AI news at or above aiThreshold (10 = new frontier model).
+  // homeCountry: its news alerts one step below the breaking threshold. maxPerDay caps breaking + AI alerts together.
+  alerts: { briefing: true, breaking: true, ai: true, calendar: true, jobs: true, agent: true, aiThreshold: 9, homeCountry: 'Germany', maxPerDay: 6 },
   // engine: auto (ElevenLabs when its key is set, else OpenAI) | elevenlabs | openai. voice = OpenAI voice.
   voice: { autoRead: false, engine: 'auto', voice: 'marin', elevenVoice: '', elevenModel: 'eleven_v4' },
   phone: { enabled: false, number: '', monthlyCapEur: 10, quietHours: ['21:30', '08:30'], maxSeconds: 180 },

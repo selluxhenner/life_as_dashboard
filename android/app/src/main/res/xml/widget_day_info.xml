@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Day plan: resize from a one-line "next lesson + room" strip up to the whole day. keyguard: lock screen where allowed. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="40dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="3"
+    android:maxResizeWidth="600dp"
+    android:maxResizeHeight="500dp"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_day"
+    android:initialKeyguardLayout="@layout/widget_day_small"
+    android:previewLayout="@layout/widget_day"
+    android:previewImage="@mipmap/ic_launcher"
+    android:description="@string/day_widget_description"
+    android:widgetCategory="home_screen|keyguard" />

@@ -97,12 +97,34 @@
 .status .sync.ok { color: var(--pulse); }
 .status .sync.offline, .status .sync.error, .status .sync.auth { color: var(--amber); }
 .status .kbd { border: 1px solid var(--seam-strong); border-radius: var(--r-xs); padding: 0 5px; color: var(--ink-2); background: none; font-family: inherit; font-size: 10px; height: 20px; }
-.status .win { display: none; gap: 2px; }
-.is-tauri .status .win { display: flex; }
-.status .win button { width: 30px; height: 26px; border: 0; border-radius: var(--r-xs); background: none; color: var(--ink-3); display: grid; place-items: center; }
-.status .win button:hover { background: var(--hull-2); color: var(--ink); }
-.status .win button.close:hover { background: var(--flare); color: #fff; }
-.status .win svg { width: 12px; height: 12px; }
+/* Window buttons (desktop): flush in the window's top-right corner like native caption buttons,
+   46px wide and the full height of the bar. Drag, double-click to maximise and the right-click
+   system menu come from the bar's app-region (WebView2 treats it as the real title bar). */
+.status .win { display: none; }
+.is-tauri .status { padding-right: 0; user-select: none; }
+.is-tauri .status .win { display: flex; align-self: stretch; }
+.status .win button {
+  width: 46px; height: 100%; padding: 0;
+  border: 0; border-radius: 0;
+  background: transparent; color: var(--ink-2);
+  display: grid; place-items: center;
+  transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
+}
+.status .win button:hover { background: color-mix(in oklab, var(--ink) 9%, transparent); color: var(--ink); }
+.status .win button:active { background: color-mix(in oklab, var(--ink) 5%, transparent); color: var(--ink-2); }
+.status .win button.close:hover { background: var(--caption-close); color: #fff; }
+.status .win button.close:active { background: color-mix(in srgb, var(--caption-close) 82%, transparent); color: rgb(255 255 255 / .85); }
+.status .win svg { width: 10px; height: 10px; overflow: visible; }
+.status .win path { fill: none; stroke: currentColor; stroke-width: 1; }
+html.win-blurred .status .win button:not(:hover) { color: var(--ink-3); }
+
+/* Desktop: the window is the app. Only <main> scrolls, so the title bar reaches the window's
+   right edge and the scrollbar starts below it, as in a native app. */
+html.is-tauri, html.is-tauri body { height: 100%; overflow: hidden; }
+.is-tauri .app { height: 100vh; min-height: 0; }
+.is-tauri main { min-height: 0; overflow: hidden auto; }
+.is-tauri .cal-side { top: var(--s-6); }
+.is-tauri .mail-reader { top: var(--s-4); }
 
 /* ---------- main ---------- */
 main {
@@ -178,19 +200,54 @@ main {
 .palette li[aria-selected='true'] { background: var(--hull-2); color: var(--ink); box-shadow: inset 2px 0 0 var(--signal); }
 .palette .foot { display: flex; gap: var(--s-4); padding: var(--s-2) var(--s-5); border-top: 1px solid var(--seam); font-family: var(--font-data); font-size: var(--fs-micro); color: var(--ink-3); }
 
-/* ---------- boot ---------- */
-.boot {
+/* ---------- launch (components/launch.js) ----------
+   html[data-launch]: cover → draw → arrive → (removed). leave = closing to the tray.
+   draw: the mark draws itself on the void. arrive: it pushes towards the viewer and fades while the
+   cover dissolves and the app and map settle from slightly off-scale. Only transform, opacity and
+   stroke move, so the compositor carries it while the page renders underneath. */
+.launch-cover {
+  display: none;
   position: fixed; inset: 0; z-index: var(--z-boot);
+  place-items: center;
   background: var(--void);
-  display: grid; place-items: center;
-  font-family: var(--font-data); font-size: var(--fs-xs); color: var(--ink-3);
-  transition: opacity var(--t-slow) var(--ease-out);
 }
-.boot.out { opacity: 0; pointer-events: none; }
-.boot .core { display: grid; gap: var(--s-4); justify-items: center; }
-.boot svg { width: 120px; height: 120px; }
-.boot svg circle { fill: none; stroke: var(--signal); stroke-width: 1; stroke-dasharray: 380; stroke-dashoffset: 380; animation: draw 900ms var(--ease-in-out) forwards; }
-.boot svg circle + circle { stroke: var(--seam-strong); animation-delay: 150ms; }
-.boot .log { height: 64px; overflow: hidden; text-align: left; width: 260px; line-height: 16px; }
-.boot .log div { animation: fade-in 120ms forwards; opacity: 0; }
-.boot .log div span { color: var(--pulse); }
+html[data-launch] .launch-cover { display: grid; }
+.launch-mark { width: 84px; height: 84px; overflow: visible; opacity: 0; }
+.launch-mark .ring, .launch-mark .arc {
+  fill: none;
+  stroke-dasharray: 100; stroke-dashoffset: 100;
+  transform-box: fill-box; transform-origin: center;
+}
+.launch-mark .ring { stroke: var(--seam-strong); stroke-width: .5; transform: rotate(-90deg); }
+.launch-mark .arc { stroke: var(--signal); stroke-width: .75; stroke-linecap: round; filter: drop-shadow(0 0 2px var(--signal)); }
+.launch-mark .dot { fill: var(--signal); opacity: 0; transform-box: fill-box; transform-origin: center; }
+
+html[data-launch='draw'] .launch-mark { animation: mark-in 380ms var(--ease-out) both; }
+html[data-launch='draw'] .launch-mark .ring { animation: draw 560ms var(--ease-in-out) forwards; }
+html[data-launch='draw'] .launch-mark .arc { animation: draw 520ms var(--ease-out) 40ms forwards; }
+html[data-launch='draw'] .launch-mark .dot { animation: dot-in 320ms var(--ease-spring) 220ms both; }
+@keyframes mark-in { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
+@keyframes dot-in { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: none; } }
+
+html[data-launch='arrive'] .launch-cover { pointer-events: none; animation: cover-out 720ms var(--ease-out) forwards; }
+html[data-launch='arrive'] .launch-mark { animation: mark-out 520ms var(--ease-out) forwards; }
+html[data-launch='arrive'] .launch-mark .ring, html[data-launch='arrive'] .launch-mark .arc { stroke-dashoffset: 0; }
+html[data-launch='arrive'] .launch-mark .dot { opacity: 1; }
+html[data-launch='arrive'] .app { animation: app-arrive 900ms var(--ease-out) both; }
+html[data-launch='arrive'] #backdrop { animation: map-arrive 900ms var(--ease-out) both; }
+@keyframes cover-out { to { opacity: 0; } }
+@keyframes mark-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(1.6); } }
+@keyframes app-arrive { from { transform: scale(.965); } }
+@keyframes map-arrive { from { transform: scale(1.05); } }
+
+html[data-launch='leave'] .launch-cover { animation: cover-in 180ms var(--ease-out) both; }
+html[data-launch='leave'] .app { animation: app-leave 180ms var(--ease-out) forwards; }
+@keyframes cover-in { from { opacity: 0; } }
+@keyframes app-leave { to { transform: scale(.985); } }
+
+/* Calm / reduced motion: no mark, no scale, a short cross-fade in and none out. */
+html[data-launch='calm'] .launch-cover { pointer-events: none; animation: cover-out 220ms ease forwards; }
+html[data-motion='calm'][data-launch='leave'] .launch-cover, html[data-motion='calm'][data-launch='leave'] .app { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-launch='leave'] .launch-cover, html[data-launch='leave'] .app { animation: none; }
+}

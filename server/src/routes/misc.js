@@ -14,6 +14,8 @@ import { runAgent, decideAction, pendingActions } from '../agent/runner.js';
 import { placeCall, listCalls, phoneSpend } from '../phone/twilio.js';
 import { monthSpend, asData } from '../ai/claude.js';
 import { notificationsSince } from '../notify/index.js';
+import { fcmReady } from '../notify/fcm.js';
+import { glance } from '../jobs/glance.js';
 import { runJob, JOBS } from '../jobs/scheduler.js';
 import { localDate, monthKey } from '../lib/time.js';
 import { uid } from '../lib/crypto.js';
@@ -102,6 +104,17 @@ misc.get('/usage', c => {
   return c.json({ month, usage: { aiUsd: monthSpend(month) - voiceUsd, voiceUsd, aiCapUsd: getSetting('ai').monthlyCapUsd, phoneEur: phoneSpend(month), phoneCapEur: getSetting('phone').monthlyCapEur, byFeature } });
 });
 misc.get('/notifications', c => c.json({ notifications: notificationsSince(Number(c.req.query('since') || 0)) }));
+/* What the phone shows outside the app: morning notification, home-screen widget, Quick Settings tile. */
+misc.get('/glance', c => c.json({ ...glance(), instant: fcmReady() }));
+/* The Android app registers its Firebase token here (null to stop); used only to say "check now". */
+misc.post('/push/register', async c => {
+  const { deviceId } = c.get('user');
+  if (deviceId === 'master') throw new HttpError(400, 'Pair this device first; the master token has no device row');
+  const b = await body(c);
+  const token = b.token == null ? null : str(b.token, 4096);
+  db.run('UPDATE devices SET push_token = ? WHERE id = ?', token || null, deviceId);
+  return c.json({ ok: true, instant: fcmReady() && !!token });
+});
 misc.get('/jobs-status', c => c.json({ runs: db.all('SELECT * FROM job_runs ORDER BY started_at DESC LIMIT 40') }));
 
 /* ---------- dev: run a scheduled job by hand ---------- */

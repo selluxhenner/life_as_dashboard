@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shortcut: world news (globe). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:fillColor="#FF05070A" android:pathData="M24,0a24,24 0 1,1 0,48a24,24 0 1,1 0,-48z" />
+    <path android:fillColor="#00000000" android:strokeColor="#FF4FE3FF" android:strokeWidth="2"
+        android:pathData="M24,13a11,11 0 1,1 0,22a11,11 0 1,1 0,-22zM13,24h22M24,13c-3.5,3 -5,7 -5,11s1.5,8 5,11c3.5,-3 5,-7 5,-11s-1.5,-8 -5,-11z" />
+</vector>

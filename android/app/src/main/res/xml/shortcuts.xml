@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the app icon (or drag one to the home screen). Each opens a route through agenticos://open/… -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="briefing" android:enabled="true" android:icon="@drawable/ic_sc_briefing"
+        android:shortcutShortLabel="@string/sc_briefing_short" android:shortcutLongLabel="@string/sc_briefing_long">
+        <intent android:action="android.intent.action.VIEW" android:data="agenticos://open/home?do=listen"
+            android:targetPackage="com.kevinschmid.lifeos" android:targetClass="com.kevinschmid.lifeos.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="world" android:enabled="true" android:icon="@drawable/ic_sc_world"
+        android:shortcutShortLabel="@string/sc_world_short" android:shortcutLongLabel="@string/sc_world_long">
+        <intent android:action="android.intent.action.VIEW" android:data="agenticos://open/news"
+            android:targetPackage="com.kevinschmid.lifeos" android:targetClass="com.kevinschmid.lifeos.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="ai" android:enabled="true" android:icon="@drawable/ic_sc_ai"
+        android:shortcutShortLabel="@string/sc_ai_short" android:shortcutLongLabel="@string/sc_ai_long">
+        <intent android:action="android.intent.action.VIEW" android:data="agenticos://open/ai"
+            android:targetPackage="com.kevinschmid.lifeos" android:targetClass="com.kevinschmid.lifeos.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="ask" android:enabled="true" android:icon="@drawable/ic_sc_ask"
+        android:shortcutShortLabel="@string/sc_ask_short" android:shortcutLongLabel="@string/sc_ask_long">
+        <intent android:action="android.intent.action.VIEW" android:data="agenticos://open/home?do=ask"
+            android:targetPackage="com.kevinschmid.lifeos" android:targetClass="com.kevinschmid.lifeos.MainActivity" />
+    </shortcut>
+</shortcuts>

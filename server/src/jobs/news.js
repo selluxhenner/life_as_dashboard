@@ -94,20 +94,25 @@ export async function scoreNews() {
   return scored;
 }
 
-/* 3. Breaking: very significant AND reported by at least two outlets within 3 hours. Push once per cluster. */
+/* 3. Breaking: very significant AND reported by at least two outlets within 3 hours. Push once per cluster.
+   News about the home country (Settings: alerts.homeCountry) counts one step below the threshold: it matters more to Kevin. */
 export async function detectBreaking() {
   const threshold = getSetting('news').breakingThreshold;
-  const rows = db.all(`SELECT cluster, MAX(significance) sig, COUNT(DISTINCT feed_id) n, MAX(headline) headline, MIN(id) any_id
+  const home = getSetting('alerts').homeCountry || '';
+  const rows = db.all(`SELECT cluster, MAX(significance) sig, COUNT(DISTINCT feed_id) n, MAX(country = ?) home
                        FROM news_items WHERE published_at > ? AND significance >= ? AND cluster IS NOT NULL GROUP BY cluster`,
-    Date.now() - 3 * 3600000, threshold);
+    home, Date.now() - 3 * 3600000, threshold - (home ? 1 : 0));
   const fresh = [];
   for (const r of rows) {
-    if (r.n < 2) continue;
+    if (r.n < 2 || (r.sig < threshold && !r.home)) continue;
     const already = db.get('SELECT 1 FROM news_items WHERE cluster = ? AND breaking = 1', r.cluster);
     db.run('UPDATE news_items SET breaking = 1 WHERE cluster = ?', r.cluster);
-    if (!already) fresh.push(r);
+    // the headline of the most significant item in the cluster
+    if (!already) fresh.push({ ...r, ...db.get(`SELECT headline, country FROM news_items WHERE cluster = ? AND headline IS NOT NULL
+                                                ORDER BY significance DESC, published_at DESC LIMIT 1`, r.cluster) });
   }
-  for (const r of fresh) await notify({ title: 'Breaking', body: r.headline, tags: ['rotating_light'], url: '#/news', priority: 4 });
+  for (const r of fresh) await notify({ title: r.home ? `Breaking · ${home}` : r.country ? `Breaking · ${r.country}` : 'Breaking', body: r.headline,
+    tags: ['rotating_light'], url: '#/news', priority: 4, kind: 'breaking', ref: 'news:' + r.cluster });
   return fresh.length;
 }
 

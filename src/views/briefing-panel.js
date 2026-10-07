@@ -73,6 +73,18 @@ export function localBriefing() {
 
 const greeting = () => { const hr = new Date().getHours(); return hr < 12 ? 'Morning, Kevin!' : hr < 18 ? 'Hi Kevin!' : 'Evening, Kevin!'; };
 const bulletText = x => (typeof x === 'string' ? x : x.text);
+
+/* Crossed off once it no longer needs you: every event the line is about has ended (`until`, from the server)
+   and every task it mentions is done on this device. Lines about mail, news etc. stay as they are. */
+function finished(x) {
+  if (typeof x === 'string') return false;
+  const refs = x.refs || [];
+  const events = refs.filter(r => r.startsWith('ev:'));
+  const todos = refs.filter(r => r.startsWith('todo:')).map(r => r.slice(5));
+  if (!events.length && !todos.length) return false;
+  if (events.length && !(x.until && Date.parse(x.until) <= Date.now())) return false;
+  return todos.every(id => { const t = state.tasks.find(t => t.id === id); return !!t && (t.done || t.deleted); });
+}
 const count = (n, one, many = one + 's') => `${n === 1 ? 'one' : n} ${n === 1 ? one : many}`;
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -133,15 +145,27 @@ export async function autoReadBriefing() {
     keep(res.briefing);
     if (!cache.spoken) await addSpoken();
     localStorage.setItem(AUTO_KEY, tk);
-    playBriefing({
-      onBlocked: () => {
-        toast('Tap anywhere to hear your briefing.', 'signal');
-        const go = () => { window.removeEventListener('pointerdown', go, true); window.removeEventListener('keydown', go, true); playBriefing(); };
-        window.addEventListener('pointerdown', go, true);
-        window.addEventListener('keydown', go, true);
-      }
-    });
+    playBriefing({ onBlocked: tapToPlay });
   } catch { /* offline: try again next time */ } finally { autoBusy = false; }
+}
+
+/* The system blocks sound until the first tap: the next tap anywhere starts it. */
+function tapToPlay() {
+  toast('Tap anywhere to hear your briefing.', 'signal');
+  const go = () => { window.removeEventListener('pointerdown', go, true); window.removeEventListener('keydown', go, true); playBriefing(); };
+  window.addEventListener('pointerdown', go, true);
+  window.addEventListener('keydown', go, true);
+}
+
+/* "Listen" on the phone's morning notification, lock-screen card or app shortcut: fetch today's briefing, then play it. */
+export async function listenNow() {
+  if (apiConfig()) {
+    try {
+      const res = await api.get('/api/briefing/today');
+      if (res && res.briefing) { keep(res.briefing); await addSpoken(); }
+    } catch { /* offline: the cached or local version */ }
+  }
+  playBriefing({ onBlocked: tapToPlay });
 }
 
 export function briefingPanel() {
@@ -171,6 +195,8 @@ export function briefingPanel() {
       h('span.brief-air-list', topics.map((t, i) => [i ? h('span.dot-sep', '·') : null, h('span', t.label)]))) : null,
     h('div.brief-sections', b.sections.map(s => h('div.brief-sec',
       h('div.brief-k', s.title),
-      h('ul', s.bullets.map(x => h('li', bulletText(x))))))),
+      h('ul', s.bullets.map(x => (finished(x)
+        ? h('li.done', { title: 'Done or already over' }, bulletText(x))
+        : h('li', bulletText(x)))))))),
     b.focus && b.focus.length ? h('div.brief-focus', h('span.micro', 'Focus'), b.focus.map(f => chip(f, 'signal'))) : null);
 }

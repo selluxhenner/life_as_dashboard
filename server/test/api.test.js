@@ -246,3 +246,26 @@ test('voice: audio keeps the CORS header (the apps play it cross-origin) and is 
     assert.equal(calls, 1);
   } finally { globalThis.fetch = realFetch; config.openaiKey = ''; }
 });
+
+test('briefing: bullets about events carry the end of the last one, so the card can cross them off', async () => {
+  const { db, j } = await import('../src/db.js');
+  const { localDate } = await import('../src/lib/time.js');
+  const now = Date.now();
+  db.run(`INSERT OR REPLACE INTO calendar_events (id, connection_id, kind, title, start, end, all_day, updated_at) VALUES (?, 'c', 'event', ?, ?, ?, 0, ?)`,
+    'c:past', 'Stand-up', new Date(now - 3 * 3600000).toISOString(), new Date(now - 2 * 3600000).toISOString(), now);
+  db.run(`INSERT OR REPLACE INTO calendar_events (id, connection_id, kind, title, start, end, all_day, updated_at) VALUES (?, 'c', 'event', ?, ?, ?, 0, ?)`,
+    'c:later', 'Call', new Date(now + 3600000).toISOString(), new Date(now + 2 * 3600000).toISOString(), now);
+  const sections = [{ id: 'schedule', title: 'Schedule', bullets: [
+    { text: 'Stand-up, then the call.', refs: ['ev:c:past', 'ev:c:later'] },
+    { text: 'Stand-up only.', refs: ['ev:c:past', 'mail:x'] },
+    { text: 'Reply to Anna.', refs: ['mail:x'] },
+    { text: 'Unknown event.', refs: ['ev:missing'] }
+  ] }];
+  db.run('INSERT OR REPLACE INTO briefings (date, created_at, model, headline, sections, focus) VALUES (?, ?, ?, ?, ?, ?)', localDate(), now, 'test', 'Day.', j.str(sections), '[]');
+  const b = (await api('GET', '/api/briefing/today')).body.briefing;
+  const [both, past, mail, unknown] = b.sections[0].bullets;
+  assert.equal(both.until, new Date(now + 2 * 3600000).toISOString());   // the later event decides
+  assert.ok(Date.parse(past.until) < now);
+  assert.equal(mail.until, undefined);
+  assert.equal(unknown.until, undefined);
+});

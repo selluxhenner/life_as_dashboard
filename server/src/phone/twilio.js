@@ -74,8 +74,8 @@ export function callStatus(id, p) {
     db.run('UPDATE calls SET status = ?, ended_at = ?, duration_s = ?, cost_eur = ? WHERE id = ?',
       st, Date.now(), dur, Math.ceil(dur / 60) * EUR_PER_MIN, id);
     const call = db.get('SELECT * FROM calls WHERE id = ?', id);
-    if (st === 'completed' && call?.outcome) notify({ title: 'Call summary', body: call.outcome.slice(0, 280), url: '#/assistant' });
-    else if (st !== 'completed') notify({ title: 'Call not answered', body: `Status: ${st}`, url: '#/assistant' });
+    if (st === 'completed' && call?.outcome) notify({ title: 'Call summary', body: call.outcome.slice(0, 280), url: '#/assistant', kind: 'agent' });
+    else if (st !== 'completed') notify({ title: 'Call not answered', body: `Status: ${st}`, url: '#/assistant', kind: 'agent' });
   } else db.run('UPDATE calls SET status = ?, started_at = COALESCE(started_at, ?) WHERE id = ?', st, Date.now(), id);
 }
 

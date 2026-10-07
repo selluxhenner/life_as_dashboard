@@ -1,8 +1,10 @@
 // Server notifications (briefing ready, breaking news, approvals, call summaries) shown as native notifications.
-// Desktop: Tauri notification plugin. Browser: Web Notifications. Phone push comes from ntfy (server side).
+// Desktop: Tauri notification plugin. Browser: Web Notifications. Android: the app's native side (core/native.js)
+// posts them itself, also while the app is closed; here it is only asked to check every minute while the app is open.
 import { apiConfig, apiFetch } from './api.js';
 import { platform } from './platform.js';
 import { toast } from './fx.js';
+import { native, nativeCheck } from './native.js';
 
 const KEY = 'agenticNotifySince';
 let since = Number(localStorage.getItem(KEY) || 0);
@@ -39,6 +41,11 @@ async function poll() {
 }
 
 export function initNotifications() {
+  if (native) {
+    setInterval(() => { if (!document.hidden) nativeCheck(); }, 60000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) nativeCheck(); });
+    return;
+  }
   if (!platform.isTauri && 'Notification' in window && Notification.permission === 'default') {
     window.addEventListener('pointerdown', () => Notification.requestPermission().catch(() => {}), { once: true });
   }

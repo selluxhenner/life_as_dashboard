@@ -11,6 +11,9 @@ import { toast } from '../core/fx.js';
 import { confirmDelete } from '../components/overlay.js';
 import { icon } from '../core/icons.js';
 import * as chrono from 'chrono-node';
+import { isPhone, phoneQuery } from '../core/platform.js';
+
+phoneQuery.addEventListener('change', () => notify());
 
 const DAY_START = 6 * 60, DAY_END = 24 * 60, HOUR_PX = 52;
 let mode = matchMedia('(max-width: 860px)').matches ? 'day' : 'week';   // week | day | planner — phones start on Day
@@ -135,6 +138,26 @@ function detail() {
       it.link ? h('a.btn', { href: it.link, target: '_blank', rel: 'noopener' }, 'Open in Google Calendar') : null));
 }
 
+/* Phone week: the seven days stacked, each with its events, blocks and due tasks. Tap a day to open it. */
+function weekAgenda(days) {
+  const tk = todayKey();
+  return h('div.week-agenda', days.map(dk => {
+    const items = agendaFor(dk), tasks = dueTasksOn(dk).filter(t => !t.done);
+    return h('section.wa-day' + (dk === tk ? '.today' : '') + (dk < tk ? '.past' : ''),
+      h('button.wa-head', { type: 'button', onclick: () => { anchor = dk; mode = 'day'; notify(); } },
+        h('span.wa-wd', fmt.weekday(dk)), h('span.wa-dn.data', String(parseKey(dk).getDate())),
+        dk === tk ? chip('today', 'signal') : null,
+        h('span.wa-count', items.length + tasks.length ? `${items.length + tasks.length} item${items.length + tasks.length > 1 ? 's' : ''}` : 'free'),
+        icon('right')),
+      items.length || tasks.length ? h('div.wa-items',
+        items.map(it => h('button.wa-item' + (it.kind === 'plan' && it.done ? '.done' : ''), { type: 'button', style: { '--c': it.color }, onclick: () => { selected = it; notify(); } },
+          h('span.wa-time.data', it.allDay ? 'all day' : it.time || '—'),
+          h('span.wa-title', it.title),
+          it.location ? h('span.wa-loc', it.location) : null)),
+        tasks.map(t => h('div.wa-item.task', { style: { '--c': SOURCE_COLORS.todo } }, h('span.wa-time.data', 'due'), h('span.wa-title', t.title)))) : null);
+  }));
+}
+
 function planner(monKey) {
   const tk = todayKey();
   const board = h('div.week-board');
@@ -155,6 +178,8 @@ function planner(monKey) {
 export default {
   id: 'calendar',
   render(root) {
+    const phone = isPhone();
+    if (phone && mode === 'planner') mode = 'week';     // phones: day or week only
     const mon = mondayKeyOf(parseKey(anchor));
     ensureCalRange(mon);
     const days = mode === 'day' ? [anchor] : Array.from({ length: 7 }, (_, i) => keyOffset(mon, i));
@@ -168,7 +193,7 @@ export default {
     [...legend.children].forEach((c, i) => { c.classList.remove('plain'); c.style.setProperty('--c', [SOURCE_COLORS.plan, SOURCE_COLORS.lesson, SOURCE_COLORS.event][i]); });
 
     let side = null;
-    if (mode === 'day') {
+    if (mode === 'day' && !phone) {
       clock = createChronosphere({ lat: state.settings.home.lat, lon: state.settings.home.lon, size: 340 });
       clock.update({ events: agendaFor(anchor).filter(a => a.start != null && !a.allDay).map(a => ({ start: a.start, end: a.end ?? a.start + 60, color: a.color, title: a.title, time: a.time })) });
       side = h('div.cal-side', panel({ cls: 'quiet' }, clock.el));
@@ -176,13 +201,14 @@ export default {
 
     root.append(h('div.view.calendar',
       viewHead('Calendar', state.gcal.connected ? 'Google calendars, school lessons and your plan in one place.' : 'Your plan blocks. Connect Google and Fuxam in Settings to see lessons and meetings.',
-        seg([{ value: 'day', label: 'Day' }, { value: 'week', label: 'Week' }, { value: 'planner', label: 'Planner' }], mode, v => { mode = v; notify(); }, 'View'),
+        seg([{ value: 'day', label: 'Day' }, { value: 'week', label: 'Week' }, ...(phone ? [] : [{ value: 'planner', label: 'Planner' }])], mode, v => { mode = v; notify(); }, 'View'),
         iconBtn('left', 'Previous', () => { anchor = keyOffset(anchor, -step); notify(); }),
         h('button.btn', { type: 'button', onclick: () => { anchor = todayKey(); notify(); } }, 'Today'),
         iconBtn('right', 'Next', () => { anchor = keyOffset(anchor, step); notify(); })),
       h('div.cal-bar', h('span.cal-range', rangeLabel), qa, legend),
       mode === 'planner'
         ? planner(mon)
+        : phone && mode === 'week' ? weekAgenda(days)
         : h('div.cal-layout' + (side ? '.with-side' : ''), panel({ cls: 'flush cal-panel' }, timeGrid(days)), side),
       detail()));
   },

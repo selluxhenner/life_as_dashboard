@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "bounce-easing",
+        "value": "var(--ease-spring)",
+        "createdAt": "2026-10-05T22:11:10.617Z",
+        "reason": "DESIGN.md line 64 defines --ease-spring as a design-system token (critically-damped spring in tokens.css) used for toggles, toasts and the intro; pre-existing, not introduced in this session"
+      }
+    ]
+  }
+}

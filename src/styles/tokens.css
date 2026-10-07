@@ -75,6 +75,9 @@
   --z-overlay: 50;
   --z-palette: 60;
   --z-boot: 100;
+
+  /* Windows caption close button. The one colour taken from the platform: people know it. */
+  --caption-close: #C42B1C;
 }
 
 /* ===================== THEME · ORBITAL (default) ===================== */

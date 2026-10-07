@@ -19,6 +19,7 @@
         "minWidth": 900,
         "minHeight": 600,
         "center": true,
+        "visible": false,
         "decorations": false,
         "transparent": false,
         "backgroundColor": "#05070A",
@@ -39,7 +40,10 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "startMenuFolder": "Agentic OS"
+        "startMenuFolder": "Agentic OS",
+        "installerIcon": "icons/icon.ico",
+        "template": "installer/installer.nsi",
+        "installerHooks": "installer/theme.nsh"
       }
     }
   }

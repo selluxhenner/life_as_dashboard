@@ -8,7 +8,7 @@ import { localDate, localTime } from '../lib/time.js';
 import { BudgetError, AiUnavailable } from '../ai/claude.js';
 import { refreshCalendar, refreshInbox } from './refresh.js';
 import { newsTick, buildDigest } from './news.js';
-import { aiDaily } from './aimodels.js';
+import { aiDaily, aiWatch } from './aimodels.js';
 import { briefingJob } from './briefing.js';
 import { triageInbox } from './triage.js';
 import { meetingPrep, jobNudge } from './assist.js';
@@ -19,6 +19,7 @@ export const JOBS = {
   news: newsTick,
   digest: () => buildDigest(localDate() + ' ' + localTime().slice(0, 2)),
   aimodels: aiDaily,
+  aiwatch: aiWatch,
   briefing: briefingJob,
   triage: triageInbox,
   prep: meetingPrep,
@@ -82,6 +83,7 @@ export function startScheduler() {
   cron.schedule('*/30 6-23 * * *', () => runJob('news', slot15()), tz);
   cron.schedule('0 7,13,19 * * *', () => runJob('digest', localDate() + ' ' + localTime().slice(0, 2)), tz);
   cron.schedule('30 7 * * *', () => runJob('aimodels', localDate()), tz);
+  cron.schedule('20 6-23 * * *', () => runJob('aiwatch', slot15()), tz);           // major AI news → alert
   cron.schedule('40 7 * * *', () => runJob('calendar', localDate() + ' am'), tz);
   cron.schedule('5 * * * *', () => runJob('calendar', localDate() + ' ' + localTime().slice(0, 2)), tz);
   // Briefing: checked every 5 minutes from 05:00, runs once per day as soon as its time has come.
