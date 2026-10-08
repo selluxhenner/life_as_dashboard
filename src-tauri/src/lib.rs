@@ -1,4 +1,5 @@
-// Agentic OS desktop shell: frameless window, tray icon, global hotkey (Ctrl+Alt+Space, or a free fallback), autostart.
+// Agentic OS desktop shell: frameless window, tray icon, global hotkey (Ctrl+Alt+Space, or a free fallback), autostart,
+// and "Hey Lina" (lina.rs).
 // Closing the window hides it; the app keeps running in the tray so the hotkey is instant.
 // The window starts hidden. The page calls `launch_ready` once its launch screen can paint, so the window never
 // opens on a blank or half-built frame, and never jumps while the saved size and position are restored.
@@ -12,6 +13,8 @@ use tauri::{
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_window_state::StateFlags;
+
+mod lina;
 
 // is_focused() reports false while the embedded WebView2 holds keyboard focus, so focus is tracked from window events.
 static FOCUSED: AtomicBool = AtomicBool::new(false);
@@ -88,7 +91,8 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![launch_ready])
+        .manage(lina::Lina::default())
+        .invoke_handler(tauri::generate_handler![launch_ready, lina::lina_wake, lina::lina_send])
         .setup(|app| {
             STARTED_HIDDEN.store(std::env::args().any(|a| a == "--hidden"), Ordering::SeqCst);
 

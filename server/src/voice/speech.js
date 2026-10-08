@@ -108,7 +108,7 @@ export async function transcribe(buf, type = 'audio/webm') {
   form.append('file', new Blob([buf], { type }), 'speech.' + ext);
   form.append('model', 'gpt-4o-mini-transcribe');
   // No fixed language: Kevin speaks German or English, sometimes both in one sentence. The prompt keeps names right.
-  form.append('prompt', 'Kevin speaks German or English and sometimes mixes both. Write it down in the language spoken. Names: Agentic OS, ServiWeb, Werkstudent, Berlin, Fuxam.');
+  form.append('prompt', 'Kevin speaks German or English and sometimes mixes both. Write it down in the language spoken. Swiss German is fine: write it as Standard German. Names: Lina, Agentic OS, ServiWeb, Werkstudent, Berlin, Fuxam.');
   const res = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: 'Bearer ' + config.openaiKey }, body: form });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new HttpError(502, 'Transcription failed: ' + (data.error?.message || res.status));

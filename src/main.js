@@ -44,6 +44,7 @@ import captures from './views/captures.js';
 import { unsorted, settleCaptures, takeCaptures } from './features/capture/captures.js';
 import { initNotifications } from './core/notifications.js';
 import { initNative, onNativeAction, nativeCaptures, nativeTakeCaptures } from './core/native.js';
+import { initDesktopWake } from './voice/wake.js';
 
 const ROUTES = [
   { id: 'home', label: 'Home', short: 'Overview', icon: 'home', view: home, dock: true, key: 'G H' },
@@ -57,7 +58,7 @@ const ROUTES = [
   { id: 'jobs', label: 'Job hunt', icon: 'briefcase', view: jobs, key: 'G J', nav: false },
   { id: 'goals', label: 'Goals', icon: 'target', view: goals },
   { id: 'rank', label: 'Rank', icon: 'rank', view: rankView, hidden: () => !pointsOn() },
-  { id: 'assistant', label: 'Agent', icon: 'agent', view: assistant, key: 'G .' },
+  { id: 'assistant', label: 'Lina', icon: 'agent', view: assistant, key: 'G .' },
   { id: 'settings', label: 'Settings', icon: 'settings', view: settings, bottom: true },
   { id: 'lab', label: 'Design lab', icon: 'spark', view: lab, hidden: () => location.hash !== '#/lab' }
 ];
@@ -80,7 +81,7 @@ const pointsEl = h('span.hide-m');
 const crumb = h('span.crumb');
 /* The voice agent from anywhere. On Home it knows the briefing, on World the news digest. */
 const talkContext = () => ({ home: 'briefing', news: 'world' })[currentRoute() && currentRoute().id] || null;
-const talkBtn = h('button.talk', { type: 'button', 'aria-label': 'Talk to the assistant', title: 'Talk to the assistant', onclick: () => toggleTalk(talkContext()) }, icon('mic'));
+const talkBtn = h('button.talk', { type: 'button', 'aria-label': 'Talk to Lina', title: 'Talk to Lina', onclick: () => toggleTalk(talkContext()) }, icon('mic'));
 const paintTalk = () => talkBtn.setAttribute('aria-pressed', String(talk.state === 'listening'));
 const rail = h('nav.rail', { 'aria-label': 'Main' });
 // picking a page from More puts the dock back (after the tap, so the link still navigates)
@@ -240,6 +241,7 @@ function startServices() {
   onNativeAction('listen', listenNow);
   onNativeAction('ask', () => { if (talk.state === 'idle') toggleTalk(); });
   initNative();
+  initDesktopWake();
   // the Capture widget types over the home screen; what has not reached the server yet is taken from the phone
   const takeWidgetCaptures = () => nativeTakeCaptures().then(takeCaptures);
   takeWidgetCaptures();

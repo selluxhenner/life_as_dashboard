@@ -40,6 +40,31 @@ final class Server {
         } finally { c.disconnect(); }
     }
 
+    /** Lina's spoken turn: a WAV up, the JSON answer (with the reply as base64 mp3) back. The agent may take a while. */
+    static JSONObject postAudio(Prefs p, String path, byte[] audio, String type) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(p.url().replaceAll("/+$", "") + path).openConnection();
+        try {
+            c.setRequestMethod("POST");
+            c.setConnectTimeout(8000);
+            c.setReadTimeout(90000);
+            c.setDoOutput(true);
+            c.setFixedLengthStreamingMode(audio.length);
+            c.setRequestProperty("Authorization", "Bearer " + p.token());
+            c.setRequestProperty("Accept", "application/json");
+            c.setRequestProperty("Content-Type", type);
+            try (OutputStream os = c.getOutputStream()) { os.write(audio); }
+            int code = c.getResponseCode();
+            if (code == 401) throw new AuthException();
+            String text = read(code >= 400 ? c.getErrorStream() : c.getInputStream());
+            if (code >= 400) {
+                String msg = "Server answered " + code;
+                try { msg = new JSONObject(text).optString("error", msg); } catch (Exception ignored) { /* not json */ }
+                throw new IOException(msg);
+            }
+            return new JSONObject(text);
+        } finally { c.disconnect(); }
+    }
+
     private static String read(InputStream in) throws IOException {
         if (in == null) return "";
         try (InputStream is = in; ByteArrayOutputStream out = new ByteArrayOutputStream()) {

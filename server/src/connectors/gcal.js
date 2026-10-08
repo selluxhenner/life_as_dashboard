@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 import { HttpError } from '../http.js';
 import { gfetch } from './google.js';
 import { listConnections } from './store.js';
+import { config } from '../config.js';
+import { localDate, localTime, addDays } from '../lib/time.js';
 
 const API = 'https://www.googleapis.com/calendar/v3';
 const MAX_CALENDARS = 10;
@@ -94,8 +96,95 @@ export async function push({ timeZone = 'Europe/Berlin', upserts = [], deletes =
   return { connected: true, done, failed };
 }
 
-/* Create a single event (used by the agent's add_calendar_block tool). */
-export async function createEvent({ title, date, time, endTime, notes }) {
-  const r = await push({ upserts: [{ key: 'agent:' + Date.now().toString(36), title, date, time, endTime, notes }] });
-  return r.connected && r.done.length > 0;
+/* Lina's events (blocks and meetings). Unlike pushed plan blocks they carry no `lifeos` key, so fetchEvents reads them
+   back and they show up in the app's calendar like any other event. Nobody is invited here: see inviteToEvent. */
+export async function createEvent({ title, date, time, endTime, notes, location, video = false }, timeZone = 'Europe/Berlin') {
+  const conn = pushTarget();
+  if (!conn) throw new Error('No Google calendar is connected');
+  const { body } = toGoogle({ key: 'agent', title, date, time, endTime, notes: notes || 'Scheduled by Lina' }, timeZone);
+  body.extendedProperties = { private: { lifeosAgent: '1' } };
+  if (location) body.location = location.slice(0, 300);
+  if (video) body.conferenceData = { createRequest: { requestId: 'lina' + Date.now().toString(36), conferenceSolutionKey: { type: 'hangoutsMeet' } } };
+  const res = await gfetch(conn, API + '/calendars/primary/events' + (video ? '?conferenceDataVersion=1' : ''), { method: 'POST', body: JSON.stringify(body) });
+  if (!res) throw new Error('Google needs to be reconnected');
+  if (!res.ok) throw new Error('Google Calendar HTTP ' + res.status);
+  const ev = await res.json();
+  return { connectionId: conn.id, eventId: ev.id, link: ev.htmlLink || null, meet: ev.hangoutLink || null };
+}
+
+/* An event Lina may change, by the app's id ("<connection>:<google event id>"): looked up on the account's
+   writable calendars. guests = other people on it (a change or cancellation then emails them, so it needs Kevin's OK). */
+export async function editableEvent(id) {
+  const cut = String(id).indexOf(':');
+  const conn = listConnections('google').find(c => c.id === String(id).slice(0, cut));
+  if (cut < 0 || !conn) throw new Error('Only Google Calendar events can be changed (school lessons are read-only)');
+  const eventId = String(id).slice(cut + 1);
+  const cals = ['primary'];
+  const list = await gfetch(conn, API + '/users/me/calendarList?minAccessRole=writer');
+  if (list && list.ok) for (const c of (await list.json()).items || []) if (!c.primary) cals.push(c.id);
+  for (const cal of cals.slice(0, MAX_CALENDARS)) {
+    const res = await gfetch(conn, API + '/calendars/' + encodeURIComponent(cal) + '/events/' + encodeURIComponent(eventId));
+    if (res && res.ok) {
+      const ev = await res.json();
+      const guests = (ev.attendees || []).filter(a => !a.self && !a.resource).map(a => a.displayName || a.email);
+      return { conn, cal, ev, guests, url: API + '/calendars/' + encodeURIComponent(cal) + '/events/' + encodeURIComponent(eventId) };
+    }
+  }
+  throw new Error('That event isn’t on a calendar Lina can edit');
+}
+
+const wall = iso => { const d = new Date(iso); return { date: localDate(d, config.tz), time: localTime(d, config.tz) }; };
+const plusMinutes = (date, time, mins) => {
+  const [h, m] = time.split(':').map(Number);
+  const total = h * 60 + m + mins;
+  return { date: addDays(date, Math.floor(total / 1440)), time: hhmm(((total % 1440) + 1440) % 1440) };
+};
+
+/* Move / rename an event. Keeps its length when only the start changes. notify: email the guests about it. */
+export async function changeEvent({ id, title, date, time, endTime, location }, notify = false) {
+  const { ev, url, conn } = await editableEvent(id);
+  const patch = {};
+  if (title) patch.summary = title.slice(0, 300);
+  if (location !== undefined) patch.location = location.slice(0, 300);
+  if (date || time || endTime) {
+    if (ev.start.date) {                                             // all-day: move the day(s), keep the length
+      const days = Math.round((Date.parse(ev.end.date) - Date.parse(ev.start.date)) / 86400000);
+      const d = date || ev.start.date;
+      patch.start = { date: d }; patch.end = { date: addDays(d, days) };
+    } else {
+      const from = wall(ev.start.dateTime);
+      const length = Math.round((Date.parse(ev.end.dateTime) - Date.parse(ev.start.dateTime)) / 60000);
+      const start = { date: date || from.date, time: time || from.time };
+      const end = endTime ? { date: start.date, time: endTime } : plusMinutes(start.date, start.time, length);
+      if (endTime && endTime <= start.time) throw new Error('The end must be after the start');
+      patch.start = { dateTime: `${start.date}T${start.time}:00`, timeZone: config.tz };
+      patch.end = { dateTime: `${end.date}T${end.time}:00`, timeZone: config.tz };
+    }
+  }
+  const res = await gfetch(conn, url + '?sendUpdates=' + (notify ? 'all' : 'none'), { method: 'PATCH', body: JSON.stringify(patch) });
+  if (!res || !res.ok) throw new Error('Google Calendar HTTP ' + (res ? res.status : 401) + (res && res.status === 403 ? ': only the organizer can change this event' : ''));
+  return { ok: true };
+}
+
+/* Remove an event from Kevin's calendar; with notify, Google tells the guests it's cancelled. */
+export async function cancelEvent({ id }, notify = false) {
+  const { url, conn } = await editableEvent(id);
+  const res = await gfetch(conn, url + '?sendUpdates=' + (notify ? 'all' : 'none'), { method: 'DELETE' });
+  if (!res || !(res.ok || res.status === 410)) throw new Error('Google Calendar HTTP ' + (res ? res.status : 401));
+  return { ok: true };
+}
+
+/* Adds guests to an event Lina created and lets Google email them the invitation (only after Kevin approved it). */
+export async function inviteToEvent({ connectionId, eventId, attendees }) {
+  const conn = listConnections('google').find(c => c.id === connectionId) || pushTarget();
+  if (!conn) throw new Error('No Google calendar is connected');
+  const url = API + '/calendars/primary/events/' + encodeURIComponent(eventId);
+  const cur = await gfetch(conn, url);
+  if (!cur || !cur.ok) throw new Error('The event is gone (HTTP ' + (cur ? cur.status : 401) + ')');
+  const have = (await cur.json()).attendees || [];
+  const add = attendees.filter(a => !have.some(h => h.email?.toLowerCase() === a.email.toLowerCase()))
+    .map(a => ({ email: a.email, ...(a.name ? { displayName: a.name } : {}) }));
+  const res = await gfetch(conn, url + '?sendUpdates=all', { method: 'PATCH', body: JSON.stringify({ attendees: [...have, ...add] }) });
+  if (!res || !res.ok) throw new Error('Google Calendar HTTP ' + (res ? res.status : 401));
+  return { ok: true, invited: add.map(a => a.email) };
 }

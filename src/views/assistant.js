@@ -25,7 +25,7 @@ export const pendingActions = () => remote('actions', '/api/agent/actions?status
 export async function sendToAgent(text, { viaVoice = false, context = null, speakReply } = {}) {
   if (!text.trim() || streaming) return null;
   const cfg = apiConfig();
-  if (!cfg) { toast('Pair this device in Settings to talk to the assistant.', 'amber'); return null; }
+  if (!cfg) { toast('Pair this device in Settings to talk to Lina.', 'amber'); return null; }
   conv.messages.push({ role: 'user', text, at: Date.now() });
   const reply = { role: 'assistant', text: '', tools: [], at: Date.now() };
   conv.messages.push(reply);
@@ -101,7 +101,7 @@ function approvals() {
     refresh('actions', '/api/agent/actions?status=pending');
   };
   return panel({ title: 'Needs your approval', readout: items.length ? h('span', h('b', String(items.length)), ' pending') : '' },
-    !connected ? empty('Nothing to approve', 'Approvals appear here when the assistant wants to send something on your behalf.')
+    !connected ? empty('Nothing to approve', 'Approvals appear here when Lina wants to send something on your behalf, like a meeting invitation.')
       : items.length ? h('div.approvals', items.map(a => h('article.approval',
           h('div.ap-head', chip(a.tool.replace(/_/g, ' '), 'warn'), h('span.data.muted', fmt.ago(a.createdAt))),
           h('div.ap-summary', a.summary || ''),
@@ -125,15 +125,15 @@ export default {
   render(root) {
     const log = h('div.chat-log', conv.messages.length ? conv.messages.map(message)
       : h('div.chat-empty',
-          h('p', 'Ask about your day, inbox or job hunt — or tell me to do something.'),
-          h('div.suggestions', ['What’s my day like?', 'Summarise unread emails', 'Add “call Lena” tomorrow 10:00', 'Which applications need a follow-up?']
+          h('p', 'Hi, I’m Lina. Ask about your day, inbox or job hunt, or tell me to plan something, in English, German or Swiss German.'),
+          h('div.suggestions', ['What’s my day like?', 'Schedule a meeting at 3pm with my business partner', 'Summarise unread emails', 'Which applications need a follow-up?']
             .map(s => h('button.btn.sm', { type: 'button', onclick: () => send(s) }, s)))));
-    const input = h('textarea.field.chat-input', { rows: 1, placeholder: streaming ? 'Thinking…' : 'Message the assistant', 'aria-label': 'Message',
+    const input = h('textarea.field.chat-input', { rows: 1, placeholder: streaming ? 'Thinking…' : 'Message Lina', 'aria-label': 'Message',
       onkeydown: e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const v = input.value; input.value = ''; send(v); } } });
     const mic = h('button.btn.icon.mic', { type: 'button', 'aria-label': 'Hold to talk', title: 'Talk (click to start, click to send)', disabled: !canRecord(), onclick: () => toggleRecord(mic) }, icon('mic'));
     if (recording) mic.classList.add('rec');
     root.append(h('div.view.assistant',
-      viewHead('Assistant', 'Your agent can read your calendar, inbox and tasks, and acts only with your approval when it touches the outside world.',
+      viewHead('Lina', 'Your assistant reads your calendar, inbox and tasks, plans meetings and to-dos, and only touches the outside world (invites, emails) with your OK. Say “Hey Lina” on your phone.',
         h('label.inline-toggle', h('input', { type: 'checkbox', checked: voiceReply, onchange: e => { voiceReply = e.target.checked; } }), 'Speak replies'),
         btn('New chat', () => { conv = { id: null, messages: [] }; persistConv(); notify(); }, 'ghost')),
       h('div.grid.g-assist',

@@ -46,6 +46,8 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+// Lina's on-device "Hey Lina" wake word (sherpa-onnx library + model, fetched and checksummed on first build)
+apply from: 'lina.gradle'
 
 try {
     def servicesJSON = file('google-services.json')

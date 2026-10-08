@@ -106,6 +106,26 @@ test('agent policy: outward tools are always queued, never run', async () => {
   assert.equal(policyFor('draft_email', ['read', 'internal']), 'forbidden');   // background jobs
   assert.equal(policyFor('create_todo', ['read', 'internal']), 'run');
   assert.equal(policyFor('send_money', ['read']), 'unknown');
+  assert.equal(policyFor('send_invite', ['read', 'internal', 'outward']), 'queue');   // Lina's meeting invitations
+  assert.equal(policyFor('schedule_meeting', ['read', 'internal', 'outward']), 'run');
+  assert.equal(policyFor('cancel_event', ['read', 'internal', 'outward']), 'queue');      // cancelling always asks
+  assert.equal(policyFor('update_event', ['read', 'internal', 'outward']), 'queue');      // guests get emailed
+  assert.equal(policyFor('move_event', ['read', 'internal']), 'run');
+  assert.equal(policyFor('delete_todo', ['read', 'internal']), 'run');
+});
+
+test('Lina remembers people and queues invitations for approval', async () => {
+  const { TOOLS, queueAction, people } = await import('../src/agent/tools.js');
+  TOOLS.remember_person.run({ name: 'Max Muster', email: 'max@example.com', relation: 'business partner' });
+  TOOLS.remember_person.run({ name: 'Max Muster', email: 'max@muster.ch', relation: 'Business Partner' });   // same relation: replaced
+  assert.deepEqual(people().map(p => p.email), ['max@muster.ch']);
+  assert.equal(TOOLS.find_person.run({ query: 'business partner' }).known[0].name, 'Max Muster');
+  assert.equal(TOOLS.find_person.run({ query: 'my business partner' }).known.length, 1);
+  const id = await queueAction({ runId: 'run_t', trigger: 'voice' }, 'send_invite',
+    { connectionId: 'c', eventId: 'e', title: 'Meeting with Max', date: '2026-10-08', time: '15:00', guests: [{ email: 'max@muster.ch', name: 'Max' }] });
+  const pending = (await api('GET', '/api/agent/actions?status=pending')).body.actions;
+  assert.ok(pending.some(a => a.id === id && /Send the invite for “Meeting with Max”.*to Max/.test(a.summary)));
+  assert.equal((await api('POST', '/api/agent/actions/' + id + '/reject')).body.ok, true);
 });
 
 test('phone refuses to dial when switched off', async () => {
@@ -176,6 +196,8 @@ test('voice: without keys the server says so, and spoken briefing/world audio ar
   assert.equal((await api('GET', '/api/voice/briefing')).status, 404);
   assert.equal((await api('POST', '/api/voice/tts', { text: 'Hello' })).status, 503);
   assert.equal((await api('GET', '/api/voice/voices')).status, 503);
+  const turn = await app.fetch(new Request('http://test.local/api/voice/turn', { method: 'POST', headers: { Authorization: 'Bearer test-master-token', 'Content-Type': 'audio/wav' }, body: new Uint8Array(4000) }));
+  assert.equal(turn.status, 503);                                     // Lina can't hear without a speech-to-text key
   assert.deepEqual((await api('POST', '/api/briefing/spoken', {})).body, { briefing: null });
 });
 
@@ -268,4 +290,42 @@ test('briefing: bullets about events carry the end of the last one, so the card 
   assert.ok(Date.parse(past.until) < now);
   assert.equal(mail.until, undefined);
   assert.equal(unknown.until, undefined);
+});
+
+test('Lina by voice: a false wake stays silent, a spoken yes/no decides only the action she asked about', async () => {
+  const { config } = await import('../src/config.js');
+  const { queueAction } = await import('../src/agent/tools.js');
+  const realFetch = globalThis.fetch;
+  let heard = '';
+  config.openaiKey = 'sk-test';
+  globalThis.fetch = async (url, opts) => {
+    const u = String(url);
+    if (u.endsWith('/v1/audio/transcriptions')) return new Response(JSON.stringify({ text: heard }), { headers: { 'Content-Type': 'application/json' } });
+    if (u.endsWith('/v1/audio/speech')) return new Response(Buffer.from('ID3-lina'));
+    return realFetch(url, opts);
+  };
+  const turn = (query, text) => { heard = text; return app.fetch(new Request('http://test.local/api/voice/turn' + query, { method: 'POST', headers: { Authorization: 'Bearer test-master-token', 'Content-Type': 'audio/wav' }, body: new Uint8Array(8000) })).then(r => r.json()); };
+  try {
+    const wrong = await turn('?wake=1', 'Hey Linda, are you coming?');
+    assert.equal(wrong.falseWake, true);
+    assert.equal(wrong.audio, null);
+
+    const ctx = { runId: 'run_voice', trigger: 'voice' };
+    const email = await queueAction(ctx, 'draft_email', { to: 'max@muster.ch', subject: 'Offer', body: 'Hi Max' });
+    const other = await queueAction(ctx, 'draft_email', { to: 'anna@example.com', subject: 'Other', body: 'x' });
+    const no = await turn('?awaiting=' + email, 'Nein, lass es.');
+    assert.equal(no.reply, 'Okay, ich lasse es.');
+    assert.equal(no.lang, 'de');
+    assert.equal(Buffer.from(no.audio, 'base64').toString(), 'ID3-lina');
+
+    const email2 = await queueAction(ctx, 'draft_email', { to: 'max@muster.ch', subject: 'Offer', body: 'Hi Max' });
+    const yes = await turn('?awaiting=' + email2, 'Yes, please.');
+    assert.equal(yes.reply, 'The email is ready: open it in the app to send it.');
+    const { db } = await import('../src/db.js');
+    const status = id => db.get('SELECT status FROM agent_actions WHERE id = ?', id).status;
+    assert.equal(status(email), 'rejected');
+    assert.equal(status(email2), 'executed');
+    assert.equal(status(other), 'pending');                            // nothing she didn't ask about
+    await api('POST', '/api/agent/actions/' + other + '/reject');
+  } finally { globalThis.fetch = realFetch; config.openaiKey = ''; }
 });

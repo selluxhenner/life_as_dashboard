@@ -12,6 +12,8 @@ export const DEFAULTS = {
   voice: { autoRead: false, engine: 'auto', voice: 'marin', elevenVoice: '', elevenModel: 'eleven_v4' },
   phone: { enabled: false, number: '', monthlyCapEur: 10, quietHours: ['21:30', '08:30'], maxSeconds: 180 },
   ai: { monthlyCapUsd: 40 },
+  // Lina, the assistant. people: who "my business partner", "mom" … are, so she can schedule with them ({name, email, relation}).
+  lina: { people: [] },
   jobs: { profile: 'Student in Berlin. Looking for Werkstudent, part-time or startup roles in web development, product, design or marketing. Max 20 h/week.' }
 };
 

@@ -6,7 +6,7 @@ import { icon } from '../core/icons.js';
 import { talk, toggleTalk, cancelTalk } from '../voice/talk.js';
 
 const LINGER = 15000;
-const LABEL = { listening: 'Listening — tap Send when you’re done', thinking: 'Thinking…', speaking: 'Speaking', idle: 'Answer' };
+const LABEL = { listening: 'Lina is listening — tap Send when you’re done', thinking: 'Lina is thinking…', speaking: 'Lina', idle: 'Lina' };
 const ABOUT = { briefing: 'about your briefing', world: 'about the world' };
 
 export function mountVoicePill() {
@@ -21,13 +21,14 @@ export function mountVoicePill() {
     if (talk.state === 'idle' && !recent) { host.replaceChildren(); return; }
     if (recent) hideTimer = setTimeout(render, LINGER - (Date.now() - talk.at) + 50);
     const st = talk.state;
-    const action = st === 'listening' ? h('button.btn.sm.primary', { type: 'button', onclick: () => toggleTalk() }, 'Send')
+    const action = st === 'listening' && talk.source === 'wake' ? null           // "Hey Lina" ends by itself when Kevin pauses
+      : st === 'listening' ? h('button.btn.sm.primary', { type: 'button', onclick: () => toggleTalk() }, 'Send')
       : st === 'speaking' ? h('button.btn.sm', { type: 'button', onclick: () => toggleTalk() }, icon('pause'), 'Stop')
       : recent ? h('button.btn.sm', { type: 'button', onclick: () => toggleTalk(talk.context) }, icon('mic'), 'Ask again') : null;
     host.replaceChildren(h('div.voice-pill', { role: 'status', dataset: { state: st } },
       h('span.vp-orb', { 'aria-hidden': 'true' }, h('i'), h('i'), h('i'), h('i')),
       h('div.vp-main',
-        h('div.vp-head', h('span.vp-label', LABEL[st]), talk.context ? h('span.micro', ABOUT[talk.context]) : null),
+        h('div.vp-head', h('span.vp-label', st === 'listening' && talk.source === 'wake' ? 'Lina is listening…' : LABEL[st]), talk.context ? h('span.micro', ABOUT[talk.context]) : null),
         talk.heard ? h('div.vp-heard', '“' + talk.heard + '”') : null,
         talk.reply && (st === 'speaking' || recent) ? h('div.vp-reply', talk.reply) : null),
       action,

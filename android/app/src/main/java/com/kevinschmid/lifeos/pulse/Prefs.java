@@ -72,4 +72,13 @@ public final class Prefs {
 
     public boolean askedNotifications() { return sp.getBoolean("askedNotifications", false); }
     public void setAskedNotifications() { sp.edit().putBoolean("askedNotifications", true).apply(); }
+
+    /** Lina: listen for "Hey Lina" while the phone is unlocked; how eagerly (low | normal | high). */
+    public boolean linaWake() { return sp.getBoolean("linaWake", false); }
+    public void setLinaWake(boolean on) { sp.edit().putBoolean("linaWake", on).apply(); }
+    public String linaSensitivity() { return sp.getString("linaSensitivity", "normal"); }
+    public void setLinaSensitivity(String s) { sp.edit().putString("linaSensitivity", s).apply(); }
+    /** The last spoken conversation, so "and invite Anna too" a few minutes later still makes sense. */
+    public String linaConversation() { return System.currentTimeMillis() - sp.getLong("linaConversationAt", 0) < 10 * 60000 ? sp.getString("linaConversation", "") : ""; }
+    public void setLinaConversation(String id) { sp.edit().putString("linaConversation", id).putLong("linaConversationAt", System.currentTimeMillis()).apply(); }
 }
