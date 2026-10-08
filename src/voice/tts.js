@@ -119,8 +119,8 @@ export function stopSpeaking() {
   if (cap) cap.stop().catch(() => {});
 }
 
-async function speakPremium(text, lang, v, my, audioPath, audioData) {
-  const key = (audioPath || v.premiumVoice + '|' + lang) + '|' + text;
+async function speakPremium(text, lang, v, my, audioPath, audioData, fast) {
+  const key = (audioPath || v.premiumVoice + '|' + lang + (fast ? '|fast' : '')) + '|' + text;
   let url = audioData ? 'data:audio/mpeg;base64,' + audioData : cache.get(key);
   if (!url) {
     const cfg = apiConfig();
@@ -130,7 +130,7 @@ async function speakPremium(text, lang, v, my, audioPath, audioData) {
       : await fetch(base + '/api/voice/tts', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + cfg.token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, lang, voice: v.premiumVoice })
+        body: JSON.stringify({ text, lang, voice: v.premiumVoice, fast })
       });
     if (!res.ok) throw new Error('tts ' + res.status);
     url = URL.createObjectURL(await res.blob());
@@ -201,7 +201,8 @@ export async function speak(text, onEnd, opts = {}) {
   speaking = true; playing = opts.what || 'text'; notify();
   const premiumOn = apiConfig() && (v.provider === 'premium' || v.provider === 'auto');
   if (premiumOn) {
-    try { await speakPremium(clean, lang, v, my, lang === 'en' ? opts.audioPath : null, opts.audioData); return finish(); }
+    // Lina's replies ('talk') ask for the quick voice; the server uses it when quick answers are on
+    try { await speakPremium(clean, lang, v, my, lang === 'en' ? opts.audioPath : null, opts.audioData, opts.what === 'talk'); return finish(); }
     catch (e) { if (blocked(e)) return refuse(); /* else fall back to the device voice */ }
     if (my !== gen) return;
   }

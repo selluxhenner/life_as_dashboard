@@ -6,13 +6,14 @@ import { config } from '../config.js';
 import { HttpError, body, str } from '../http.js';
 import { allSettings, setSetting, getSetting, DEFAULTS } from '../settings.js';
 import { pairDevice } from '../auth.js';
-import { getBriefing, generateBriefing, ensureSpoken, briefingSpeech } from '../jobs/briefing.js';
-import { latestDigest, worldSpeech } from '../jobs/news.js';
+import { getBriefing, generateBriefing, ensureSpoken } from '../jobs/briefing.js';
+import { latestDigest } from '../jobs/news.js';
 import { marketPulse } from '../jobs/markets.js';
 import { aiToday } from '../jobs/aimodels.js';
 import { runAgent, decideAction, pendingActions } from '../agent/runner.js';
 import { placeCall, listCalls, phoneSpend } from '../phone/twilio.js';
-import { monthSpend, asData } from '../ai/claude.js';
+import { monthSpend } from '../ai/claude.js';
+import { voiceContext } from '../voice/lina.js';
 import { notificationsSince } from '../notify/index.js';
 import { fcmReady } from '../notify/fcm.js';
 import { glance } from '../jobs/glance.js';
@@ -56,15 +57,6 @@ misc.get('/ai-models/today', c => c.json(aiToday()));
 misc.get('/notes', c => c.json({ notes: db.all('SELECT * FROM notes ORDER BY created_at DESC LIMIT 50') }));
 
 /* ---------- agent ---------- */
-/* What Kevin was just listening to, so a spoken follow-up like "tell me more about the second one" makes sense. */
-function voiceContext(kind) {
-  const heard = kind === 'briefing' ? briefingSpeech() : kind === 'world' ? worldSpeech() : null;
-  if (!heard) return '';
-  return (kind === 'briefing'
-    ? 'Kevin just listened to his spoken morning briefing (below). He may ask follow-ups about it; look details up with tools.\n'
-    : 'Kevin just listened to the spoken world news summary (below). For details use get_news.\n') + asData(kind + '_heard', heard);
-}
-
 misc.post('/agent/chat', async c => {
   const b = await body(c);
   const message = str(b.message, 4000);

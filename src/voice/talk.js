@@ -1,18 +1,20 @@
 // Talk to Lina (the agent) from anywhere: tap to speak, tap again to send, and the answer comes back in the same natural voice.
-// Speech-to-text and the voice run on the server (ElevenLabs), the answer is Claude with all of the agent's tools.
-// Every exchange also lands in the Agent chat. context = what Kevin just heard ('briefing' | 'world'), so
-// "tell me more about the second one" makes sense to the agent.
+// One request does it all (/api/voice/turn: speech-to-text, Claude with all of the agent's tools, the voice), and the
+// server gets the model ready while Kevin is still talking. Every exchange also lands in the Agent chat.
+// context = what Kevin just heard ('briefing' | 'world'), so "tell me more about the second one" makes sense to the agent.
 import { notify } from '../core/store.js';
 import { apiConfig } from '../core/api.js';
 import { toast, tick } from '../core/fx.js';
 import { speak, stopSpeaking } from './tts.js';
-import { canRecord, startRecording, stopRecording, transcribe } from './stt.js';
-import { sendToAgent } from '../views/assistant.js';
+import { canRecord, startRecording, stopRecording } from './stt.js';
+import { voiceTurn, warmLina } from './turn.js';
+import { chatConversationId, logVoiceExchange } from '../views/assistant.js';
 
 const MAX_MS = 60000;                 // a question longer than a minute is sent anyway
 // source 'wake': the desktop's "Hey Lina" (voice/wake.js) records and ends by itself, there is no Send.
 export const talk = { state: 'idle', context: null, heard: '', reply: '', source: null, at: 0 };
 let timer = null, run = 0;
+let awaiting = { ids: '', at: 0 };     // what Lina just asked yes/no about ("Shall I send Max the invite?")
 const set = patch => { Object.assign(talk, patch, { at: Date.now() }); notify(); };
 export const setTalk = set;
 const cancelHooks = new Set();
@@ -33,6 +35,7 @@ export async function toggleTalk(context = null) {
   set({ source: null });
   try { await startRecording(); } catch { toast('Microphone permission denied.', 'flare'); return; }
   if (my !== run) { stopRecording(); return; }
+  warmLina();
   tick('open');
   set({ state: 'listening', context, heard: '', reply: '' });
   timer = setTimeout(finishListening, MAX_MS);
@@ -54,15 +57,21 @@ async function finishListening() {
   const my = run;
   set({ state: 'thinking' });
   const blob = await stopRecording();
-  let text = '';
-  try { text = blob ? await transcribe(blob) : ''; }
-  catch (e) { if (my === run) { set({ state: 'idle' }); toast(e.message || 'Transcription failed', 'flare'); } return; }
+  const missed = () => { set({ state: 'idle' }); toast('Didn’t catch that. Tap and try again.', 'amber'); };
   if (my !== run) return;
-  if (!text) { set({ state: 'idle' }); toast('Didn’t catch that. Tap and try again.', 'amber'); return; }
-  set({ heard: text });
-  const reply = await sendToAgent(text, { viaVoice: true, context: talk.context, speakReply: false });
+  if (!blob || blob.size < 1000) return missed();
+  let r;
+  try {
+    r = await voiceTurn(blob, {
+      conversationId: chatConversationId(), context: talk.context,
+      awaiting: Date.now() - awaiting.at < 10 * 60000 ? awaiting.ids : ''
+    });
+  } catch (e) { if (my === run) { set({ state: 'idle' }); toast(e.message, 'flare'); } return; }
+  logVoiceExchange(r);
+  awaiting = { ids: (r.awaiting || []).map(a => a.id).join(','), at: Date.now() };
   if (my !== run) return;
-  if (!reply) { set({ state: 'idle' }); return; }
-  set({ state: 'speaking', reply });
-  speak(reply, () => { if (my === run && talk.state === 'speaking') set({ state: 'idle' }); }, { what: 'talk' });
+  if (!r.heard) return missed();
+  if (!r.reply) { set({ state: 'idle', heard: r.heard }); return; }
+  set({ state: 'speaking', heard: r.heard, reply: r.reply });
+  speak(r.reply, () => { if (my === run && talk.state === 'speaking') set({ state: 'idle' }); }, { what: 'talk', lang: r.lang, audioData: r.audio || undefined });
 }

@@ -22,7 +22,8 @@ export const config = {
     .split(',').map(s => s.trim()).filter(Boolean),
   google: { clientId: e.GOOGLE_CLIENT_ID || '', clientSecret: e.GOOGLE_CLIENT_SECRET || '' },
   anthropicKey: e.ANTHROPIC_API_KEY || '',
-  models: { main: e.AI_MODEL_MAIN || 'claude-sonnet-5-5', fast: e.AI_MODEL_FAST || 'claude-haiku-4-5' },
+  // voice: Lina's spoken turns ("Hey Lina", push-to-talk, phone), where an answer within a second matters most
+  models: { main: e.AI_MODEL_MAIN || 'claude-sonnet-5-5', fast: e.AI_MODEL_FAST || 'claude-haiku-4-5', voice: e.AI_MODEL_VOICE || 'claude-haiku-5-5' },
   openaiKey: e.OPENAI_API_KEY || '',
   elevenKey: e.ELEVENLABS_API_KEY || '',
   elevenVoice: e.ELEVENLABS_VOICE_ID || '',

@@ -12,6 +12,7 @@ export const ELEVEN_MODELS = [
   { id: 'eleven_flash_v2_5', label: 'Flash v2.5', note: 'fastest, half the credits', usdPer1k: 0.04 }
 ];
 export const ELEVEN_MODEL_IDS = ELEVEN_MODELS.map(m => m.id);
+export const FAST_ELEVEN_MODEL = 'eleven_flash_v2_5';           // Lina's quick spoken replies
 // Jessica: a bright, playful, warm premade voice that sounds awake rather than narrated (Kevin found the calm Lily too
 // flat). If an account doesn't have it, the first premade voice is used instead.
 export const DEFAULT_ELEVEN_VOICE = 'cgSgspJ2msm6clMCkdW9';

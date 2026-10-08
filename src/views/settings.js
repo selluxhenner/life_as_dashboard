@@ -274,11 +274,13 @@ function linaDesktop() {
 function linaPanel() {
   if (native && !watchingNative) { watchingNative = true; onNativeStatus(() => notify()); }
   const { data, connected } = remote('serverSettings', '/api/settings', 5 * 60000);
-  const people = (data && data.settings && data.settings.lina && data.settings.lina.people) || [];
-  const save = async list => {
-    try { await api.patch('/api/settings', { lina: { people: list } }); refresh('serverSettings', '/api/settings'); toast('Saved'); }
+  const lina = (data && data.settings && data.settings.lina) || {};
+  const people = lina.people || [];
+  const patchLina = async patch => {
+    try { await api.patch('/api/settings', { lina: patch }); refresh('serverSettings', '/api/settings'); toast('Saved'); }
     catch (e) { toast(errorText(e), 'flare'); }
   };
+  const save = list => patchLina({ people: list });
   const add = () => {
     const p = { relation: person.relation.trim(), name: person.name.trim(), email: person.email.trim() };
     if (!p.name || (p.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email))) { toast('Add a name and a valid email.', 'amber'); return; }
@@ -294,6 +296,11 @@ function linaPanel() {
     native ? linaPhone() : null,
     desktopWake.available ? linaDesktop() : null,
     !connected || !data ? empty('Pair this device first', 'Lina runs on your server.') : h('div',
+      row('Quick answers', lina.quick !== false
+        ? 'When you talk to her, Lina answers in about a second: a fast model, and changes to tasks, habits, notes and your calendar done in one step. Typed chat stays thorough.'
+        : 'Off: spoken answers use the thorough model and the voice from Settings › Voice, and take several seconds.',
+        toggle(lina.quick !== false, v => patchLina({ quick: v }), 'Quick answers')),
+      h('div.set-sep'),
       h('div.title', { style: { margin: '4px 0 6px' } }, 'People Lina knows'),
       people.length ? h('div.rows', people.map(p => h('div.row',
         h('div.grow', h('div.title', p.name + (p.relation ? ' · ' + p.relation : '')), h('div.sub', p.email || 'no email')),

@@ -8,6 +8,7 @@ import { remote, refresh } from '../core/remote.js';
 import { icon } from '../core/icons.js';
 import { speak, stopSpeaking } from '../voice/tts.js';
 import { canRecord, startRecording, stopRecording, transcribe } from '../voice/stt.js';
+import { warmLina } from '../voice/turn.js';
 import { toast, tick } from '../core/fx.js';
 import { runSync } from '../core/sync.js';
 
@@ -70,9 +71,22 @@ export async function sendToAgent(text, { viaVoice = false, context = null, spea
 }
 const send = (text, opts) => sendToAgent(text, opts);
 
+/* Push-to-talk shares this conversation: a spoken turn continues it and lands in the chat like a typed one. */
+export const chatConversationId = () => conv.id;
+export function logVoiceExchange({ conversationId, heard, reply, tools = [] }) {
+  if (!heard) return;
+  conv.id = conversationId || conv.id;
+  const at = Date.now();
+  conv.messages.push({ role: 'user', text: heard, at }, { role: 'assistant', text: reply || '', tools, at });
+  persistConv();
+  notify();
+  if (tools.length) runSync();
+  refresh('actions', '/api/agent/actions?status=pending');      // a spoken yes/no decides one without any tool call
+}
+
 async function toggleRecord(btnEl) {
   if (!recording) {
-    try { stopSpeaking(); await startRecording(); recording = true; tick('open'); btnEl.classList.add('rec'); }
+    try { stopSpeaking(); await startRecording(); recording = true; warmLina(); tick('open'); btnEl.classList.add('rec'); }
     catch { toast('Microphone permission denied.', 'flare'); }
     return;
   }

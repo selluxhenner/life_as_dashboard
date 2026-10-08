@@ -20,6 +20,22 @@ function validate(it) {
   return { key: it.key, value, updatedAt: it.updatedAt, deleted };
 }
 
+/* Server-side edits (Lina adding a habit or a note): the devices pick them up on their next sync like any other edit.
+   value null = delete. */
+export function writeDoc(key, value) {
+  db.tx(() => {
+    const rev = bumpRev();
+    const prev = db.get('SELECT updated_at FROM docs WHERE key = ?', key);
+    // newer than the stored copy even if a device clock runs ahead, so the edit is never dropped as "older"
+    const at = Math.max(Date.now(), (prev?.updated_at || 0) + 1);
+    db.run(`INSERT INTO docs (key, value, updated_at, deleted, rev) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (user_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, deleted = excluded.deleted, rev = excluded.rev`,
+      key, value == null ? null : j.str(value), at, value == null, rev);
+  });
+}
+export const readDoc = key => { const r = db.get('SELECT value FROM docs WHERE key = ? AND deleted = 0', key); return r ? j.parse(r.value) : null; };
+export const listDocs = prefix => db.all('SELECT value FROM docs WHERE key LIKE ? AND deleted = 0 ORDER BY key', prefix + '%').map(r => j.parse(r.value)).filter(Boolean);
+
 export const docs = new Hono();
 
 docs.post('/docs/sync', async c => {
