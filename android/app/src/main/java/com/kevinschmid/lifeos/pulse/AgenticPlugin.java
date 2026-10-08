@@ -28,6 +28,8 @@ import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 import com.kevinschmid.lifeos.R;
 
+import org.json.JSONException;
+
 /**
  * JS ↔ native for alerts (src/core/native.js): hands over the server and token, reports whether notifications can
  * actually arrive (permission, exact alarms, battery), adds the tile / widget, and passes notification taps on as
@@ -142,15 +144,34 @@ public class AgenticPlugin extends Plugin {
             });
     }
 
-    /** The launcher asks where to put the widget. which: "day" (day plan with rooms) or "glance" (briefing + news). */
+    /** The launcher asks where to put the widget. which: "day" (day plan with rooms), "capture" (capture bar) or "glance" (briefing + news). */
     @PluginMethod
     public void addWidget(PluginCall call) {
         AppWidgetManager m = AppWidgetManager.getInstance(ctx());
         JSObject r = new JSObject();
-        Class<?> provider = "day".equals(call.getString("which", "glance")) ? DayWidget.class : GlanceWidget.class;
+        String which = call.getString("which", "glance");
+        Class<?> provider = "day".equals(which) ? DayWidget.class : "capture".equals(which) ? CaptureWidget.class : GlanceWidget.class;
         boolean ok = Build.VERSION.SDK_INT >= 26 && m.isRequestPinAppWidgetSupported()
             && m.requestPinAppWidget(new ComponentName(ctx(), provider), null, null);
         r.put("result", ok ? "asked" : "unsupported");
+        call.resolve(r);
+    }
+
+    /** The app reports how many captures wait to be sorted; the Capture widget shows it. */
+    @PluginMethod
+    public void setCaptures(PluginCall call) {
+        int n = Math.max(0, call.getInt("unsorted", 0));
+        Prefs p = Prefs.of(ctx());
+        if (n != p.unsorted()) { p.setUnsorted(n); CaptureWidget.updateAll(ctx()); }
+        call.resolve();
+    }
+
+    /** Captures typed into the Capture widget's popup that the server does not have yet; the app adds them itself. */
+    @PluginMethod
+    public void takeCaptures(PluginCall call) {
+        JSObject r = new JSObject();
+        try { r.put("captures", new JSArray(Captures.take(ctx()).toString())); }
+        catch (JSONException e) { r.put("captures", new JSArray()); }
         call.resolve(r);
     }
 
@@ -196,6 +217,7 @@ public class AgenticPlugin extends Plugin {
         s.put("canAddWidget", Build.VERSION.SDK_INT >= 26 && AppWidgetManager.getInstance(c).isRequestPinAppWidgetSupported());
         s.put("widgets", GlanceWidget.count(c));
         s.put("dayWidgets", DayWidget.count(c));
+        s.put("captureWidgets", CaptureWidget.count(c));
         s.put("sdk", Build.VERSION.SDK_INT);
         return s;
     }

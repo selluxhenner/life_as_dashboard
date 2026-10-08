@@ -50,6 +50,20 @@ export async function syncNative(force = false) {
 /** What "?do=listen" / "?do=ask" on a notification or shortcut does (registered by main.js). */
 export function onNativeAction(name, fn) { actions[name] = fn; }
 
+/** The Capture widget shows how many captures wait to be sorted. Only the app knows, so it reports every change. */
+let capturesShown = null;
+export function nativeCaptures(unsorted) {
+  if (!native || unsorted === capturesShown) return;
+  capturesShown = unsorted;
+  native.setCaptures({ unsorted }).catch(() => { capturesShown = null; });
+}
+
+/** Captures typed into the Capture widget's popup that have not reached the server (offline, or never paired). */
+export async function nativeTakeCaptures() {
+  if (!native) return [];
+  try { return (await native.takeCaptures()).captures || []; } catch { return []; }
+}
+
 /** Ask the native side to check the server now (the app does this every minute while it is open). */
 export function nativeCheck() { if (native && apiConfig()) native.checkNow().then(setStatus).catch(() => {}); }
 

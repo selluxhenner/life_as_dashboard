@@ -24,6 +24,10 @@
   grid-template-rows: 52px 1fr;
   grid-template-areas: 'rail status' 'rail main';
   min-height: 100vh;
+  /* Nothing in a view may widen the page. On Android a too-wide view makes the WebView zoom out
+     and grow the layout viewport, so the fixed dock stretches past the screen and drifts when panned.
+     clip (not hidden) keeps the status bar and rail sticky. */
+  overflow-x: clip;
 }
 
 /* ---------- rail ---------- */
@@ -180,13 +184,10 @@ main {
   .g-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* ---------- sheet (mobile "more") ---------- */
-.sheet { position: fixed; inset: 0; z-index: var(--z-overlay); background: rgb(0 0 0 / .5); display: flex; align-items: flex-end; animation: fade-in var(--t-base) forwards; }
-.sheet .panel { width: 100%; margin: var(--s-3); animation: toast-in var(--t-base) var(--ease-out); }
-.sheet nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-2); }
-.sheet nav a { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: var(--s-3) 0; color: var(--ink-2); font-size: var(--fs-xs); border-radius: var(--r-md); text-decoration: none; }
-.sheet nav a svg { width: 22px; height: 22px; stroke-width: 1.5; }
-.sheet nav a[aria-current='page'] { color: var(--signal); background: var(--hull-2); }
+/* ---------- dock "More": the other pages take the dock's place until one is picked ---------- */
+.dock button.here { color: var(--signal); }
+.dock.swap > * { animation: dock-swap var(--t-base) var(--ease-out) both; }
+@keyframes dock-swap { from { opacity: 0; transform: translateY(6px); } }
 
 /* ---------- command palette ---------- */
 .palette-wrap { position: fixed; inset: 0; z-index: var(--z-palette); background: rgb(0 0 0 / .45); display: flex; justify-content: center; align-items: flex-start; padding-top: 14vh; }

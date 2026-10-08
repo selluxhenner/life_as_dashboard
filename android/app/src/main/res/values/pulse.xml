@@ -7,6 +7,11 @@
     <string name="widget_description">Your briefing, the world\'s top stories and the biggest AI news</string>
     <string name="day_widget_name">Agentic OS · Day plan</string>
     <string name="day_widget_description">The lesson that is on now or next and its room, then the rest of your day</string>
+    <string name="capture_widget_name">Agentic OS · Capture</string>
+    <string name="capture_widget_description">Write a thought down from the home screen and see how many wait to be sorted</string>
+    <string name="capture_widget_hint">Capture anything…</string>
+    <string name="capture_widget_count">to sort</string>
+    <string name="capture_send">Save capture</string>
     <string name="sc_briefing_short">Briefing</string>
     <string name="sc_briefing_long">Listen to today\'s briefing</string>
     <string name="sc_world_short">World</string>
@@ -15,4 +20,22 @@
     <string name="sc_ai_long">AI news today</string>
     <string name="sc_ask_short">Ask</string>
     <string name="sc_ask_long">Ask the assistant</string>
+
+    <!-- The Capture widget's popup (CaptureActivity): over the home screen, no app window behind it. -->
+    <style name="AppTheme.Capture" parent="Theme.AppCompat.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowAnimationStyle">@style/CaptureFade</item>
+        <item name="colorAccent">#FF4FE3FF</item>
+        <item name="colorControlActivated">#FF4FE3FF</item>
+        <item name="android:textColorHighlight">#664FE3FF</item>
+    </style>
+    <style name="CaptureFade">
+        <item name="android:activityOpenEnterAnimation">@android:anim/fade_in</item>
+        <item name="android:activityCloseExitAnimation">@android:anim/fade_out</item>
+        <item name="android:taskOpenEnterAnimation">@android:anim/fade_in</item>
+        <item name="android:taskCloseExitAnimation">@android:anim/fade_out</item>
+    </style>
 </resources>

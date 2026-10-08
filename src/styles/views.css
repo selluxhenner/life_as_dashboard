@@ -150,6 +150,9 @@
 .brief-sec li.done { color: var(--ink-3); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--ink-3) 80%, transparent); text-decoration-thickness: 1px; }
 .brief-sec li.done::before { background: var(--seam-strong); }
 .brief-focus { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; margin-top: var(--s-4); }
+/* focus items are whole sentences: they wrap inside the panel instead of running off a phone screen */
+.brief-focus .chip { height: auto; min-height: 22px; max-width: 100%; padding-block: 3px; white-space: normal; line-height: 1.35; }
+.brief-focus .chip::before { flex: none; }
 /* The spoken briefing's topics, in the order you hear them. */
 .brief-air { display: flex; align-items: baseline; gap: var(--s-3); margin: calc(var(--s-2) * -1) 0 var(--s-4); font-size: var(--fs-sm); color: var(--ink-2); }
 .brief-air .micro { color: var(--ink-3); flex: none; }
@@ -488,6 +491,10 @@ button.mail:focus-visible { outline: 2px solid var(--signal); outline-offset: -2
 .reader-body { margin-top: var(--s-5); font-size: var(--fs-sm); line-height: 1.65; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; max-width: 78ch; }
 .reader-body a { color: var(--signal); }
 .reader-body.loading { color: var(--ink-3); }
+/* phones: refresh sits after the unread count */
+.mail-readout .btn.icon.sm { width: 36px; height: 36px; margin: -12px -10px -12px 4px; color: var(--ink-3); vertical-align: middle; }   /* a full tap target that doesn't grow the header */
+.btn.spin svg { animation: orbit 900ms linear infinite; }
+@media (prefers-reduced-motion: reduce) { .btn.spin svg { animation: none; } }
 @media (max-width: 860px) {
   .mail-reader { position: static; max-height: none; }
   .reader-head { flex-wrap: wrap; }
