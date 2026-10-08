@@ -24,9 +24,9 @@ export const liveCaptures = () => state.captures.filter(c => !c.archived);
 export const unsorted = () => state.captures.filter(c => !c.archived && c.type === 'none');
 
 /* Dates in the text ("call Anna tomorrow 15:00", "Freitag 9 Uhr") are read as a suggestion; the type stays unsorted. */
-function parseWhen(text) {
+function parseWhen(text, ref = new Date()) {
   const opts = { forwardDate: true };
-  const r = chrono.parse(text, new Date(), opts)[0] || (chrono.de ? chrono.de.parse(text, new Date(), opts)[0] : null);
+  const r = chrono.parse(text, ref, opts)[0] || (chrono.de ? chrono.de.parse(text, ref, opts)[0] : null);
   if (!r) return {};
   const s = r.start.date();
   const timed = r.start.isCertain('hour');
@@ -59,6 +59,26 @@ export function captureText(raw, extra = {}) {
   state.captures.unshift(...made.reverse());
   save();
   return made;
+}
+
+/* Captures typed outside the app (the Android Capture widget) carry `parse`: their dates are read here, against the
+   moment they were written. They arrive by sync, or from the phone's own queue when it could not reach the server. */
+export function settleCaptures() {
+  const raw = state.captures.filter(c => c.parse);
+  for (const c of raw) {
+    if (c.type === 'none' && !c.date) Object.assign(c, parseWhen(c.text, new Date(c.createdAt)));
+    delete c.parse;
+    c.updatedAt = Date.now();
+  }
+  if (raw.length) save();
+  return raw.length;
+}
+export function takeCaptures(list) {
+  const known = new Set(state.captures.map(c => c.id));
+  const fresh = list.filter(c => c && c.id && !known.has(c.id));
+  if (!fresh.length) return;
+  state.captures.unshift(...fresh.sort((a, b) => b.createdAt - a.createdAt));
+  if (!settleCaptures()) save();
 }
 
 /* ---------- the thing a capture became ---------- */

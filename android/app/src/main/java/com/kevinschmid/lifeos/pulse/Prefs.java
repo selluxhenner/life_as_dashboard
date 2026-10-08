@@ -58,6 +58,18 @@ public final class Prefs {
     public String pushSent() { return sp.getString("pushSent", ""); }
     public void setPushSent(String token) { sp.edit().putString("pushSent", token).apply(); }
 
+    /** Captures waiting to be sorted, as the app last reported it (the Capture widget shows it). */
+    public int unsorted() { return sp.getInt("unsorted", 0); }
+    public void setUnsorted(int n) { sp.edit().putInt("unsorted", n).apply(); }
+
+    /** Widget captures the server does not have yet, as a JSON array (see Captures). */
+    public String captureQueue() { return sp.getString("captureQueue", "[]"); }
+    public void setCaptureQueue(String json) { sp.edit().putString("captureQueue", json).apply(); }
+
+    /** What was left in the capture popup when it closed without saving. */
+    public String captureDraft() { return sp.getString("captureDraft", ""); }
+    public void setCaptureDraft(String text) { sp.edit().putString("captureDraft", text).apply(); }
+
     public boolean askedNotifications() { return sp.getBoolean("askedNotifications", false); }
     public void setAskedNotifications() { sp.edit().putBoolean("askedNotifications", true).apply(); }
 }

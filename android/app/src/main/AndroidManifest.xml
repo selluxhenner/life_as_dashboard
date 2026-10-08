@@ -71,6 +71,24 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_day_info" />
         </receiver>
 
+        <receiver android:name=".pulse.CaptureWidget" android:exported="true" android:label="@string/capture_widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_capture_info" />
+        </receiver>
+
+        <!-- The Capture widget's popup: type a capture over the home screen without opening the app -->
+        <activity
+            android:name=".pulse.CaptureActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode"
+            android:theme="@style/AppTheme.Capture"
+            android:windowSoftInputMode="adjustResize|stateAlwaysVisible" />
+
         <service
             android:name=".pulse.BriefingTile"
             android:exported="true"

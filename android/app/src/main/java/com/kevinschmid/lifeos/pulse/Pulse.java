@@ -90,6 +90,7 @@ public final class Pulse {
     static synchronized String check(Context ctx, boolean forceGlance) {
         Prefs p = Prefs.of(ctx);
         if (!p.configured()) return "Not connected to a server yet.";
+        Captures.flush(ctx);                                                  // widget captures that missed the network
         String error = null;
         JSONObject briefingNote = null;
         long now = System.currentTimeMillis();

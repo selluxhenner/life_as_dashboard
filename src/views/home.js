@@ -261,7 +261,8 @@ function columns() {
   ];
 }
 
-/* Phone: a short overview only. What's next, what to do, habits. Notes and Today have their own tabs. */
+/* Phone: a short overview only. What's next, what to do, habits. Notes and Today have their own tabs;
+   capturing happens in Notes or from the Capture widget on the home screen. */
 function phoneOverview(root) {
   const s = dayScore();
   const title = h('h1.hero-title');
@@ -269,7 +270,6 @@ function phoneOverview(root) {
     h('section.phone-hero',
       title,
       h('div.hero-sub', fmt.long(new Date()) + ' · ' + state.settings.home.city, h('span.day-score.data', 'Day ' + s.score + '%'))),
-    captureBar(),
     h('div.stack', liveUpNext(), briefingPanel(), tasksPanel(), habitsPanel(), jobsPulse(), aiPulse())));
   return title;
 }

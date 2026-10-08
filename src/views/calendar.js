@@ -185,15 +185,35 @@ export default {
     const days = mode === 'day' ? [anchor] : Array.from({ length: 7 }, (_, i) => keyOffset(mon, i));
     const step = mode === 'day' ? 1 : 7;
     const rangeLabel = mode === 'day' ? fmt.long(parseKey(anchor)) : `${fmt.short(days[0])} – ${fmt.short(days[6])}`;
-    const qa = h('input.field.qa', { placeholder: 'Quick add: “Lunch with Ana fri 13:00” or “Submit essay next Monday”', 'aria-label': 'Quick add',
+    const qa = h('input.field.qa', { placeholder: phone ? 'Add: “Lunch fri 13:00”' : 'Quick add: “Lunch with Ana fri 13:00” or “Submit essay next Monday”', 'aria-label': 'Quick add',
       onkeydown: e => { if (e.key === 'Enter' && e.target.value.trim()) { const v = e.target.value.trim(); e.target.value = ''; quickAdd(v); } } });
+    const viewSwitch = seg([{ value: 'day', label: 'Day' }, { value: 'week', label: 'Week' }, ...(phone ? [] : [{ value: 'planner', label: 'Planner' }])], mode, v => { mode = v; notify(); }, 'View');
+
+    if (phone) {
+      // Two short lines: the range with prev / today / next, then quick add with the day / week switch.
+      // The day grid fills the rest of the screen and is the only thing that scrolls.
+      const label = mode === 'day' ? `${fmt.weekday(anchor)} ${fmt.short(anchor)}`
+        : parseKey(days[0]).getMonth() === parseKey(days[6]).getMonth() ? `${parseKey(days[0]).getDate()}–${fmt.short(days[6])}`
+        : rangeLabel;
+      root.append(h('div.view.calendar.cal-phone' + (mode === 'day' ? '.cal-fit' : ''),
+        h('h1.sr-only', 'Calendar'),
+        h('div.cal-tools',
+          h('span.cal-range', label),
+          iconBtn('left', 'Previous', () => { anchor = keyOffset(anchor, -step); notify(); }, 'sm ghost'),
+          h('button.btn.sm.ghost', { type: 'button', onclick: () => { anchor = todayKey(); notify(); } }, 'Today'),
+          iconBtn('right', 'Next', () => { anchor = keyOffset(anchor, step); notify(); }, 'sm ghost')),
+        h('div.cal-add', qa, viewSwitch),
+        mode === 'week' ? weekAgenda(days) : panel({ cls: 'flush cal-panel' }, timeGrid(days)),
+        detail()));
+      return;
+    }
 
     const legend = h('div.cal-legend',
       chip('Plan blocks', null, 'plain'), chip('Lessons', null, 'plain'), chip('Google', null, 'plain'));
     [...legend.children].forEach((c, i) => { c.classList.remove('plain'); c.style.setProperty('--c', [SOURCE_COLORS.plan, SOURCE_COLORS.lesson, SOURCE_COLORS.event][i]); });
 
     let side = null;
-    if (mode === 'day' && !phone) {
+    if (mode === 'day') {
       clock = createChronosphere({ lat: state.settings.home.lat, lon: state.settings.home.lon, size: 340 });
       clock.update({ events: agendaFor(anchor).filter(a => a.start != null && !a.allDay).map(a => ({ start: a.start, end: a.end ?? a.start + 60, color: a.color, title: a.title, time: a.time })) });
       side = h('div.cal-side', panel({ cls: 'quiet' }, clock.el));
@@ -201,14 +221,13 @@ export default {
 
     root.append(h('div.view.calendar',
       viewHead('Calendar', state.gcal.connected ? 'Google calendars, school lessons and your plan in one place.' : 'Your plan blocks. Connect Google and Fuxam in Settings to see lessons and meetings.',
-        seg([{ value: 'day', label: 'Day' }, { value: 'week', label: 'Week' }, ...(phone ? [] : [{ value: 'planner', label: 'Planner' }])], mode, v => { mode = v; notify(); }, 'View'),
+        viewSwitch,
         iconBtn('left', 'Previous', () => { anchor = keyOffset(anchor, -step); notify(); }),
         h('button.btn', { type: 'button', onclick: () => { anchor = todayKey(); notify(); } }, 'Today'),
         iconBtn('right', 'Next', () => { anchor = keyOffset(anchor, step); notify(); })),
       h('div.cal-bar', h('span.cal-range', rangeLabel), qa, legend),
       mode === 'planner'
         ? planner(mon)
-        : phone && mode === 'week' ? weekAgenda(days)
         : h('div.cal-layout' + (side ? '.with-side' : ''), panel({ cls: 'flush cal-panel' }, timeGrid(days)), side),
       detail()));
   },

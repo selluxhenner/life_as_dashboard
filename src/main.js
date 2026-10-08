@@ -41,9 +41,9 @@ import assistant from './views/assistant.js';
 import settings from './views/settings.js';
 import lab from './views/lab.js';
 import captures from './views/captures.js';
-import { unsorted } from './features/capture/captures.js';
+import { unsorted, settleCaptures, takeCaptures } from './features/capture/captures.js';
 import { initNotifications } from './core/notifications.js';
-import { initNative, onNativeAction } from './core/native.js';
+import { initNative, onNativeAction, nativeCaptures, nativeTakeCaptures } from './core/native.js';
 
 const ROUTES = [
   { id: 'home', label: 'Home', short: 'Overview', icon: 'home', view: home, dock: true, key: 'G H' },
@@ -83,12 +83,30 @@ const talkContext = () => ({ home: 'briefing', news: 'world' })[currentRoute() &
 const talkBtn = h('button.talk', { type: 'button', 'aria-label': 'Talk to the assistant', title: 'Talk to the assistant', onclick: () => toggleTalk(talkContext()) }, icon('mic'));
 const paintTalk = () => talkBtn.setAttribute('aria-pressed', String(talk.state === 'listening'));
 const rail = h('nav.rail', { 'aria-label': 'Main' });
-const dock = h('nav.dock', { 'aria-label': 'Main' });
+// picking a page from More puts the dock back (after the tap, so the link still navigates)
+const dock = h('nav.dock', { 'aria-label': 'Main', onclick: e => { if (more && e.target.closest('a')) setTimeout(() => showMore(false), 0); } });
+let moreBtn = null, more = false;
 
 function buildNav() {
   rail.replaceChildren(h('div.mark', mark()), ...navLinks(r => !r.bottom), h('div.spacer'), ...navLinks(r => r.bottom));
-  dock.replaceChildren(...navLinks(r => r.dock, true), h('button', { type: 'button', onclick: openSheet }, icon('more'), h('span', 'More')));
+  buildDock();
   markCurrent();
+}
+/* The dock, or after More the other pages in its place, until a page is picked or the screen is touched anywhere else. */
+function buildDock(swap = false) {
+  moreBtn = more ? null : h('button', { type: 'button', onclick: () => showMore(true) }, icon('more'), h('span', 'More'));
+  dock.replaceChildren(...navLinks(r => more ? !r.dock : r.dock, true), ...(moreBtn ? [moreBtn] : []));
+  dock.setAttribute('aria-label', more ? 'More pages' : 'Main');
+  dock.classList.toggle('swap', swap);
+}
+const touchedOutside = e => { if (!dock.contains(e.target)) showMore(false); };
+function showMore(on) {
+  if (more === on) return;
+  more = on;
+  buildDock(true);
+  markCurrent();
+  if (on) document.addEventListener('pointerdown', touchedOutside, true);
+  else document.removeEventListener('pointerdown', touchedOutside, true);
 }
 function markCurrent() {
   const id = currentRoute() && currentRoute().id;
@@ -99,12 +117,8 @@ function markCurrent() {
     document.querySelectorAll(`[data-route="${id}"] .badge`).forEach(b => b.remove());
     if (n) document.querySelectorAll(`[data-route="${id}"]`).forEach(a => a.append(h('span.badge' + (id === 'captures' ? '.soft' : ''), String(n))));
   }
-}
-function openSheet() {
-  const sheet = h('div.sheet', { onclick: e => { if (e.target === sheet || e.target.closest('a')) sheet.remove(); } },
-    h('div.panel', h('nav', navLinks(r => !r.dock))));
-  document.body.append(sheet);
-  markCurrent();
+  // More lights up like a tab while one of its pages is open
+  if (moreBtn) moreBtn.classList.toggle('here', !!id && !currentRoute().dock);
 }
 
 /* Caption buttons drawn like Windows' own: 10px glyphs on 1px lines. */
@@ -226,6 +240,13 @@ function startServices() {
   onNativeAction('listen', listenNow);
   onNativeAction('ask', () => { if (talk.state === 'idle') toggleTalk(); });
   initNative();
+  // the Capture widget types over the home screen; what has not reached the server yet is taken from the phone
+  const takeWidgetCaptures = () => nativeTakeCaptures().then(takeCaptures);
+  takeWidgetCaptures();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) takeWidgetCaptures(); });
+  settleCaptures();
+  nativeCaptures(unsorted().length);
+  subscribe(() => { settleCaptures(); nativeCaptures(unsorted().length); });
   updatePings();
   // Spoken morning briefing (if switched on): now, and whenever the window comes back to front later in the morning.
   autoReadBriefing();
@@ -258,7 +279,7 @@ async function start() {
   backdrop = createBackdrop(canvas, { boot: true, hold: launch, home: { lat: state.settings.home.lat, lon: state.settings.home.lon, label: state.settings.home.city } });
   onTheme(() => { backdrop.refresh(); updatePings(); });
 
-  onRoute(markCurrent);
+  onRoute(() => { showMore(false); markCurrent(); });
   subscribe(() => { updatePings(); markCurrent(); if (pointsOn() !== !!routeList().find(r => r.id === 'rank')) buildNav(); paintStatus(); paintTalk(); });
   onSyncStatus(paintSync);
   paintSync();

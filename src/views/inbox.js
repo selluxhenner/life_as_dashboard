@@ -102,9 +102,14 @@ export default {
     const sd = s.data || {};
     const people = [...(sd.dms || []), ...(sd.mentions || [])].sort((a, b) => b.ts - a.ts);
     const reload = () => { refresh('email', '/api/inbox/email?live=1'); refresh('slack', '/api/inbox/slack?live=1'); };
+    const loading = e.loading || s.loading;
+    // phones: a small refresh button next to the unread count instead of a row of its own
+    const phoneRefresh = isPhone() && e.connected
+      ? iconBtn('sync', loading ? 'Refreshing…' : 'Refresh', reload, 'sm ghost' + (loading ? ' spin' : ''))
+      : null;
 
     const mailReady = e.connected && accounts.length && emails.length;
-    const mailList = panel({ title: 'Email', cls: 'mail-list-panel', readout: h('span', h('b', String(unread)), ' unread'),
+    const mailList = panel({ title: 'Email', cls: 'mail-list-panel', readout: h('span.mail-readout', h('b', String(unread)), ' unread', phoneRefresh),
       actions: accounts.length > 1 ? [seg([{ value: 'all', label: 'All' }, ...accounts.map(a => ({ value: a.account, label: a.account.split('@')[0] }))], account, v => { account = v; notify(); }, 'Account')] : null },
       !e.connected ? empty('Email needs the server', 'Connect this device in Settings, then add your Gmail accounts.', h('button.btn', { type: 'button', onclick: () => go('settings') }, 'Open settings'))
         : !accounts.length ? empty('No Gmail account connected', 'Add one or more Google accounts in Settings → Connections.', h('button.btn', { type: 'button', onclick: () => go('settings') }, 'Connect Gmail'))
@@ -122,7 +127,7 @@ export default {
               h('div.mail-list', (c.messages || []).slice(0, 5).map(slackRow)))))
             : empty('No channels picked', 'Choose the channels to follow in Settings → Connections.')));
 
-    const head = viewHead('Inbox', 'Every Gmail account and Slack in one place.', e.connected ? btn(e.loading || s.loading ? 'Refreshing…' : 'Refresh', reload, 'ghost', 'sync') : null);
+    const head = viewHead('Inbox', 'Every Gmail account and Slack in one place.', e.connected && !isPhone() ? btn(loading ? 'Refreshing…' : 'Refresh', reload, 'ghost', 'sync') : null);
 
     if (isPhone()) {
       // phone: the list, or one message full width with a back button

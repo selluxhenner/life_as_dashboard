@@ -42,6 +42,7 @@
 .panel-head h2 { font-size: var(--fs-lg); font-weight: 500; }
 .panel-head .readout { margin-left: auto; font-family: var(--font-data); font-size: var(--fs-xs); color: var(--ink-3); white-space: nowrap; }
 .panel-head .readout b { color: var(--ink); font-weight: 500; }
+.panel-head > div { min-width: 0; }   /* actions (a seg switch) scroll inside the panel instead of pushing past it */
 .panel.flush { --pad: 0; }
 .panel.quiet { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none; clip-path: none; }
 .panel.quiet > .frame { display: none; }
