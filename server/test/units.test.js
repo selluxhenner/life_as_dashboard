@@ -136,3 +136,26 @@ test('spoken script: grounded topics only, two sentences each, fits the 30-secon
   assert.equal(tight.outro, '');
   assert.ok(tight.overview);
 });
+
+test('Lina: wake words are stripped, short yes/no answers are recognised in English, German and Swiss German', async () => {
+  const { stripWake, yesNo, guessLang, saidLina } = await import('../src/voice/lina.js');
+  for (const s of ['Hey Lina, schedule a meeting', 'Hi, Lena. What is next?', 'hoi leena mach en termin', 'Lina?', 'Okay, hey Lina'])
+    assert.ok(saidLina(s), s);
+  for (const s of ['Hey Linda, can you send it', 'The line near the arena', 'I talked to Max and then later to Lina about it'])
+    assert.ok(!saidLina(s), s);
+  assert.equal(stripWake('Hey Lina, schedule a meeting at 3pm.'), 'schedule a meeting at 3pm.');
+  assert.equal(stripWake('Hoi Lina plan es Meeting'), 'plan es Meeting');
+  assert.equal(stripWake('hallo leena: um drei'), 'um drei');
+  assert.equal(stripWake('Hey Lina.'), '');
+  assert.equal(stripWake('Linear is a tool'), 'Linear is a tool');
+  for (const s of ['Yes.', 'yes please', 'Yeah, send it!', 'ok', 'Ja.', 'Jo, gärn', 'Ja bitte', 'Klar, schick es', 'passt'])
+    assert.equal(yesNo(s)?.answer, 'yes', s);
+  for (const s of ['No.', 'Nope', 'Nein, danke', 'nei', 'nöd schicke', "don't send it"])
+    assert.equal(yesNo(s)?.answer, 'no', s);
+  for (const s of ['Yes, but make it 4pm', 'Ja, aber später', 'Who is invited?', 'Schedule another one with Anna tomorrow at ten please'])
+    assert.equal(yesNo(s), null, s);
+  assert.equal(yesNo('Jo gärn').lang, 'de');
+  assert.equal(yesNo('yes').lang, 'en');
+  assert.equal(guessLang('Ich habe das Meeting um 15 Uhr eingetragen. Soll ich die Einladung schicken?'), 'de');
+  assert.equal(guessLang('I put the meeting at 3 pm on your calendar. Shall I send the invite?'), 'en');
+});

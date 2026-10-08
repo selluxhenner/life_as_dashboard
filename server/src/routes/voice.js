@@ -7,6 +7,7 @@ import { synthesize, transcribe, ttsEngine, sttEngine, elevenChoice } from '../v
 import { elevenVoices, elevenAccount, ELEVEN_MODELS } from '../voice/eleven.js';
 import { briefingScript } from '../jobs/briefing.js';
 import { worldScript } from '../jobs/news.js';
+import { linaTurn } from '../voice/lina.js';
 
 export const voice = new Hono();
 
@@ -33,6 +34,19 @@ voice.post('/voice/tts', async c => {
     elevenVoice: typeof b.elevenVoice === 'string' ? b.elevenVoice : undefined
   });
   return mp3(c, out);
+});
+
+/* "Hey Lina, …": one spoken exchange without streaming, for the phone's wake word / assistant button and the desktop.
+   Query: conversationId (follow-ups), awaiting (comma-separated action ids Lina just asked yes/no about), wake=1. */
+voice.post('/voice/turn', async c => {
+  const type = c.req.header('Content-Type') || 'audio/wav';
+  const buf = Buffer.from(await c.req.arrayBuffer());
+  if (buf.length < 1000) throw new HttpError(400, 'Empty recording');
+  if (buf.length > 12 * 1024 * 1024) throw new HttpError(413, 'Recording too long');
+  const q = c.req.query();
+  const conversationId = /^conv_\w+$/.test(q.conversationId || '') ? q.conversationId : null;
+  const awaiting = String(q.awaiting || '').split(',').filter(id => /^act_\w+$/.test(id)).slice(0, 5);
+  return c.json(await linaTurn({ audio: buf, type, conversationId, awaiting, viaWake: q.wake === '1' }));
 });
 
 /* The 30-second spoken briefing and world summary, rendered from the server's own script (with delivery directions)

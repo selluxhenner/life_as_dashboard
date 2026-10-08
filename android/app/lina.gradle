@@ -1,0 +1,59 @@
+// "Hey Lina": on-device wake word with sherpa-onnx (Apache-2.0, github.com/k2-fsa/sherpa-onnx).
+// The library (AAR) and the English keyword-spotting model are downloaded once from the project's GitHub releases,
+// checked against a pinned SHA-256, and kept out of git (libs/*.aar and the tarball are ignored). Only the int8 model
+// files are packed into the APK (~5 MB), as assets/kws/, next to the committed lina/keywords.txt.
+import java.security.MessageDigest
+
+def SHERPA = '1.13.8'
+def downloads = [
+    [url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/v${SHERPA}/sherpa-onnx-static-link-onnxruntime-${SHERPA}.aar",
+     file: "libs/sherpa-onnx-static-link-onnxruntime-${SHERPA}.aar",
+     sha256: 'b22c3fc1b6a45666d28892bb2f7694beeb77a8362d7ebd77c1a5431ec9435471'],
+    [url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2',
+     file: 'libs/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2',
+     sha256: 'f170013b4716e41b62b9bfd809687c207cef798ef9bc6534d524e17af9b6561a']
+]
+
+def sha256 = { File f ->
+    def md = MessageDigest.getInstance('SHA-256')
+    f.withInputStream { is -> byte[] buf = new byte[1 << 16]; int n; while ((n = is.read(buf)) > 0) md.update(buf, 0, n) }
+    md.digest().encodeHex().toString()
+}
+
+// Runs while Gradle configures the project, so the AAR exists before dependencies are resolved. A no-op once fetched.
+downloads.each { d ->
+    def f = file(d.file)
+    if (f.exists() && sha256(f) == d.sha256) return
+    f.parentFile.mkdirs()
+    logger.lifecycle("Lina: downloading ${d.url}")
+    def tmp = new File(f.path + '.part')
+    new URL(d.url).withInputStream { is -> tmp.withOutputStream { os -> os << is } }
+    def got = sha256(tmp)
+    if (got != d.sha256) { tmp.delete(); throw new GradleException("Lina: checksum mismatch for ${d.url} (got ${got})") }
+    f.delete(); tmp.renameTo(f)
+}
+
+def kwsDir = file("$buildDir/lina-assets/kws")
+def wanted = ['encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx', 'decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx',
+              'joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx', 'tokens.txt']
+if (!wanted.every { new File(kwsDir, it).exists() }) {
+    copy {
+        from(tarTree(resources.bzip2(file(downloads[1].file)))) { include wanted.collect { '**/' + it } }
+        eachFile { it.path = it.name }
+        includeEmptyDirs = false
+        into kwsDir
+    }
+}
+copy { from 'lina/keywords.txt'; into kwsDir }
+
+android {
+    sourceSets { main { assets.srcDirs += "$buildDir/lina-assets" } }
+    // arm64 for phones, x86_64 for the emulator. The other two ABIs would add ~40 MB for devices Kevin doesn't have.
+    defaultConfig { ndk { abiFilters 'arm64-v8a', 'x86_64' } }
+    // keep the native library compressed in the APK (smaller download; it is extracted once at install)
+    packagingOptions { jniLibs { useLegacyPackaging = true } }
+}
+
+dependencies {
+    implementation(name: "sherpa-onnx-static-link-onnxruntime-${SHERPA}", ext: 'aar')
+}

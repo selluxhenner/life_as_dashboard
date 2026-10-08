@@ -89,6 +89,33 @@
             android:theme="@style/AppTheme.Capture"
             android:windowSoftInputMode="adjustResize|stateAlwaysVisible" />
 
+        <!-- Lina: the phone's assistant (hold power / home, after choosing Agentic OS as Digital assistant app) -->
+        <activity
+            android:name=".pulse.AssistActivity"
+            android:exported="true"
+            android:label="@string/lina_label"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:taskAffinity=""
+            android:showWhenLocked="true"
+            android:theme="@style/AppTheme.Lina">
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VOICE_COMMAND" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Lina: "Hey Lina" wake word and spoken conversations (microphone only while the phone is unlocked) -->
+        <service
+            android:name=".pulse.LinaService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+        <receiver android:name=".pulse.LinaReceiver" android:exported="false" />
+
         <service
             android:name=".pulse.BriefingTile"
             android:exported="true"
@@ -115,6 +142,10 @@
     <!-- push-to-talk voice chat -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Lina listens for "Hey Lina" in a microphone foreground service and buzzes when she hears it -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- alerts: show notifications, re-arm the morning alarm after a reboot -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />

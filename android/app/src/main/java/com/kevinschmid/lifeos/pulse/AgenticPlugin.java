@@ -5,6 +5,7 @@ import android.app.AlarmManager;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.StatusBarManager;
+import android.app.role.RoleManager;
 import android.appwidget.AppWidgetManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -35,12 +36,17 @@ import org.json.JSONException;
  * actually arrive (permission, exact alarms, battery), adds the tile / widget, and passes notification taps on as
  * "route" events (agenticos://open/<route>?do=<action>).
  */
-@CapacitorPlugin(name = "AgenticNative", permissions = { @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS }) })
+@CapacitorPlugin(name = "AgenticNative", permissions = {
+    @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS }),
+    @Permission(alias = "microphone", strings = { Manifest.permission.RECORD_AUDIO })
+})
 public class AgenticPlugin extends Plugin {
 
     @Override
     public void load() {
         Alerts.ensureChannels(getContext());
+        Prefs p = Prefs.of(ctx());
+        if (p.linaWake() && p.configured() && LinaService.hasMic(ctx())) LinaService.start(ctx(), LinaService.ACT_LISTEN);  // re-arm after a reboot
         Intent i = getActivity().getIntent();
         if (route(i)) getActivity().setIntent(new Intent(i).setData(null));   // a recreated activity must not navigate again
     }
@@ -175,6 +181,60 @@ public class AgenticPlugin extends Plugin {
         call.resolve(r);
     }
 
+    /** Lina: wake (listen for "Hey Lina" while unlocked) and sensitivity (low | normal | high). Asks for the microphone first. */
+    @PluginMethod
+    public void lina(PluginCall call) {
+        if (getPermissionState("microphone") != PermissionState.GRANTED && Boolean.TRUE.equals(call.getBoolean("wake", false))) {
+            requestPermissionForAlias("microphone", call, "linaMic");
+            return;
+        }
+        applyLina(call);
+    }
+
+    @PermissionCallback
+    private void linaMic(PluginCall call) {
+        if (getPermissionState("microphone") != PermissionState.GRANTED) { call.resolve(status()); return; }
+        applyLina(call);
+    }
+
+    private void applyLina(PluginCall call) {
+        Prefs p = Prefs.of(ctx());
+        String s = call.getString("sensitivity", null);
+        boolean restart = false;
+        if (s != null && s.matches("low|normal|high") && !s.equals(p.linaSensitivity())) { p.setLinaSensitivity(s); restart = true; }
+        Boolean wake = call.getBoolean("wake", null);
+        if (wake != null) p.setLinaWake(wake);
+        if (p.linaWake() && LinaService.hasMic(ctx())) {
+            if (restart) LinaService.stop(ctx());                     // the spotter picks the new sensitivity on start
+            LinaService.start(ctx(), LinaService.ACT_LISTEN);
+        } else if (wake != null && !wake) LinaService.stop(ctx());
+        call.resolve(status());
+    }
+
+    /** Talk to Lina now, natively (the same as holding the power button with Lina as the assistant). */
+    @PluginMethod
+    public void linaTalk(PluginCall call) {
+        if (getPermissionState("microphone") != PermissionState.GRANTED) { requestPermissionForAlias("microphone", call, "linaTalkMic"); return; }
+        LinaService.start(ctx(), LinaService.ACT_TALK);
+        call.resolve(status());
+    }
+
+    @PermissionCallback
+    private void linaTalkMic(PluginCall call) {
+        if (getPermissionState("microphone") == PermissionState.GRANTED) LinaService.start(ctx(), LinaService.ACT_TALK);
+        call.resolve(status());
+    }
+
+    /** Opens the system page where Agentic OS can be picked as the digital assistant (hold power / home → Lina). */
+    @PluginMethod
+    public void openAssistantSettings(PluginCall call) {
+        Intent[] tries = { new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS), new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS), new Intent(Settings.ACTION_SETTINGS) };
+        for (Intent i : tries) {
+            try { getActivity().startActivity(i); break; } catch (Exception ignored) { /* next */ }
+        }
+        call.resolve(status());
+    }
+
     /** what: notifications | battery | alarms | app */
     @PluginMethod
     public void openSettings(PluginCall call) {
@@ -219,6 +279,19 @@ public class AgenticPlugin extends Plugin {
         s.put("dayWidgets", DayWidget.count(c));
         s.put("captureWidgets", CaptureWidget.count(c));
         s.put("sdk", Build.VERSION.SDK_INT);
+        JSObject lina = new JSObject();
+        lina.put("wake", p.linaWake());
+        lina.put("sensitivity", p.linaSensitivity());
+        lina.put("listening", LinaService.running());
+        lina.put("available", Wake.available(c));
+        lina.put("mic", LinaService.hasMic(c) ? "granted" : "prompt");
+        boolean assistant = false;
+        if (Build.VERSION.SDK_INT >= 29) {
+            RoleManager rm = c.getSystemService(RoleManager.class);
+            assistant = rm != null && rm.isRoleAvailable(RoleManager.ROLE_ASSISTANT) && rm.isRoleHeld(RoleManager.ROLE_ASSISTANT);
+        }
+        lina.put("assistant", assistant);
+        s.put("lina", lina);
         return s;
     }
 }

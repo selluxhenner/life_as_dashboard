@@ -1,4 +1,4 @@
-// Talk to the agent from anywhere: tap to speak, tap again to send, and the answer comes back in the same natural voice.
+// Talk to Lina (the agent) from anywhere: tap to speak, tap again to send, and the answer comes back in the same natural voice.
 // Speech-to-text and the voice run on the server (ElevenLabs), the answer is Claude with all of the agent's tools.
 // Every exchange also lands in the Agent chat. context = what Kevin just heard ('briefing' | 'world'), so
 // "tell me more about the second one" makes sense to the agent.
@@ -10,21 +10,27 @@ import { canRecord, startRecording, stopRecording, transcribe } from './stt.js';
 import { sendToAgent } from '../views/assistant.js';
 
 const MAX_MS = 60000;                 // a question longer than a minute is sent anyway
-export const talk = { state: 'idle', context: null, heard: '', reply: '', at: 0 };
+// source 'wake': the desktop's "Hey Lina" (voice/wake.js) records and ends by itself, there is no Send.
+export const talk = { state: 'idle', context: null, heard: '', reply: '', source: null, at: 0 };
 let timer = null, run = 0;
 const set = patch => { Object.assign(talk, patch, { at: Date.now() }); notify(); };
+export const setTalk = set;
+const cancelHooks = new Set();
+export const onTalkCancel = fn => cancelHooks.add(fn);
 
 export const canTalk = () => !!apiConfig() && canRecord();
 
 /** Tap once to start listening, again to send; while it speaks, a tap stops it. */
 export async function toggleTalk(context = null) {
+  if (talk.source === 'wake' && talk.state !== 'idle') return cancelTalk();
   if (talk.state === 'listening') return finishListening();
   if (talk.state === 'thinking') return;
   if (talk.state === 'speaking') { stopSpeaking(); set({ state: 'idle' }); return; }
-  if (!apiConfig()) { toast('Pair this device in Settings to talk to the assistant.', 'amber'); return; }
+  if (!apiConfig()) { toast('Pair this device in Settings to talk to Lina.', 'amber'); return; }
   if (!canRecord()) { toast('This device can’t record audio here.', 'amber'); return; }
   stopSpeaking();
   const my = ++run;
+  set({ source: null });
   try { await startRecording(); } catch { toast('Microphone permission denied.', 'flare'); return; }
   if (my !== run) { stopRecording(); return; }
   tick('open');
@@ -36,9 +42,10 @@ export async function toggleTalk(context = null) {
 export async function cancelTalk() {
   run++;
   clearTimeout(timer);
-  if (talk.state === 'listening') await stopRecording();
+  if (talk.state === 'listening' && talk.source !== 'wake') await stopRecording();
   stopSpeaking();
-  set({ state: 'idle', heard: '', reply: '' });
+  if (talk.source === 'wake') cancelHooks.forEach(fn => fn());
+  set({ state: 'idle', heard: '', reply: '', source: null });
 }
 
 async function finishListening() {

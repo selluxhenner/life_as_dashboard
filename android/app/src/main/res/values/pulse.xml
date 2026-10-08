@@ -18,8 +18,9 @@
     <string name="sc_world_long">World news</string>
     <string name="sc_ai_short">AI news</string>
     <string name="sc_ai_long">AI news today</string>
-    <string name="sc_ask_short">Ask</string>
-    <string name="sc_ask_long">Ask the assistant</string>
+    <string name="sc_ask_short">Ask Lina</string>
+    <string name="sc_ask_long">Talk to Lina</string>
+    <string name="lina_label">Lina</string>
 
     <!-- The Capture widget's popup (CaptureActivity): over the home screen, no app window behind it. -->
     <style name="AppTheme.Capture" parent="Theme.AppCompat.NoActionBar">
@@ -31,6 +32,15 @@
         <item name="colorAccent">#FF4FE3FF</item>
         <item name="colorControlActivated">#FF4FE3FF</item>
         <item name="android:textColorHighlight">#664FE3FF</item>
+    </style>
+    <!-- Lina's entry from the assistant gesture (AssistActivity): no window of its own, it starts the voice service. -->
+    <style name="AppTheme.Lina" parent="Theme.AppCompat.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Translucent</item>
     </style>
     <style name="CaptureFade">
         <item name="android:activityOpenEnterAnimation">@android:anim/fade_in</item>

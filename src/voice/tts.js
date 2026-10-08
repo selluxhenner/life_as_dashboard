@@ -119,9 +119,9 @@ export function stopSpeaking() {
   if (cap) cap.stop().catch(() => {});
 }
 
-async function speakPremium(text, lang, v, my, audioPath) {
+async function speakPremium(text, lang, v, my, audioPath, audioData) {
   const key = (audioPath || v.premiumVoice + '|' + lang) + '|' + text;
-  let url = cache.get(key);
+  let url = audioData ? 'data:audio/mpeg;base64,' + audioData : cache.get(key);
   if (!url) {
     const cfg = apiConfig();
     const base = cfg.url.replace(/\/+$/, '');
@@ -185,6 +185,7 @@ const blocked = e => e && e.name === 'NotAllowedError';
  * - lang is detected from the text when not given.
  * - what names the source ('briefing', 'world', …) for speakingWhat().
  * - audioPath plays server-rendered audio (e.g. '/api/voice/briefing'); text is still used by the device-voice fallback.
+ * - audioData plays audio the server already sent along (base64 mp3, Lina's spoken turn), same fallback.
  * - onBlocked fires instead of onEnd when the browser refuses to play without a tap (autoplay policy).
  * onEnd fires once otherwise, also when nothing could be spoken.
  */
@@ -200,7 +201,7 @@ export async function speak(text, onEnd, opts = {}) {
   speaking = true; playing = opts.what || 'text'; notify();
   const premiumOn = apiConfig() && (v.provider === 'premium' || v.provider === 'auto');
   if (premiumOn) {
-    try { await speakPremium(clean, lang, v, my, lang === 'en' ? opts.audioPath : null); return finish(); }
+    try { await speakPremium(clean, lang, v, my, lang === 'en' ? opts.audioPath : null, opts.audioData); return finish(); }
     catch (e) { if (blocked(e)) return refuse(); /* else fall back to the device voice */ }
     if (my !== gen) return;
   }

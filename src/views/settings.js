@@ -13,6 +13,7 @@ import { fmt } from '../core/dates.js';
 import { scheduleCal } from '../core/calendar-sync.js';
 import { icon } from '../core/icons.js';
 import { native, nativeStatus, nativeCall, onNativeStatus } from '../core/native.js';
+import { desktopWake, wakeSettings, setDesktopWake } from '../voice/wake.js';
 import { speak, stopSpeaking, clearVoiceCache, VOICE_SAMPLES, PREMIUM_VOICES, SPEEDS, voiceSettings, voiceScore, systemVoices } from '../voice/tts.js';
 
 const row = (label, hint, control) => h('div.set-row', h('div.grow', h('div.title', label), hint ? h('div.sub', hint) : null), control);
@@ -149,7 +150,7 @@ function serverSettingsPanel() {
     row('Morning briefing', 'Generated a few minutes before, then pushed to your devices.', time),
     row('Play the spoken briefing automatically', 'The 30-second version, the first time the app is in front each morning (until noon).', toggle(!!voice.autoRead, v => patch('voice', { ...voice, autoRead: v }), 'Auto-read')),
     h('div.set-sep'),
-    row('Phone check-ins (prototype)', `The assistant can call you to collect answers. Hard cap €${phone.monthlyCapEur || 10}/month.`, toggle(!!phone.enabled, v => patch('phone', { ...phone, enabled: v }), 'Phone calls')),
+    row('Phone check-ins (prototype)', `Lina can call you to collect answers. Hard cap €${phone.monthlyCapEur || 10}/month.`, toggle(!!phone.enabled, v => patch('phone', { ...phone, enabled: v }), 'Phone calls')),
     phone.enabled ? h('div', row('Your number', 'Verified caller ID on Twilio.', phoneNum),
       row('Quiet hours', 'No calls in this window.', h('span.data', (phone.quietHours || ['21:30', '08:30']).join(' → '))),
       h('div.input-row', h('button.btn', { type: 'button', onclick: async () => { try { await api.post('/api/phone/call', { purpose: 'test', questions: ['Is this a good moment to test the call?'] }); toast('Calling you…', 'pulse'); } catch (e) { toast(errorText(e), 'flare'); } } }, 'Test call'))) : null);
@@ -160,7 +161,7 @@ function serverSettingsPanel() {
    whether the phone can actually receive it: permission, the exact morning alarm, battery, plus tile, widget and card. */
 const AI_LEVELS = [{ value: 10, label: 'Frontier only' }, { value: 9, label: 'Big launches' }, { value: 8, label: 'Notable' }];
 const PER_DAY = [{ value: 3, label: '3' }, { value: 6, label: '6' }, { value: 10, label: '10' }];
-const CHANNEL_NAMES = { briefing: 'Morning briefing', breaking: 'Breaking world news', ai: 'Major AI news', calendar: 'Meeting prep', jobs: 'Job hunt', agent: 'Assistant', general: 'Other', pinned: 'Lock-screen card' };
+const CHANNEL_NAMES = { briefing: 'Morning briefing', breaking: 'Breaking world news', ai: 'Major AI news', calendar: 'Meeting prep', jobs: 'Job hunt', agent: 'Assistant', lina: 'Lina’s answers', lina_wake: 'Lina is listening', general: 'Other', pinned: 'Lock-screen card' };
 let watchingNative = false;
 
 function whenText(t) {
@@ -231,7 +232,76 @@ function notificationsPanel() {
       a.breaking || a.ai ? row('News alerts per day', 'Breaking and AI together; the rest waits on the World and AI pages.',
         seg(PER_DAY, a.maxPerDay, v => patch({ maxPerDay: v }), 'News alerts per day')) : null,
       row('Meeting prep', 'A short prep note 30 minutes before a meeting.', toggle(!!a.calendar, v => patch({ calendar: v }), 'Meeting prep')),
-      row('Job hunt and assistant', 'Due follow-ups, approvals and call summaries.', toggle(!!(a.jobs && a.agent), v => patch({ jobs: v, agent: v }), 'Job hunt and assistant'))));
+      row('Job hunt and Lina', 'Due follow-ups, approvals and call summaries.', toggle(!!(a.jobs && a.agent), v => patch({ jobs: v, agent: v }), 'Job hunt and Lina'))));
+}
+
+/* ---------- Lina ----------
+   The people she knows live on the server (so "my business partner" works from every device). On Android: the
+   "Hey Lina" wake word, how eagerly it wakes, and Lina as the phone's assistant (hold the power button). */
+const SENS = [{ value: 'low', label: 'Fewer mistakes' }, { value: 'normal', label: 'Normal' }, { value: 'high', label: 'Hears more' }];
+const person = { relation: '', name: '', email: '' };
+
+function linaPhone() {
+  const st = nativeStatus;
+  if (!st) { nativeCall('status').catch(() => {}); return h('div.hint', 'Checking this phone…'); }
+  const l = st.lina || {};
+  return h('div',
+    row('“Hey Lina”', !l.available ? 'This app build has no wake-word model. Install the newest APK.'
+      : l.wake ? 'Listening on this phone while it is unlocked; the screen off or locked turns the microphone off. Nothing leaves the phone until it hears “Hey Lina”.'
+      : 'Say “Hey Lina” (or Hi, Hoi, Hallo Lina) with the phone unlocked, then just talk. Android shows a small notification and the mic dot while she listens.',
+      l.available ? toggle(!!l.wake, v => phoneAct('lina', { wake: v }), 'Listen for Hey Lina') : chip('not in this build', 'warn')),
+    l.wake ? row('Wake sensitivity', 'If she wakes up by mistake, pick Fewer mistakes. If she misses you, Hears more. False wakes stay silent: the server checks what was said.',
+      seg(SENS, l.sensitivity || 'normal', v => phoneAct('lina', { sensitivity: v }), 'Wake sensitivity')) : null,
+    row('Hold the power button', l.assistant ? 'Lina is this phone’s assistant: hold the power button (or swipe up from a bottom corner) and talk.'
+      : 'Make Lina the phone’s assistant: choose “Agentic OS” under Digital assistant app. Some phones also need Settings › Buttons › Hold power button › Digital assistant.',
+      l.assistant ? chip('set', 'ok') : btn('Set up', () => phoneAct('openAssistantSettings', {}), 'sm')),
+    h('div.input-row', { style: { marginTop: '8px' } }, btn('Talk to Lina now', () => phoneAct('linaTalk', {}), 'sm primary', 'mic')),
+    h('div.set-sep'));
+}
+
+function linaDesktop() {
+  const s = wakeSettings(), st = desktopWake.status;
+  const hint = st === 'error' ? 'Couldn’t start: ' + (desktopWake.error || 'unknown error') + '. Check the microphone in Windows Settings › Privacy › Microphone.'
+    : s.wake ? 'Listening on this PC’s microphone, also while the window is in the tray. Say “Hey Lina” and the window comes forward. Nothing leaves the PC until she hears her name.'
+    : 'Say “Hey Lina” (or Hi, Hoi, Hallo Lina) at your PC and talk; she answers out loud and shows it here.';
+  return h('div',
+    row('“Hey Lina” on this PC', hint, toggle(!!s.wake, v => setDesktopWake({ wake: v }), 'Listen for Hey Lina on this PC')),
+    s.wake ? row('Wake sensitivity', 'Fewer mistakes if she wakes up by herself, Hears more if she misses you.',
+      seg(SENS, s.sensitivity, v => setDesktopWake({ sensitivity: v }), 'Wake sensitivity on this PC')) : null,
+    h('div.set-sep'));
+}
+
+function linaPanel() {
+  if (native && !watchingNative) { watchingNative = true; onNativeStatus(() => notify()); }
+  const { data, connected } = remote('serverSettings', '/api/settings', 5 * 60000);
+  const people = (data && data.settings && data.settings.lina && data.settings.lina.people) || [];
+  const save = async list => {
+    try { await api.patch('/api/settings', { lina: { people: list } }); refresh('serverSettings', '/api/settings'); toast('Saved'); }
+    catch (e) { toast(errorText(e), 'flare'); }
+  };
+  const add = () => {
+    const p = { relation: person.relation.trim(), name: person.name.trim(), email: person.email.trim() };
+    if (!p.name || (p.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email))) { toast('Add a name and a valid email.', 'amber'); return; }
+    person.relation = person.name = person.email = '';
+    save([...people.filter(x => !(p.relation && x.relation && x.relation.toLowerCase() === p.relation.toLowerCase())), Object.fromEntries(Object.entries(p).filter(([, v]) => v))]);
+  };
+  const field = (key, placeholder, type = 'text') => h('input.field', { type, value: person[key], placeholder, 'aria-label': placeholder, oninput: e => { person[key] = e.target.value; } });
+  const st = nativeStatus && nativeStatus.lina;
+  const readout = st ? chip(st.listening && st.wake ? 'listening' : st.wake ? 'waiting' : 'off', st.listening && st.wake ? 'ok' : null, st.wake ? '' : 'plain')
+    : desktopWake.available ? chip(desktopWake.status === 'listening' ? 'listening' : desktopWake.status, desktopWake.status === 'listening' ? 'ok' : desktopWake.status === 'error' ? 'alert' : null, desktopWake.status === 'off' ? 'plain' : '') : null;
+  return panel({ title: 'Lina', readout },
+    h('p.dim', { style: { marginBottom: '12px' } }, 'Your assistant. She understands English, German and Swiss German and answers in English or German. Try: “Hey Lina, schedule a meeting at 3pm with my business partner.” She puts it on your calendar and asks before the invite goes out.'),
+    native ? linaPhone() : null,
+    desktopWake.available ? linaDesktop() : null,
+    !connected || !data ? empty('Pair this device first', 'Lina runs on your server.') : h('div',
+      h('div.title', { style: { margin: '4px 0 6px' } }, 'People Lina knows'),
+      people.length ? h('div.rows', people.map(p => h('div.row',
+        h('div.grow', h('div.title', p.name + (p.relation ? ' · ' + p.relation : '')), h('div.sub', p.email || 'no email')),
+        h('button.btn.sm.ghost.danger', { type: 'button', onclick: () => save(people.filter(x => x !== p)) }, 'Remove'))))
+        : h('div.hint', 'Nobody yet. Add your business partner, or just tell Lina: “My business partner is Max, max@example.com.”'),
+      h('div.input-row', { style: { marginTop: '8px', flexWrap: 'wrap' } },
+        field('relation', 'Relation, e.g. business partner'), field('name', 'Name'), field('email', 'Email', 'email'),
+        h('button.btn', { type: 'button', onclick: add }, 'Add'))));
 }
 
 let voicesLoaded = false;
@@ -343,6 +413,6 @@ export default {
       viewHead('Settings', 'Server, connections, appearance and automation.'),
       h('div.grid.g-2',
         h('div.stack', serverPanel(), notificationsPanel(), connectionsPanel(), serverSettingsPanel()),
-        h('div.stack', appearancePanel(), voicePanel(), featuresPanel(), usagePanel(), dataPanel()))));
+        h('div.stack', linaPanel(), appearancePanel(), voicePanel(), featuresPanel(), usagePanel(), dataPanel()))));
   }
 };
