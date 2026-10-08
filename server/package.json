@@ -11,7 +11,7 @@
     "start": "node --experimental-sqlite --disable-warning=ExperimentalWarning src/index.js",
     "dev": "node --experimental-sqlite --disable-warning=ExperimentalWarning --watch src/index.js",
     "migrate": "node --experimental-sqlite --disable-warning=ExperimentalWarning src/migrate.js",
-    "test": "node --experimental-sqlite --disable-warning=ExperimentalWarning --test test/api.test.js test/units.test.js test/alerts.test.js"
+    "test": "node --experimental-sqlite --disable-warning=ExperimentalWarning --test test/api.test.js test/units.test.js test/alerts.test.js test/lina.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

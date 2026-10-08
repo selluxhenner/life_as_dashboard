@@ -13,7 +13,8 @@ export const DEFAULTS = {
   phone: { enabled: false, number: '', monthlyCapEur: 10, quietHours: ['21:30', '08:30'], maxSeconds: 180 },
   ai: { monthlyCapUsd: 40 },
   // Lina, the assistant. people: who "my business partner", "mom" … are, so she can schedule with them ({name, email, relation}).
-  lina: { people: [] },
+  // quick: spoken turns use the fast model and the fast voice (about a second instead of several).
+  lina: { people: [], quick: true },
   jobs: { profile: 'Student in Berlin. Looking for Werkstudent, part-time or startup roles in web development, product, design or marketing. Max 20 h/week.' }
 };
 

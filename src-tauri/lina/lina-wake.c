@@ -114,7 +114,7 @@ static void sendWav(const Pcm *p) {
   free(b); free(w);
 }
 
-/* Records until 1.1 s after the last speech, or waitMs without any, at most 25 s (same as the phone). */
+/* Records until 0.8 s after the last speech, or waitMs without any, at most 25 s (same as the phone). */
 static void record(const short *pre, int preN, int waitMs) {
   Pcm p = { 0 };
   if (preN) put(&p, pre, preN);
@@ -134,7 +134,7 @@ static void record(const short *pre, int preN, int waitMs) {
     if (rms > fmax(600, floor * 2.5)) { speech = 1; quietMs = 0; }
     else { quietMs += n * 1000 / RATE; floor = floor * 0.95 + rms * 0.05; }
     if (!speech && ms >= waitMs) break;
-    if (speech && quietMs >= 1100) break;
+    if (speech && quietMs >= 800) break;
   }
   if (speech) sendWav(&p); else say("NOSPEECH", NULL);
   free(p.s);

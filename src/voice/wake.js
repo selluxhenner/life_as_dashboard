@@ -6,8 +6,10 @@ import { state, save, notify } from '../core/store.js';
 import { platform } from '../core/platform.js';
 import { apiConfig } from '../core/api.js';
 import { toast, tick } from '../core/fx.js';
+import { runSync } from '../core/sync.js';
 import { speak, stopSpeaking } from './tts.js';
 import { talk, setTalk, onTalkCancel } from './talk.js';
+import { voiceTurn, warmLina } from './turn.js';
 
 export const desktopWake = { available: platform.isTauri, status: 'off', error: '' };
 let send = () => {};
@@ -42,19 +44,14 @@ async function turn(b64, viaWake) {
   const cfg = apiConfig();
   if (!cfg) { toast('Pair this device in Settings to talk to Lina.', 'amber'); return back(); }
   setTalk({ state: 'thinking', source: 'wake' });
-  const q = new URLSearchParams({ wake: viaWake ? '1' : '0' });
-  if (conversation.id && Date.now() - conversation.at < 10 * 60000) q.set('conversationId', conversation.id);
-  if (awaiting) q.set('awaiting', awaiting);
   let r;
   try {
-    const res = await fetch(cfg.url.replace(/\/+$/, '') + '/api/voice/turn?' + q, {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + cfg.token, 'Content-Type': 'audio/wav' },
-      body: Uint8Array.from(atob(b64), c => c.charCodeAt(0))
+    r = await voiceTurn(Uint8Array.from(atob(b64), c => c.charCodeAt(0)), {
+      type: 'audio/wav', wake: viaWake, awaiting,
+      conversationId: conversation.id && Date.now() - conversation.at < 10 * 60000 ? conversation.id : null
     });
-    r = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(r.error || 'Lina couldn’t answer (' + res.status + ')');
-  } catch (e) { toast(e.message || 'Lina couldn’t reach your server.', 'flare'); return back(); }
+  } catch (e) { toast(e.message, 'flare'); return back(); }
+  if (r.tools && r.tools.length) runSync();                            // what she changed shows up right away
   if (talk.source !== 'wake') return send('resume');                  // closed while she was thinking
   if (r.falseWake || !r.reply) return back();                          // not "Lina" after all
   conversation = { id: r.conversationId, at: Date.now() };
@@ -73,6 +70,7 @@ export async function initDesktopWake() {
   onTalkCancel(() => { stopSpeaking(); awaiting = ''; send('resume'); });
   listen('lina://wake', () => {
     stopSpeaking();
+    warmLina();
     tick('open');
     awaiting = '';
     setTalk({ state: 'listening', source: 'wake', context: null, heard: '', reply: '' });

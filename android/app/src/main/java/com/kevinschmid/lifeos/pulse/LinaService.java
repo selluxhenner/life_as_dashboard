@@ -66,6 +66,7 @@ public class LinaService extends Service {
     private static final String TAG = "Lina";
     private static final int RATE = Wake.RATE, FRAME = RATE / 10;           // 100 ms
     private static final int PRE_ROLL = RATE * 3 / 2;                         // "Hey Lina" goes up with the question
+    private static final int END_MS = 800;                                    // this much quiet ends what he says
     private static volatile boolean alive;
 
     private final Object gate = new Object();
@@ -264,6 +265,7 @@ public class LinaService extends Service {
      * started by the assistant gesture).
      */
     private void converse(Source rec, short[] pre, Prefs prefs) throws InterruptedException {
+        warm(prefs);
         String cid = prefs.linaConversation();
         String awaiting = "";
         for (int turn = 0; turn < 6 && running; turn++) {
@@ -305,8 +307,15 @@ public class LinaService extends Service {
         setState("idle");
     }
 
+    /** Lets the server get Lina's model ready while Kevin is still talking, so the first answer comes sooner. */
+    private static void warm(Prefs prefs) {
+        new Thread(() -> {
+            try { Server.post(prefs, "/api/voice/warm", new JSONObject()); } catch (Exception ignored) { /* only a head start */ }
+        }, "lina-warm").start();
+    }
+
     /**
-     * Records until Kevin pauses: ends 1.1 s after the last speech, or after `waitMs` if he never starts, at most 25 s.
+     * Records until Kevin pauses: ends 0.8 s after the last speech, or after `waitMs` if he never starts, at most 25 s.
      * A simple energy detector with a moving noise floor; the pre-roll is sent along but doesn't count as the start.
      */
     private byte[] record(Source rec, short[] pre, int waitMs) {
@@ -330,7 +339,7 @@ public class LinaService extends Service {
                 floor = floor * 0.95 + rms * 0.05;
             }
             if (!speech && ms >= waitMs) return null;
-            if (speech && quietMs >= 1100) break;
+            if (speech && quietMs >= END_MS) break;
         }
         return speech ? out.toByteArray() : null;
     }

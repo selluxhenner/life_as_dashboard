@@ -128,7 +128,7 @@ These keys all go in `/etc/agentic-os.env`.
 
 **AI and voice:**
 - `ANTHROPIC_API_KEY` is needed for the briefing, news digests, AI tracker, inbox triage and the assistant.
-  - Models: `claude-sonnet-5-5` writes, `claude-haiku-4-5` classifies.
+  - Models: `claude-sonnet-5-5` writes, `claude-haiku-4-5` classifies, `claude-haiku-5-5` answers Lina's spoken turns (`AI_MODEL_VOICE`).
   - A monthly cap is set in settings (default $40).
 - `ELEVENLABS_API_KEY` is the natural voice (Eleven v4) and push-to-talk speech-to-text (Scribe v2), all with one key.
   - The Starter plan ($6/month) covers a daily briefing, World and spoken replies; Creator ($22) is for heavy use or voice cloning.
@@ -139,14 +139,19 @@ These keys all go in `/etc/agentic-os.env`.
 
 **Voice agent:**
 - **Morning briefing → Listen:** a 30-second spoken summary written together with the card, never the card read aloud. It opens with one line on the shape of the day, then up to four things that matter and what to do about them, and closes by saying what it left out ("everything else can wait"). It may add what the card doesn't show, such as rain at the times you're out or one world event that matters.
-- **Ask:** tap, speak, tap Send. Claude answers in one to three spoken sentences and knows what you just heard ("tell me more about the second one"). The mic in the status bar does the same from any page. Exchanges also appear in the Agent chat.
+- **Ask:** tap, speak, tap Send. Lina answers in one or two spoken sentences and knows what you just heard ("tell me more about the second one"). The mic in the status bar does the same from any page. It is one request (`POST /api/voice/turn`), the same as "Hey Lina", and exchanges also appear in the Agent chat.
 - **World → Listen:** the world in 30 seconds: the big picture in one line, the four or five events that matter and why, and what was left out. With a filter on, the summary lines for that slice (or its top three headlines) and how many more are on the page.
 - **How it sounds:** quick and lively. Eleven v4 gets a quick-pace direction and a tone per sentence (upbeat, serious, urgent …) so it rises and falls like a person talking; Settings › Voice › Speed (Calm / Brisk / Fast, Brisk by default) sets how fast every voice plays.
 - **Automatic:** Settings › Automation › *Play the spoken briefing automatically* plays it the first time the app is in front each morning. If the system blocks sound until you tap, the next tap starts it.
 
 **Lina (the assistant, hands-free):**
 - **"Hey Lina, …"** (or Hi / Hoi / Hallo / Okay Lina), then just talk. She understands English, German and Swiss German and answers out loud in English or Standard German. Example: *"Hey Lina, schedule a meeting tomorrow at 3pm with my business partner."* She puts it on your calendar right away and asks *"Shall I send Max the invite?"*; say yes and Google emails the invitation.
-- **What she may do by herself:** create, change, complete and delete todos; put blocks and meetings on your own calendar; move or rename your events; remember people ("my business partner is Max, max@…"). **What waits for your yes** (by voice, the notification's Send button, or Lina → Needs your approval): invitations, changes to meetings other people are on, cancelling events, emails, calls.
+- **Quick answers** (Settings › Lina, on by default): spoken turns answer in about a second instead of several.
+  - A fast model (`claude-haiku-5-5`, no thinking) with your open todos, habits and the next 7 days of calendar already in the prompt, so "delete the gym task" or "move my 3 o'clock to 4" needs no lookup first.
+  - A change is said and done in one model call: the confirmation comes with the tool call, and only a failure or a lookup (emails, Slack, news) takes a second one.
+  - The reply is spoken with ElevenLabs Flash (same voice). The server gets the model ready while you are still talking (`POST /api/voice/warm`), and the phone and PC stop listening 0.8 s after you stop talking.
+  - Off: spoken turns use the thorough model and the voice from Settings › Voice. Typed chat is always thorough.
+- **What she may do by herself:** create, change, complete and delete todos; add, rename, delete and tick off habits; write notes (they land in your Capture inbox); put blocks and meetings on your own calendar; move or rename your events; remember people ("my business partner is Max, max@…"). **What waits for your yes** (by voice, the notification's Send button, or Lina → Needs your approval): invitations, changes to meetings other people are on, cancelling events, emails, calls.
 - **Who "my business partner" is:** Settings › Lina › People, or just tell her once.
 - **Phone:** Settings › Lina. *"Hey Lina"* listens only while the phone is unlocked (screen off or locked = microphone off), and nothing leaves the phone until it hears its name. *Set up* makes Lina the phone's digital assistant, so holding the power button starts her too. Wake sensitivity: Fewer mistakes / Normal / Hears more. A wake the server doesn't confirm ("Hey Linda") stays silent.
 - **Windows:** Settings › Lina › *"Hey Lina" on this PC*. The window comes forward and the voice bar shows what she heard and said; it keeps listening in the tray.
@@ -207,7 +212,7 @@ curl -X POST https://agentic-os.serviweb.ch/api/dev/run-job -H "Authorization: B
 - **One user.** The master token pairs devices. Device tokens are stored hashed and can be revoked.
 - **Secrets stay on the server.** Google refresh tokens, Slack tokens and the ICS link are AES-GCM encrypted at rest.
 - **Untrusted content.** Emails, Slack messages and news are wrapped as data for the model, never treated as instructions.
-- **Assistant actions:** Lina may create and change todos, notes, job entries, people and events on your own calendar. Emails, calls, invitations, changes that notify other people and cancellations only ever go to the **approval queue** (Lina → Needs your approval, the notification, or a spoken yes). A spoken yes is matched by fixed words on the server, never by the model, and only for the action she just asked about.
+- **Assistant actions:** Lina may create and change todos, habits, notes, job entries, people and events on your own calendar. Emails, calls, invitations, changes that notify other people and cancellations only ever go to the **approval queue** (Lina → Needs your approval, the notification, or a spoken yes). A spoken yes is matched by fixed words on the server, never by the model, and only for the action she just asked about.
 - **Room to grow.** Tables carry a `user_id` (always 1 today), so adding more people later means adding a login, not redesigning.
 
 ## Legacy

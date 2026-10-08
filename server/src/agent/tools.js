@@ -10,6 +10,7 @@ import { messageBody } from '../connectors/gmail.js';
 import { createEvent, inviteToEvent, editableEvent, changeEvent, cancelEvent } from '../connectors/gcal.js';
 import { refreshCalendar } from '../jobs/refresh.js';
 import { getSetting, setSetting } from '../settings.js';
+import { writeDoc, readDoc, listDocs } from '../routes/docs.js';
 import { notify } from '../notify/index.js';
 import { localDate } from '../lib/time.js';
 import { uid } from '../lib/crypto.js';
@@ -40,6 +41,25 @@ function findPerson(q) {
     WHERE from_name LIKE ? OR from_addr LIKE ? GROUP BY from_addr ORDER BY last DESC LIMIT 5`, `%${q}%`, `%${q}%`);
   return { known, fromEmails: mail.filter(m => !known.some(k => k.email === m.email)) };
 }
+/* Habits and captures are synced documents ("habit:<id>", "capture:<id>") in the shape the app writes them, so a habit
+   Lina adds shows up on every device with the next sync. */
+export const listHabits = () => listDocs('habit:');
+function habitDoc(id) {
+  const hb = readDoc('habit:' + id);
+  if (!hb) throw new Error('Unknown habit id ' + id + ' (habit ids are in the context or from list_habits)');
+  return hb;
+}
+const docId = () => uid('id_');
+/* What Kevin asked to write down lands in his Capture inbox as a note; background jobs keep theirs to themselves. */
+function captureNote({ title, body }) {
+  const t = title.trim(), b = body.trim();
+  const text = !b || b === t ? t : t ? `${t}: ${b}` : b;
+  if (!text) return null;
+  const now = Date.now(), id = docId();
+  writeDoc('capture:' + id, { id, text, type: 'note', date: '', time: '', end: '', horizon: 'woche', priority: 'med', createdAt: now, updatedAt: now, archived: false, ref: null });
+  return id;
+}
+
 const when = i => {
   const days = Math.round((Date.parse(i.date) - Date.parse(localDate())) / 86400000);
   const day = days === 0 ? 'today' : days === 1 ? 'tomorrow' : days > 1 && days < 7 ? new Date(i.date + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'long' }) : i.date;
@@ -115,10 +135,59 @@ export const TOOLS = {
     run: i => saveJob(i), summary: i => `${i.id ? 'Updated' : 'Saved'} job ${i.company || ''}`.trim()
   },
   add_note: {
-    risk: 'internal', description: 'Store a note (facts Kevin told you, call answers, meeting prep).',
+    risk: 'internal', description: 'Write a note: something Kevin wants to capture or remember (it lands in his Capture inbox), call answers, meeting prep. title: a few words; body: the note itself.',
     schema: z.object({ title: z.string().max(200), body: z.string().max(5000) }),
-    run: (i, ctx) => { const id = uid('note_'); db.run('INSERT INTO notes (id, title, body, source, created_at) VALUES (?, ?, ?, ?, ?)', id, i.title, i.body, ctx.source, Date.now()); return { id }; },
+    run: (i, ctx) => {
+      const id = uid('note_');
+      db.run('INSERT INTO notes (id, title, body, source, created_at) VALUES (?, ?, ?, ?, ?)', id, i.title, i.body, ctx.source, Date.now());
+      const capture = ['chat', 'voice', 'phone'].includes(ctx.trigger) ? captureNote(i) : null;
+      return { id, ...(capture ? { capture } : {}) };
+    },
     summary: i => `Noted “${i.title}”`
+  },
+  list_habits: {
+    risk: 'read', description: 'Habits with id, label, how often (daily or weekly with a target) and whether they are ticked off today.',
+    schema: z.object({}),
+    run: () => { const today = localDate(); return listHabits().map(hb => ({ id: hb.id, label: hb.label, mode: hb.mode || 'daily', target: hb.target, doneToday: !!hb.history?.[today] })); }
+  },
+  add_habit: {
+    risk: 'internal', description: 'Start tracking a new habit. mode daily (default) or weekly, with target = times per week.',
+    schema: z.object({ label: z.string().min(1).max(120), mode: z.enum(['daily', 'weekly']).optional(), target: z.number().int().min(1).max(7).optional() }),
+    run: i => {
+      const hb = { id: docId(), label: i.label, icon: '◆', history: {}, mode: i.mode || 'daily', ...(i.mode === 'weekly' ? { target: i.target || 3 } : {}), createdAt: localDate() };
+      writeDoc('habit:' + hb.id, hb);
+      return { ok: true, id: hb.id };
+    },
+    summary: i => `Added habit “${i.label}”`
+  },
+  update_habit: {
+    risk: 'internal', description: 'Rename a habit or change how often it is due.',
+    schema: z.object({ id: z.string(), label: z.string().min(1).max(120).optional(), mode: z.enum(['daily', 'weekly']).optional(), target: z.number().int().min(1).max(7).optional() }),
+    run: ({ id, ...patch }) => {
+      const hb = { ...habitDoc(id), ...patch };
+      if (hb.mode === 'weekly' && !hb.target) hb.target = 3;
+      writeDoc('habit:' + id, hb);
+      return { ok: true };
+    },
+    summary: i => `Updated habit${i.label ? ' “' + i.label + '”' : ''}`
+  },
+  delete_habit: {
+    risk: 'internal', description: 'Delete a habit together with its history (say which one you deleted).',
+    schema: z.object({ id: z.string(), label: z.string().max(120).optional() }),
+    run: ({ id }) => { habitDoc(id); writeDoc('habit:' + id, null); return { ok: true }; },
+    summary: i => `Deleted habit${i.label ? ' “' + i.label + '”' : ''}`
+  },
+  check_habit: {
+    risk: 'internal', description: 'Tick a habit off for a day (today unless date is given), or untick it with done false.',
+    schema: z.object({ id: z.string(), date: date.optional(), done: z.boolean().optional(), label: z.string().max(120).optional() }),
+    run: ({ id, date: day = localDate(), done = true }) => {
+      const hb = habitDoc(id);
+      const history = { ...(hb.history || {}) };
+      if (done) history[day] = true; else delete history[day];
+      writeDoc('habit:' + id, { ...hb, history });
+      return { ok: true };
+    },
+    summary: i => `${i.done === false ? 'Unticked' : 'Ticked off'} ${i.label ? '“' + i.label + '”' : 'a habit'}`
   },
   add_calendar_block: {
     risk: 'internal', description: "Put a time block on Kevin's own Google calendar (no attendees, nobody is invited). Use it to give a task a time slot.",

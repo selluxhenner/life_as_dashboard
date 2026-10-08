@@ -8,7 +8,7 @@ import { config } from '../config.js';
 import { db } from '../db.js';
 import { getSetting } from '../settings.js';
 import { HttpError } from '../http.js';
-import { elevenSpeech, elevenTranscribe, ELEVEN_MODELS, ELEVEN_MODEL_IDS, DEFAULT_ELEVEN_VOICE } from './eleven.js';
+import { elevenSpeech, elevenTranscribe, ELEVEN_MODELS, ELEVEN_MODEL_IDS, DEFAULT_ELEVEN_VOICE, FAST_ELEVEN_MODEL } from './eleven.js';
 import { stripTags } from './script.js';
 
 export const OPENAI_VOICES = ['marin', 'cedar', 'shimmer', 'sage', 'coral', 'ballad', 'alloy', 'ash', 'echo', 'fable', 'nova', 'onyx', 'verse'];
@@ -57,14 +57,15 @@ function prune() {
 }
 
 /**
- * synthesize({text, lang, openaiVoice?, elevenVoice?}) -> {audio: Buffer, engine, cached}
- * elevenVoice lets Settings preview a voice before saving it.
+ * synthesize({text, lang, openaiVoice?, elevenVoice?, fast?}) -> {audio: Buffer, engine, cached}
+ * elevenVoice lets Settings preview a voice before saving it. fast: Lina's quick spoken replies use ElevenLabs Flash
+ * (the same voice, rendered in a fraction of the time) instead of the model picked for the briefing.
  */
-export async function synthesize({ text, lang = 'en', openaiVoice, elevenVoice }) {
+export async function synthesize({ text, lang = 'en', openaiVoice, elevenVoice, fast = false }) {
   const pref = getSetting('voice');
   const engine = ttsEngine(pref);
   if (!engine) throw new HttpError(503, 'No voice on the server yet: set ELEVENLABS_API_KEY (or OPENAI_API_KEY)');
-  const eleven = elevenChoice({ ...pref, ...(elevenVoice ? { elevenVoice } : {}) });
+  const eleven = elevenChoice({ ...pref, ...(elevenVoice ? { elevenVoice } : {}), ...(fast ? { elevenModel: FAST_ELEVEN_MODEL } : {}) });
   const oaVoice = OPENAI_VOICES.includes(openaiVoice) ? openaiVoice : OPENAI_VOICES.includes(pref.voice) ? pref.voice : 'marin';
   const id = engine === 'elevenlabs' ? `elevenlabs|${eleven.model}|${eleven.voiceId}` : `openai|${oaVoice}`;
   const key = createHash('sha256').update(id + '|' + lang + '|' + text).digest('hex').slice(0, 40);

@@ -8,6 +8,7 @@ import { elevenVoices, elevenAccount, ELEVEN_MODELS } from '../voice/eleven.js';
 import { briefingScript } from '../jobs/briefing.js';
 import { worldScript } from '../jobs/news.js';
 import { linaTurn } from '../voice/lina.js';
+import { warmQuick, quickFor } from '../agent/runner.js';
 
 export const voice = new Hono();
 
@@ -31,13 +32,15 @@ voice.post('/voice/tts', async c => {
   if (!text.trim()) throw new HttpError(400, 'No text');
   const out = await synthesize({
     text, lang: b.lang === 'de' ? 'de' : 'en', openaiVoice: b.voice,
-    elevenVoice: typeof b.elevenVoice === 'string' ? b.elevenVoice : undefined
+    elevenVoice: typeof b.elevenVoice === 'string' ? b.elevenVoice : undefined,
+    fast: b.fast === true && quickFor('voice')                       // Lina's spoken replies in quick mode
   });
   return mp3(c, out);
 });
 
-/* "Hey Lina, …": one spoken exchange without streaming, for the phone's wake word / assistant button and the desktop.
-   Query: conversationId (follow-ups), awaiting (comma-separated action ids Lina just asked yes/no about), wake=1. */
+/* One spoken exchange in one request (speech in, answer + voice out), for "Hey Lina" on the phone and the desktop and
+   for push-to-talk. Query: conversationId (follow-ups), awaiting (comma-separated action ids Lina just asked yes/no
+   about), wake=1, context=briefing|world (what Kevin just listened to). */
 voice.post('/voice/turn', async c => {
   const type = c.req.header('Content-Type') || 'audio/wav';
   const buf = Buffer.from(await c.req.arrayBuffer());
@@ -46,7 +49,14 @@ voice.post('/voice/turn', async c => {
   const q = c.req.query();
   const conversationId = /^conv_\w+$/.test(q.conversationId || '') ? q.conversationId : null;
   const awaiting = String(q.awaiting || '').split(',').filter(id => /^act_\w+$/.test(id)).slice(0, 5);
-  return c.json(await linaTurn({ audio: buf, type, conversationId, awaiting, viaWake: q.wake === '1' }));
+  const context = ['briefing', 'world'].includes(q.context) ? q.context : null;
+  return c.json(await linaTurn({ audio: buf, type, conversationId, awaiting, viaWake: q.wake === '1', context }));
+});
+
+/* Kevin started talking to Lina: get the model ready (prompt cache, connection) while he speaks. Returns at once. */
+voice.post('/voice/warm', c => {
+  warmQuick().catch(() => {});
+  return c.json({ ok: true });
 });
 
 /* The 30-second spoken briefing and world summary, rendered from the server's own script (with delivery directions)

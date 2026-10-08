@@ -1,5 +1,6 @@
 // Claude access for every server feature: usage logging, a monthly budget, structured JSON outputs.
-// main = claude-sonnet-5-5 (writing, agent), fast = claude-haiku-4-5 (classification). See config.js.
+// main = claude-sonnet-5-5 (writing, agent), fast = claude-haiku-4-5 (classification), voice = claude-haiku-5-5 (Lina
+// spoken turns). See config.js.
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { config } from '../config.js';
@@ -11,7 +12,7 @@ export const client = config.anthropicKey ? new Anthropic({ apiKey: config.anthr
 export const MODELS = config.models;
 
 // USD per million tokens [input, output]; cache reads 0.1x input, cache writes 1.25x input.
-const PRICES = { 'claude-sonnet-5-5': [2, 10], 'claude-haiku-4-5': [1, 5], 'claude-opus-5-5': [4, 20] };
+const PRICES = { 'claude-sonnet-5-5': [2, 10], 'claude-haiku-4-5': [1, 5], 'claude-haiku-5-5': [0.1, 0.5], 'claude-opus-5-5': [4, 20] };
 const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 
 export class BudgetError extends Error {}
