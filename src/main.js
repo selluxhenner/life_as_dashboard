@@ -305,6 +305,13 @@ async function start() {
   onShellEvent('os://shown', openWindow);
   // The first click or key ends the render hold, so the user's own changes show at once.
   for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => holdRenders(0), { capture: true });
+  // Ctrl+R replays the clock's intro instead of reloading the page; Ctrl+Shift+R still hard-reloads.
+  window.addEventListener('keydown', e => {
+    if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'r' || phase !== 'open') return;
+    e.preventDefault();
+    replayIntro();
+    render(true);
+  });
 
   if (!launch) {
     showView();
