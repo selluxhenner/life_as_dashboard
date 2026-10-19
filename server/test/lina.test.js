@@ -245,7 +245,7 @@ test('thinking ahead: what Kevin said up to a pause is transcribed and voiced ea
 test('a pause in the middle of a request is not the end: the app hears whether the sentence is finished', async () => {
   setSetting('lina', { people: [], quick: true, instant: true });
   const { finished } = await import('../src/voice/lina.js');
-  for (const s of ['', 'add a task.', 'Add a new task', 'remind me to', 'Erinnere mich', 'füge einen Termin', 'add milk and', 'move the dentist to'])
+  for (const s of ['', 'add a task.', 'Add a new task', 'remind me to', 'Erinnere mich', 'füge einen Termin', 'add milk and', 'move the dentist to', 'Can you tell me-'])
     assert.equal(finished(s), false, s);
   for (const s of ['add a task buy some groceries for tomorrow', 'Add buy milk.', 'what\'s on tomorrow?', 'Did Max write me?', 'neue Aufgabe Wäsche waschen'])
     assert.equal(finished(s), true, s);
@@ -268,6 +268,12 @@ test('live transcription: the app gets a single-use token, sends the words, and 
   // half a request: he is still talking, nothing to voice yet
   let p = (await api('POST', '/api/voice/prepare', { text: 'Hey Lina, add a task.' })).body;
   assert.deepEqual([p.heard, p.finished], ['add a task.', false]);
+  // live transcripts with full-width punctuation are read like any other
+  p = (await api('POST', '/api/voice/prepare', { text: 'Hey, Lena。' })).body;
+  assert.deepEqual([p.heard, p.finished], ['', false]);
+  p = (await api('POST', '/api/voice/prepare', { text: 'Hey, Lena。 Can you tell me what are my open tasks right now？' })).body;
+  assert.deepEqual([p.heard, p.finished], ['Can you tell me what are my open tasks right now?', true]);
+  tts.length = 0;
   // the whole request: known at once, and its answer is voiced ahead
   p = (await api('POST', '/api/voice/prepare', { text: 'Hey Lina, add a task. Feed the cat tomorrow.' })).body;
   assert.equal(p.finished, true);

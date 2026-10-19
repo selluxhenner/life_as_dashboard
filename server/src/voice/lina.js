@@ -24,6 +24,8 @@ export function voiceContext(kind) {
 /* "Hey Lina," / "Hoi Lina" / "Hallo Leena" at the start of a transcript (the phone sends the wake word along). */
 const WAKE = /^\s*(?:(?:hey|hi|hoi|hallo|hello|okay|ok|he|hej)[\s,!.]+)?l(?:i|ee|e|ea|y)n+a\b[\s,!.:;-]*/i;
 export const stripWake = text => String(text || '').replace(WAKE, '').trim();
+/* Live transcription sometimes writes full-width punctuation ("Hey, Lena。", "right now？"): plain ASCII for everything after. */
+export const cleanTranscript = text => String(text || '').normalize('NFKC').replace(/[。｡]/g, '.').replace(/\s+/g, ' ').trim();
 /* The phone's keyword spotter errs on the side of waking up; the transcript has the last word. "Hey Linda" is not her. */
 export const saidLina = text => /^\W*(?:[\p{L}']+[\s,!.]+){0,3}l(?:i|ee|e|ea|y)n+a\b/iu.test(String(text || ''));
 
@@ -100,7 +102,7 @@ export function prepareTurn({ audio, type, text }) {
   for (const [k, p] of prepared) if (Date.now() - p.at > PREPARED_MS) prepared.delete(k);
   const id = uid('prep_');
   const t0 = Date.now();
-  const raw = text != null ? Promise.resolve(String(text)) : transcribe(audio, type);
+  const raw = (text != null ? Promise.resolve(String(text)) : transcribe(audio, type)).then(cleanTranscript);
   prepared.set(id, { at: t0, raw });
   raw.then(said => {
     const heard = stripWake(said);
@@ -118,7 +120,9 @@ export const hasPrepared = id => prepared.has(id);
 const OPEN_END = /\b(and|und|or|oder|to|zu|for|für|with|mit|the|a|an|der|die|das|den|dem|ein|eine|einen|my|mein|meine|meinen|also|dann|then|um|at|on|am|but|aber|called|named|namens|that|dass)$/i;
 const LEAD_ONLY = /^(?:please\s+|bitte\s+|can you\s+|kannst du\s+)?(?:add|create|new|make|remind me(?:\s+to)?|schedule|put|book|move|delete|remove|cancel|mark|rename|change|füge|trag\w*|erstell\w*|erinner\w*(?:\s+mich)?|lösch\w*|verschieb\w*|änder\w*|neue?[rn]?)(?:\s+(?:a|an|the|my|new|another|task|todo|to-do|event|meeting|appointment|reminder|termin|aufgabe|einen?|eine|neue[nr]?|mir|mich))*$/i;
 export function finished(heard) {
-  const t = String(heard || '').replace(/[.,!?;:…\s]+$/u, '').trim();
+  const said = cleanTranscript(heard);
+  if (/[-–—…]$/.test(said)) return false;                         // cut off mid-word: "Can you tell me-"
+  const t = said.replace(/[.,!?;:\s]+$/u, '').trim();
   if (!t || OPEN_END.test(t) || LEAD_ONLY.test(t)) return false; // only "Hey Lina", or a request that is still coming
   return true;
 }
@@ -142,7 +146,7 @@ export async function linaTurn({ audio, type, prepared: prepId, conversationId, 
   const t0 = Date.now();
   const prep = prepId && prepared.get(prepId);
   if (prep) prepared.delete(prepId);
-  const raw = prep ? await prep.raw : await transcribe(audio, type);
+  const raw = prep ? await prep.raw : cleanTranscript(await transcribe(audio, type));
   const t1 = Date.now();
   if (viaWake && !saidLina(raw)) return { heard: '', reply: '', lang: 'en', conversationId, awaiting: [], listen: false, audio: null, falseWake: true };
   const heard = stripWake(raw);
