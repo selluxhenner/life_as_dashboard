@@ -329,3 +329,21 @@ test('Lina by voice: a false wake stays silent, a spoken yes/no decides only the
     await api('POST', '/api/agent/actions/' + other + '/reject');
   } finally { globalThis.fetch = realFetch; config.openaiKey = ''; }
 });
+
+test('voice: /voice/ack serves the short "got it" in both languages, cached after the first time', async () => {
+  const { config } = await import('../src/config.js');
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+  config.openaiKey = 'sk-test';
+  globalThis.fetch = async (url, opts) => (String(url).startsWith('https://api.openai.com/') ? (calls++, new Response(Buffer.from('ID3-ack-' + calls))) : realFetch(url, opts));
+  try {
+    for (const q of ['lang=en&n=0', 'lang=de&n=1']) {
+      const r = await api('GET', '/api/voice/ack?' + q);
+      assert.equal(r.status, 200);
+      assert.equal(r.headers.get('content-type'), 'audio/mpeg');
+    }
+    const n = calls;
+    assert.equal((await api('GET', '/api/voice/ack?lang=en&n=0')).headers.get('x-voice-cached'), '1');
+    assert.equal(calls, n);
+  } finally { globalThis.fetch = realFetch; config.openaiKey = ''; }
+});

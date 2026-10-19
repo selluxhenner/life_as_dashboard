@@ -271,6 +271,21 @@ function linaDesktop() {
     h('div.set-sep'));
 }
 
+/* Obsidian: the server reads Kevin's vault (OBSIDIAN_VAULT in its .env); "Check" runs a real read/write check there. */
+function vaultRow() {
+  const r = remote('vaultStatus', '/api/vault/status', 60000);
+  const v = r.data;
+  const check = async () => {
+    try { await refresh('vaultStatus', '/api/vault/status'); toast('Vault checked', 'pulse'); } catch (e) { toast(errorText(e), 'flare'); }
+  };
+  const hint = !v ? 'Checking…'
+    : !v.connected ? v.reason + '. Set OBSIDIAN_VAULT to the vault folder on the machine the server runs on, then restart it.'
+    : `${v.notes} notes found${v.readable ? `, read ${v.sample}` : ''}${v.writable ? ', writable' : ', but read-only'}. Lina can search, read and add notes (never overwrite).`;
+  return row('Obsidian vault', hint,
+    h('div.input-row', v ? chip(v.connected ? (v.writable ? 'connected' : 'read-only') : 'not connected', v.connected && v.writable ? 'ok' : 'warn') : null,
+      btn('Check', check, 'sm ghost')));
+}
+
 function linaPanel() {
   if (native && !watchingNative) { watchingNative = true; onNativeStatus(() => notify()); }
   const { data, connected } = remote('serverSettings', '/api/settings', 5 * 60000);
@@ -304,6 +319,8 @@ function linaPanel() {
         ? 'The usual ones skip the model and answer right away: “add dentist tomorrow at 3”, “move the dentist to 4”, “cancel the dentist”, “add task buy milk”, “mark gym as done”, “delete the gym task”, “give me an overview”. Anything else goes to Lina as before.'
         : 'Off: every spoken command goes to the model.',
         toggle(lina.instant !== false, v => patchLina({ instant: v }), 'Instant commands')) : null,
+      h('div.set-sep'),
+      vaultRow(),
       h('div.set-sep'),
       h('div.title', { style: { margin: '4px 0 6px' } }, 'People Lina knows'),
       people.length ? h('div.rows', people.map(p => h('div.row',

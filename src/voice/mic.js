@@ -9,6 +9,8 @@ export const END_MS = 600, PAUSE_MS = 250;
 // finished() says whether what he said so far is a whole request (the server read it at the pause): true ends the turn
 // at FINISHED_MS, false ("Hey Lina, add a task.") waits for the rest up to OPEN_MS, null (not read yet) up to UNSURE_MS.
 export const FINISHED_MS = 450, UNSURE_MS = 1200, OPEN_MS = 2500;
+// After this much talking he may be explaining something and just thinking between sentences: wait longer.
+export const LONG_SPEECH_MS = 5000, LONG_MS = 1800;
 
 /** Opens the microphone. close() releases it (the browser's mic indicator goes off). */
 export async function openMic() {
@@ -58,12 +60,12 @@ function wav(parts, n) {
 
 /**
  * One turn: resolves to the WAV of what he said, or null when he said nothing within waitMs. mic.stop() ends it now
- * (the Send button). At most 25 s, like the phone.
+ * (the Send button). At most 3 minutes, like the phone.
  */
-export function record(mic, { waitMs = 8000, maxMs = 25000, onPause, onResume, onSpeech, onAudio, finished } = {}) {
+export function record(mic, { waitMs = 8000, maxMs = 180000, onPause, onResume, onSpeech, onAudio, finished } = {}) {
   return new Promise(resolve => {
     const parts = [];
-    let n = 0, floor = 250, speech = false, quiet = 0, ms = 0, paused = false, over = false;
+    let n = 0, floor = 250, speech = false, quiet = 0, ms = 0, talk = 0, paused = false, over = false;
     const done = () => {
       if (over) return;
       over = true; mic.sink = null; mic.stop = null;
@@ -79,6 +81,7 @@ export function record(mic, { waitMs = 8000, maxMs = 25000, onPause, onResume, o
       let sum = 0;
       for (let i = 0; i < s.length; i++) sum += s[i] * s[i];
       const rms = Math.sqrt(sum / (s.length || 1));
+      if (speech) talk += dur;
       if (rms > Math.max(600, floor * 2.5)) {
         if (!speech) onSpeech?.();
         speech = true; quiet = 0;
@@ -90,7 +93,7 @@ export function record(mic, { waitMs = 8000, maxMs = 25000, onPause, onResume, o
       if (speech && !paused && quiet >= PAUSE_MS && quiet < END_MS) { paused = true; onPause?.(wav(parts, n)); }
       if (speech && quiet >= FINISHED_MS) {
         const f = finished ? finished() : undefined;              // no finished(): the plain rule, END_MS of quiet
-        const need = f === undefined ? END_MS : f === true ? FINISHED_MS : f === false ? OPEN_MS : UNSURE_MS;
+        const need = talk >= LONG_SPEECH_MS ? (f === false ? OPEN_MS : LONG_MS) : f === undefined ? END_MS : f === true ? FINISHED_MS : f === false ? OPEN_MS : UNSURE_MS;
         if (quiet >= need) return done();
       }
       if ((!speech && ms >= waitMs) || ms >= maxMs) done();

@@ -29,6 +29,8 @@ export const config = {
   elevenVoice: e.ELEVENLABS_VOICE_ID || '',
   elevenApi: (e.ELEVENLABS_API_URL || 'https://api.elevenlabs.io').replace(/\/+$/, ''),   // override only for tests / EU residency
   aaKey: e.AA_API_KEY || '',
+  // Kevin's Obsidian vault on this machine (folder of markdown); empty = not connected
+  obsidian: { vault: e.OBSIDIAN_VAULT || '', exclude: (e.OBSIDIAN_EXCLUDE || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean) },
   twilio: { sid: e.TWILIO_ACCOUNT_SID || '', token: e.TWILIO_AUTH_TOKEN || '', from: e.TWILIO_FROM || '' },
   ntfy: { url: (e.NTFY_URL || 'https://ntfy.sh').replace(/\/+$/, ''), topic: e.NTFY_TOPIC || '' },
   fcmCredentials: ''                     // set below, once dataDir is known

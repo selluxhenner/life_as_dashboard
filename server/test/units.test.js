@@ -159,3 +159,26 @@ test('Lina: wake words are stripped, short yes/no answers are recognised in Engl
   assert.equal(guessLang('Ich habe das Meeting um 15 Uhr eingetragen. Soll ich die Einladung schicken?'), 'de');
   assert.equal(guessLang('I put the meeting at 3 pm on your calendar. Shall I send the invite?'), 'en');
 });
+
+import { mkdirSync as mk, writeFileSync as wf, readFileSync as rf } from 'node:fs';
+import { config as cfg } from '../src/config.js';
+import { searchVault, readNote, writeNote } from '../src/connectors/obsidian.js';
+
+test('obsidian vault: search, read, safe writes', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'vault-'));
+  mk(join(dir, '03 Projekte')); mk(join(dir, '.obsidian'));
+  wf(join(dir, 'Home.md'), 'Welcome to [[Dashboard]]');
+  wf(join(dir, '03 Projekte', 'Dashboard.md'), 'Life dashboard with Lina');
+  wf(join(dir, '.obsidian', 'x.md'), 'secret lina');
+  cfg.obsidian.vault = dir;
+  assert.equal(searchVault('lina').length, 1);
+  assert.equal(readNote('Dashboard').path, '03 Projekte/Dashboard.md');
+  assert.deepEqual(readNote('Home').links, ['Dashboard']);
+  assert.throws(() => writeNote({ path: '../evil.md', content: 'x' }), /outside|off limits/);
+  assert.throws(() => writeNote({ path: '.obsidian/a.md', content: 'x' }), /off limits/);
+  assert.throws(() => writeNote({ path: 'Home.md', content: 'x' }), /already exists/);
+  writeNote({ path: 'Home.md', content: 'more', append: true });
+  assert.match(rf(join(dir, 'Home.md'), 'utf8'), /Dashboard\]\]\n\nmore\n$/);
+  assert.equal(writeNote({ path: 'New/Idea', content: 'hi' }).created, true);
+  cfg.obsidian.vault = '';
+});

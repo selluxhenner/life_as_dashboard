@@ -65,6 +65,24 @@ final class Server {
         } finally { c.disconnect(); }
     }
 
+    /** A binary GET (a short mp3), or null when the server has none. */
+    static byte[] getBytes(Prefs p, String path) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(p.url().replaceAll("/+$", "") + path).openConnection();
+        try {
+            c.setConnectTimeout(8000);
+            c.setReadTimeout(20000);
+            c.setRequestProperty("Authorization", "Bearer " + p.token());
+            int code = c.getResponseCode();
+            if (code == 401) throw new AuthException();
+            if (code >= 400) return null;
+            try (InputStream is = c.getInputStream(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                byte[] buf = new byte[8192];
+                for (int n; (n = is.read(buf)) > 0; ) out.write(buf, 0, n);
+                return out.toByteArray();
+            }
+        } finally { c.disconnect(); }
+    }
+
     private static String read(InputStream in) throws IOException {
         if (in == null) return "";
         try (InputStream is = in; ByteArrayOutputStream out = new ByteArrayOutputStream()) {

@@ -12,7 +12,7 @@ import { runSync } from '../core/sync.js';
 import { speak, stopSpeaking } from './tts.js';
 import { canRecord } from './stt.js';
 import { openMic, record } from './mic.js';
-import { voiceTurn, prepareTurn, prepareText, preparedFinished, warmLina } from './turn.js';
+import { voiceTurn, prepareTurn, prepareText, preparedFinished, preparedVoice, warmLina } from './turn.js';
 import { openLive } from './live.js';
 import { chatConversationId, logVoiceExchange } from '../views/assistant.js';
 
@@ -50,6 +50,14 @@ export async function cancelTalk() {
   set({ state: 'idle', heard: '', reply: '', source: null });
 }
 
+/* Speaks a reply (base64 mp3 from the server when there is one) and resolves when it ends or is stopped. */
+function say(text, lang, audio) {
+  return new Promise(done => {
+    endSpeech = () => { endSpeech = null; done(); };
+    speak(text, () => endSpeech && endSpeech(), { what: 'talk', lang, audioData: audio || undefined, onBlocked: () => endSpeech && endSpeech() });
+  });
+}
+
 function closeMic() {
   if (!mic) return;
   if (mic.stop) mic.stop();
@@ -84,8 +92,9 @@ async function converse(context) {
       tick('open');
       set({ state: 'listening', heard: '', reply: '' });
       live?.reset();
-      // think ahead while we make sure he's done; the server also says whether the sentence was finished
-      let prep = null, done = null;
+      // think ahead while we make sure he's done; the server also says whether the sentence was finished, and
+      // ahead is the answer it expects if this pause is the end, with its voice (spoken the moment he stops)
+      let prep = null, done = null, ahead = null;
       const wav = await record(mic, {
         waitMs: turn ? NEXT_WAIT : FIRST_WAIT,
         onAudio: pcm => { if (live && live.ok) live.send(pcm); else if (early) early.push(pcm); },
@@ -94,34 +103,50 @@ async function converse(context) {
           if (live && live.ok) {                                  // the words are already there: send them, not audio
             const p = live.commit().then(text => (text ? prepareText(text) : null));
             const mine = prep = p.then(x => x && x.id);
-            p.then(x => { if (prep === mine) done = x ? x.finished : true; });
+            p.then(x => {
+              if (prep !== mine) return;
+              done = x ? x.finished : true;
+              if (x && x.finished && x.say) ahead = { id: x.id, text: x.say, lang: x.lang, heard: x.heard, audio: preparedVoice(x.id) };
+            });
             return;
           }
           const p = prep = prepareTurn(soFar);
           p.then(id => (id ? preparedFinished(id) : true)).then(f => { if (prep === p) done = f; });
         },
-        onResume: () => { prep = null; done = null; },          // he went on: what was sent is out of date
+        onResume: () => { prep = null; done = null; ahead = null; },   // he went on: what was sent is out of date
         finished: () => (prep ? done : true)
       });
       if (my !== run) return;
       if (!wav) { if (!turn) toast('Didn’t catch that. Tap and try again.', 'amber'); break; }
       set({ state: 'thinking' });
       const opts = { type: 'audio/wav', conversationId: chatConversationId(), context, awaiting: Date.now() - awaiting.at < 10 * 60000 ? awaiting.ids : '' };
+      const id = prep ? await prep : null;
+      // "Zack, zack": the expected answer is already voiced, so she says it now while the turn saves the change
+      const said = ahead && ahead.id === id ? await Promise.race([ahead.audio, new Promise(r => setTimeout(() => r(null), 1500))]) : null;   // never later than the turn, which waits for the same voice
+      const pending = voiceTurn(wav, { ...opts, prepared: id });
+      pending.catch(() => {});
+      if (said) {
+        last = { heard: ahead.heard, reply: ahead.text };
+        set({ state: 'speaking', ...last });
+        await say(ahead.text, ahead.lang, said);
+        if (my !== run) return;
+      }
       let r;
-      try { r = await voiceTurn(wav, { ...opts, prepared: prep ? await prep : null }); }
+      try { r = await pending; }
       catch (e) { if (my === run) toast(e.message, 'flare'); break; }
       if (my !== run) return;
       logVoiceExchange(r);
       if (r.tools && r.tools.length) runSync();                    // what she changed shows up right away
       awaiting = { ids: (r.awaiting || []).map(a => a.id).join(','), at: Date.now() };
+      if (said) {
+        if (r.reply === ahead.text) continue;                     // it went as she said: listen again
+        set({ state: 'thinking' });                               // it didn't (a calendar error …): say what happened
+      }
       if (!r.heard) { if (!turn) toast('Didn’t catch that. Tap and try again.', 'amber'); break; }
       if (!r.reply) { set({ heard: r.heard }); continue; }
       last = { heard: r.heard, reply: r.reply };
       set({ state: 'speaking', ...last });
-      await new Promise(done => {
-        endSpeech = () => { endSpeech = null; done(); };
-        speak(r.reply, () => endSpeech && endSpeech(), { what: 'talk', lang: r.lang, audioData: r.audio || undefined, onBlocked: () => endSpeech && endSpeech() });
-      });
+      await say(r.reply, r.lang, r.audio);
     }
   } finally {
     live?.close(); early = null;

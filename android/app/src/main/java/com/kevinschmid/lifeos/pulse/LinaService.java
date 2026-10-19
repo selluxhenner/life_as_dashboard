@@ -46,9 +46,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.net.URLEncoder;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Lina, hands-free. A microphone foreground service that, while the phone is unlocked, listens on the phone for
@@ -66,7 +70,11 @@ public class LinaService extends Service {
     private static final String TAG = "Lina";
     private static final int RATE = Wake.RATE, FRAME = RATE / 10;           // 100 ms
     private static final int PRE_ROLL = RATE * 3 / 2;                         // "Hey Lina" goes up with the question
-    private static final int END_MS = 800;                                    // this much quiet ends what he says
+    // Quiet that ends what he says. A short command ends fast once the server has read it as a whole request; after a
+    // longer stretch of talking he may just be thinking, so she waits longer.
+    private static final int END_MS = 800, FINISHED_MS = 450, UNSURE_MS = 1200, OPEN_MS = 2500, LONG_MS = 1800, LONG_DONE_MS = 900, LONG_SPEECH_MS = 5000;
+    private static final int ACK_MIN_MS = 4000;                               // after this much talking she says "Okay, got it" at once
+    private static final int PAUSE_MS = 250;                                  // at this much quiet the words so far go up
     private static volatile boolean alive;
 
     private final Object gate = new Object();
@@ -266,30 +274,46 @@ public class LinaService extends Service {
      */
     private void converse(Source rec, short[] pre, Prefs prefs) throws InterruptedException {
         warm(prefs);
+        Live live = new Live();
+        openLive(live, prefs);                                           // connects while the first turn starts
+        try { converseTurns(rec, pre, prefs, live); } finally { live.close(); }
+        setState("idle");
+    }
+
+    private void converseTurns(Source rec, short[] pre, Prefs prefs, Live live) throws InterruptedException {
         String cid = prefs.linaConversation();
         String awaiting = "";
         for (int turn = 0; turn < 6 && running; turn++) {
             cue(turn == 0);
             setState("listening");
-            byte[] speech = record(rec, pre, pre != null ? 5000 : 7000);
+            Prep prep = new Prep();
+            live.reset();
+            byte[] speech = record(rec, pre, pre != null ? 5000 : 7000, prep, prefs, live);
             if (speech == null) {                                    // he said nothing (more)
                 if (pre == null && turn == 0) reply(getString(R.string.lina_label), "Didn't hear anything. Try again.", null, null);
                 break;
             }
             setState("thinking");
+            Thread ack = prep.talkMs >= ACK_MIN_MS && live.on() ? ack(guessLang(live.stt.text())) : null;   // spoken while the answer is worked out
             JSONObject r;
             try {
-                String q = "?wake=" + (pre != null ? "1" : "0")
+                String q = "?wake=" + (pre != null ? "1" : "0") + (ack != null ? "&acked=1" : "")
                     + (cid.isEmpty() ? "" : "&conversationId=" + URLEncoder.encode(cid, "UTF-8"))
                     + (awaiting.isEmpty() ? "" : "&awaiting=" + URLEncoder.encode(awaiting, "UTF-8"));
-                r = Server.postAudio(prefs, "/api/voice/turn" + q, wav(speech), "audio/wav");
+                String pid = prep.id;
+                if (pid != null) {
+                    try { r = Server.postAudio(prefs, "/api/voice/turn" + q + "&prepared=" + URLEncoder.encode(pid, "UTF-8"), new byte[0], "audio/wav"); }
+                    catch (java.io.IOException gone) { r = Server.postAudio(prefs, "/api/voice/turn" + q, wav(speech), "audio/wav"); }   // expired: send the audio
+                } else r = Server.postAudio(prefs, "/api/voice/turn" + q, wav(speech), "audio/wav");
             } catch (Exception e) {
+                joinAck(ack);
                 Log.w(TAG, "turn failed", e);
                 String msg = e.getMessage() == null ? "Lina couldn't reach your server." : e.getMessage();
                 reply("Lina couldn't answer", msg, null, null);
                 speakLocal("Sorry, I couldn't reach your server.", "en");
                 break;
             }
+            joinAck(ack);                                                // her answer follows right after the acknowledgement
             if (r.optBoolean("falseWake")) { Log.i(TAG, "not for Lina"); break; }
             cid = r.optString("conversationId", cid);
             if (!cid.isEmpty()) prefs.setLinaConversation(cid);
@@ -304,7 +328,91 @@ public class LinaService extends Service {
             pre = null;
             rec.flush();                                               // drop what the mic caught while she spoke
         }
-        setState("idle");
+    }
+
+    /** Live transcription for one conversation: audio waits in `early` until the connection is up, then streams. */
+    private static final class Live {
+        volatile LiveStt stt;
+        volatile boolean failed, closed;
+        List<short[]> early = new ArrayList<>();
+        volatile long peekAt;
+        volatile String peeked = "";
+        void feed(short[] buf, int n) {
+            short[] copy = java.util.Arrays.copyOf(buf, n);
+            LiveStt l = stt;
+            if (l != null) {
+                List<short[]> e;
+                synchronized (this) { e = early; early = null; }
+                if (e != null) for (short[] c : e) l.send(c, c.length);
+                l.send(copy, n);
+            } else if (!failed) synchronized (this) { if (early != null && early.size() < 600) early.add(copy); }
+        }
+        boolean on() { LiveStt l = stt; return l != null && l.ok(); }
+        void reset() { LiveStt l = stt; if (l != null) l.reset(); peeked = ""; }
+        void close() { closed = true; LiveStt l = stt; if (l != null) l.close(); }
+    }
+
+    /* ---------- the instant acknowledgement ---------- */
+
+    private static final Pattern DE = Pattern.compile("\\b(ich|du|und|ist|nicht|das|der|die|mit|für|habe|hab|noch|auch|dann|morgen|heute|bitte|kannst|mach|muss|soll|wir|mein|meine)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern EN = Pattern.compile("\\b(i|you|and|is|not|the|that|with|for|have|also|then|tomorrow|today|please|can|make|need|should|we|my)\\b", Pattern.CASE_INSENSITIVE);
+
+    private static String guessLang(String text) {
+        int de = 0, en = 0;
+        Matcher d = DE.matcher(text), e = EN.matcher(text);
+        while (d.find()) de++;
+        while (e.find()) en++;
+        return de > en ? "de" : "en";
+    }
+
+    /** Starts "Okay, got it." (the server's voice, kept on the phone) and returns the thread playing it; null without a file. */
+    private Thread ack(String lang) {
+        List<File> have = new ArrayList<>();
+        for (int i = 0; i < 2; i++) { File f = new File(getFilesDir(), "lina-ack2-" + lang + "-" + i + ".mp3"); if (f.length() > 0) have.add(f); }
+        if (have.isEmpty()) return null;
+        File f = have.get((int) (Math.random() * have.size()));
+        Thread t = new Thread(() -> playFile(f), "lina-ack");
+        t.start();
+        return t;
+    }
+
+    private static void joinAck(Thread t) { if (t != null) try { t.join(6000); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); } }
+
+    /** Keeps the acknowledgements on the phone: fetched once (a few seconds of audio each), so they start without delay. */
+    private void fetchAcks(Prefs prefs) {
+        new Thread(() -> {
+            for (String lang : new String[] { "en", "de" }) for (int i = 0; i < 2; i++) {
+                File f = new File(getFilesDir(), "lina-ack2-" + lang + "-" + i + ".mp3");
+                if (f.length() > 0) continue;
+                try {
+                    byte[] b = Server.getBytes(prefs, "/api/voice/ack?lang=" + lang + "&n=" + i);
+                    if (b != null && b.length > 500) try (FileOutputStream os = new FileOutputStream(f)) { os.write(b); }
+                } catch (Exception ignored) { /* next time */ }
+            }
+        }, "lina-acks").start();
+    }
+
+    private void openLive(Live live, Prefs prefs) {
+        fetchAcks(prefs);
+        new Thread(() -> {
+            try {
+                JSONObject t = Server.post(prefs, "/api/voice/live-token", new JSONObject());
+                LiveStt l = LiveStt.open(t.optString("url") + "?model_id=scribe_v2_realtime&audio_format=pcm_16000&commit_strategy=manual&token="
+                    + URLEncoder.encode(t.optString("token"), "UTF-8"), 2500, all -> peek(live, all, prefs));
+                if (l == null || live.closed) { if (l != null) l.close(); live.failed = true; return; }
+                live.stt = l;
+            } catch (Exception e) { live.failed = true; }       // no ElevenLabs key or no connection: recordings go up as before
+        }, "lina-live-open").start();
+    }
+
+    /** Thinking while he talks: words that may already be the whole request get their answer voiced ahead. */
+    private void peek(Live live, String all, Prefs prefs) {
+        long now = System.currentTimeMillis();
+        if (all.equals(live.peeked) || now - live.peekAt < 400 || all.trim().split("\\s+").length < 3) return;
+        live.peeked = all; live.peekAt = now;
+        new Thread(() -> {
+            try { Server.post(prefs, "/api/voice/prepare", new JSONObject().put("text", all)); } catch (Exception ignored) { /* only a head start */ }
+        }, "lina-peek").start();
     }
 
     /** Lets the server get Lina's model ready while Kevin is still talking, so the first answer comes sooner. */
@@ -314,33 +422,86 @@ public class LinaService extends Service {
         }, "lina-warm").start();
     }
 
+    /** What the server made of the words so far: set from a background thread at each short pause. */
+    private static final class Prep {
+        volatile String id;
+        volatile int finished = -1;                                            // -1 not known yet, 0 no, 1 yes
+        volatile int gen;
+        volatile int talkMs;
+        void reset() { gen++; id = null; finished = -1; }
+    }
+
+    /** The same with the live words (no upload, no waiting for speech-to-text): the answer comes back at once. */
+    private void prepareText(Prep prep, Live live, Prefs prefs) {
+        final int gen = ++prep.gen;
+        new Thread(() -> {
+            try {
+                String text = live.stt.commit(800);
+                if (text.trim().isEmpty() || prep.gen != gen) return;
+                JSONObject j = Server.post(prefs, "/api/voice/prepare", new JSONObject().put("text", text));
+                if (prep.gen != gen) return;
+                prep.id = j.optString("id", null);
+                prep.finished = j.optBoolean("finished", true) ? 1 : 0;
+            } catch (Exception ignored) { /* the turn sends the audio itself */ }
+        }, "lina-prepare-live").start();
+    }
+
+    /** At a short pause the audio so far goes up (/voice/prepare): the server transcribes it, plans and voices the likely
+        answer, and says whether it was a whole request, while the phone makes sure he is done. */
+    private void prepare(Prep prep, byte[] pcm, Prefs prefs) {
+        final int gen = ++prep.gen;
+        new Thread(() -> {
+            try {
+                JSONObject j = Server.postAudio(prefs, "/api/voice/prepare", wav(pcm), "audio/wav");
+                String id = j.optString("id", "");
+                if (id.isEmpty() || prep.gen != gen) return;
+                prep.id = id;
+                JSONObject st = Server.get(prefs, "/api/voice/prepare/" + URLEncoder.encode(id, "UTF-8"));
+                if (prep.gen == gen) prep.finished = st.optBoolean("finished", true) ? 1 : 0;
+            } catch (Exception ignored) { /* only a head start: the turn sends the audio itself */ }
+        }, "lina-prepare").start();
+    }
+
     /**
-     * Records until Kevin pauses: ends 0.8 s after the last speech, or after `waitMs` if he never starts, at most 25 s.
-     * A simple energy detector with a moving noise floor; the pre-roll is sent along but doesn't count as the start.
+     * Records until Kevin is done: ends after a pause that fits what he said (see the constants), or after `waitMs` if
+     * he never starts, with no time limit. A simple energy detector with a moving noise floor; the pre-roll is sent along but
+     * doesn't count as the start.
      */
-    private byte[] record(Source rec, short[] pre, int waitMs) {
+    private byte[] record(Source rec, short[] pre, int waitMs, Prep prep, Prefs prefs, Live live) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        if (pre != null) writePcm(out, pre, pre.length);
+        if (pre != null) { writePcm(out, pre, pre.length); live.feed(pre, pre.length); }
         short[] buf = new short[FRAME];
         double floor = 250;
-        boolean speech = false;
-        int quietMs = 0, ms = 0;
-        while (running && ms < 25000) {
+        boolean speech = false, paused = false;
+        int quietMs = 0, ms = 0, talkMs = 0;
+        while (running) {                                                   // no time limit: it ends when he stops talking
             int n = rec.read(buf, 0, FRAME);
             if (n <= 0) continue;
-            ms += n * 1000 / RATE;
-            writePcm(out, buf, n);
+            int dur = n * 1000 / RATE;
+            ms += dur;
+            if (out.size() < 11_000_000) writePcm(out, buf, n);       // the upload fallback tops out at the server's 12 MB; his words go as text
+            live.feed(buf, n);
             double sum = 0;
             for (int i = 0; i < n; i++) sum += (double) buf[i] * buf[i];
             double rms = Math.sqrt(sum / n);
-            if (rms > Math.max(600, floor * 2.5)) { speech = true; quietMs = 0; }
-            else {
-                quietMs += n * 1000 / RATE;
+            if (rms > Math.max(600, floor * 2.5)) {
+                speech = true; quietMs = 0;
+                if (paused) { paused = false; prep.reset(); }             // he went on: what was sent is out of date
+            } else {
+                quietMs += dur;
                 floor = floor * 0.95 + rms * 0.05;
             }
+            if (speech) talkMs += dur;
             if (!speech && ms >= waitMs) return null;
-            if (speech && quietMs >= END_MS) break;
+            if (speech && !paused && quietMs >= PAUSE_MS) { paused = true; if (live.on()) prepareText(prep, live, prefs); else prepare(prep, out.toByteArray(), prefs); }
+            if (speech && quietMs >= FINISHED_MS) {
+                int f = prep.finished;
+                int need = talkMs >= LONG_SPEECH_MS ? (f == 0 ? OPEN_MS : f == 1 ? LONG_DONE_MS : LONG_MS)   // a long explanation: he may be thinking
+                    : f == 1 ? FINISHED_MS : f == 0 ? OPEN_MS : prep.id != null || paused ? UNSURE_MS : END_MS;
+                if (quietMs >= need) break;
+            }
         }
+        prep.talkMs = talkMs;
         return speech ? out.toByteArray() : null;
     }
 
@@ -393,6 +554,27 @@ public class LinaService extends Service {
             if (b64.isEmpty()) { speakLocal(text, lang); return; }
             File f = new File(getCacheDir(), "lina-reply.mp3");
             try (FileOutputStream os = new FileOutputStream(f)) { os.write(Base64.decode(b64, Base64.DEFAULT)); }
+            playRaw(f, attrs);
+        } catch (Exception e) {
+            Log.w(TAG, "play failed", e);
+            speakLocal(text, lang);
+        } finally {
+            if (focus != null) am.abandonAudioFocusRequest(focus);
+        }
+    }
+
+    /** Plays a short mp3 (the acknowledgement) with its own audio focus. Blocks until done. */
+    private void playFile(File f) {
+        AudioManager am = getSystemService(AudioManager.class);
+        AudioAttributes attrs = new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build();
+        AudioFocusRequest focus = Build.VERSION.SDK_INT >= 26 ? new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK).setAudioAttributes(attrs).build() : null;
+        if (focus != null) am.requestAudioFocus(focus);
+        try { playRaw(f, attrs); } catch (Exception e) { Log.w(TAG, "ack failed", e); }
+        finally { if (focus != null) am.abandonAudioFocusRequest(focus); }
+    }
+
+    private void playRaw(File f, AudioAttributes attrs) throws Exception {
+        {
             CountDownLatch done = new CountDownLatch(1);
             MediaPlayer mp = new MediaPlayer();
             mp.setAudioAttributes(attrs);
@@ -403,11 +585,6 @@ public class LinaService extends Service {
             mp.start();
             done.await(Math.max(10, mp.getDuration() / 1000 + 5), TimeUnit.SECONDS);
             mp.release();
-        } catch (Exception e) {
-            Log.w(TAG, "play failed", e);
-            speakLocal(text, lang);
-        } finally {
-            if (focus != null) am.abandonAudioFocusRequest(focus);
         }
     }
 

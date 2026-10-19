@@ -7,8 +7,10 @@ import { synthesize, transcribe, ttsEngine, sttEngine, elevenChoice } from '../v
 import { elevenVoices, elevenAccount, elevenRealtimeToken, REALTIME_STT_URL, ELEVEN_MODELS } from '../voice/eleven.js';
 import { briefingScript } from '../jobs/briefing.js';
 import { worldScript } from '../jobs/news.js';
-import { linaTurn, prepareTurn, hasPrepared, preparedState } from '../voice/lina.js';
+import { linaTurn, prepareTurn, hasPrepared, preparedState, preparedVoice } from '../voice/lina.js';
 import { warmQuick, quickFor } from '../agent/runner.js';
+import { accessSync, constants as fsConstants } from 'node:fs';
+import { vaultConnected, vaultRoot, vaultOverview, readNote } from '../connectors/obsidian.js';
 
 export const voice = new Hono();
 
@@ -59,7 +61,7 @@ voice.post('/voice/turn', async c => {
   const conversationId = /^conv_\w+$/.test(q.conversationId || '') ? q.conversationId : null;
   const awaiting = String(q.awaiting || '').split(',').filter(id => /^act_\w+$/.test(id)).slice(0, 5);
   const context = ['briefing', 'world'].includes(q.context) ? q.context : null;
-  return c.json(await linaTurn({ audio: buf, type, prepared, conversationId, awaiting, viaWake: q.wake === '1', context }));
+  return c.json(await linaTurn({ audio: buf, type, prepared, conversationId, awaiting, viaWake: q.wake === '1', context, acked: q.acked === '1' }));
 });
 
 /* Kevin paused (or the live transcript looks like a whole request): what he said so far, thought through ahead;
@@ -90,6 +92,23 @@ voice.get('/voice/prepare/:id', async c => {
   const st = /^prep_\w+$/.test(id) ? await preparedState(id) : null;
   if (!st) throw new HttpError(404, 'Unknown prepared turn');
   return c.json(st);
+});
+
+/* The expected answer's voice (mp3), so the app can speak the moment Kevin stops while the turn saves the change. */
+voice.get('/voice/prepare/:id/voice', async c => {
+  const id = c.req.param('id');
+  const audio = /^prep_\w+$/.test(id) ? await preparedVoice(id) : null;
+  if (!audio) throw new HttpError(404, 'No voice for this turn');
+  return mp3(c, { audio, engine: 'ahead', cached: true });
+});
+
+/* The short acknowledgement the phone plays the moment Kevin stops talking after a long stretch ("Okay, got it.") while the
+   real answer is still being worked out. A few fixed phrases per language, so the audio cache makes it instant. */
+const ACKS = { en: ['Okay, I got you.', 'Alright, I got you.'], de: ['Okay, ich hab dich.', 'Alles klar, ich hab dich.'] };
+voice.get('/voice/ack', async c => {
+  const lang = c.req.query('lang') === 'de' ? 'de' : 'en';
+  const text = ACKS[lang][Number(c.req.query('n')) % ACKS[lang].length || 0];
+  return mp3(c, await synthesize({ text, lang, fast: quickFor('voice') }));
 });
 
 /* Kevin started talking to Lina: get the model ready (prompt cache, connection) while he speaks. Returns at once. */
@@ -126,4 +145,17 @@ voice.get('/voice/voices', async c => {
   if (!config.elevenKey) throw new HttpError(503, 'Set ELEVENLABS_API_KEY on the server to choose an ElevenLabs voice');
   try { return c.json({ voices: await elevenVoices() }); }
   catch (e) { throw new HttpError(502, e.message); }
+});
+
+/* Is the Obsidian vault connected? For Settings › Lina › Obsidian: a real check (folder found, a note read, writable). */
+voice.get('/vault/status', c => {
+  if (!config.obsidian.vault) return c.json({ connected: false, reason: 'OBSIDIAN_VAULT is not set in the server’s .env' });
+  if (!vaultConnected()) return c.json({ connected: false, reason: 'Folder not found on the server: ' + vaultRoot() });
+  try {
+    const o = vaultOverview();
+    const first = o.recent[0] ? readNote(o.recent[0]) : null;
+    let writable = true;
+    try { accessSync(vaultRoot(), fsConstants.W_OK); } catch { writable = false; }
+    return c.json({ connected: true, path: vaultRoot(), notes: o.notes, folders: o.folders, sample: first?.path || null, readable: !!first, writable });
+  } catch (e) { return c.json({ connected: false, reason: e.message }); }
 });

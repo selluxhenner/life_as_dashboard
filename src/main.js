@@ -13,7 +13,7 @@ import { initRouter, onRoute, routeList, go, currentRoute, render, holdRenders }
 import { initSync, onSyncStatus, syncStatus } from './core/sync.js';
 import { initCal } from './core/calendar-sync.js';
 import { applyTheme, onTheme } from './core/theme.js';
-import { platform, windowAction, onMaximized, launchReady, onShellEvent } from './core/platform.js';
+import { platform, isPhone, windowAction, onMaximized, launchReady, onShellEvent } from './core/platform.js';
 import { todayKey, fmt } from './core/dates.js';
 import { createBackdrop } from './components/backdrop.js';
 import { weatherNow, conditionOf } from './core/weather.js';
@@ -120,6 +120,37 @@ function markCurrent() {
   }
   // More lights up like a tab while one of its pages is open
   if (moreBtn) moreBtn.classList.toggle('here', !!id && !currentRoute().dock);
+}
+
+/* Phone: swipe left/right on a page to move to the next/previous page, like tabs in WhatsApp.
+   Ignores swipes that start in fields, sliders, or anything that scrolls sideways itself. */
+function initSwipeNav(el) {
+  let t = null;
+  const blocked = target => {
+    for (let n = target; n && n !== el; n = n.parentElement) {
+      if (n.matches && n.matches('input, textarea, select, canvas, [contenteditable], [data-no-swipe]')) return true;
+      if (n.scrollWidth > n.clientWidth + 4 && /(auto|scroll)/.test(getComputedStyle(n).overflowX)) return true;
+    }
+    return false;
+  };
+  el.addEventListener('touchstart', e => {
+    if (!isPhone() || e.touches.length !== 1 || blocked(e.target)) { t = null; return; }
+    const p = e.touches[0];
+    t = { x: p.clientX, y: p.clientY, at: Date.now() };
+  }, { passive: true });
+  el.addEventListener('touchend', e => {
+    if (!t) return;
+    const p = e.changedTouches[0], dx = p.clientX - t.x, dy = p.clientY - t.y, dt = Date.now() - t.at;
+    t = null;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || dt > 700) return;
+    const pages = routeList().filter(r => r.id !== 'lab' && r.nav !== false);
+    const i = pages.findIndex(r => r.id === (currentRoute() || {}).id);
+    const next = pages[i + (dx < 0 ? 1 : -1)];
+    if (i < 0 || !next) return;
+    go(next.id);
+    const from = dx < 0 ? 40 : -40;
+    el.animate([{ transform: `translateX(${from}px)`, opacity: 0.4 }, { transform: 'none', opacity: 1 }], { duration: 220, easing: 'ease-out' });
+  }, { passive: true });
 }
 
 /* Caption buttons drawn like Windows' own: 10px glyphs on 1px lines. */
@@ -273,6 +304,7 @@ async function start() {
   document.body.prepend(canvas, h('div.vignette'), h('div.grain'));
   document.body.append(h('div.app', rail, statusBar(), mainEl), dock, mountVoicePill());
   if (launch) mountLaunch();
+  initSwipeNav(mainEl);
 
   forgivePenalties();
   settle();
