@@ -53,6 +53,10 @@ globalThis.fetch = async (url, opts = {}) => {
     return sse(body.model, content, content.some(b => b.type === 'tool_use') ? 'tool_use' : 'end_turn');
   }
   if (u.endsWith('/v1/audio/transcriptions')) return (sttCalls++, new Response(JSON.stringify({ text: heard }), { headers: { 'content-type': 'application/json' } }));
+  if (u === 'https://eleven.test/v1/single-use-token/realtime_scribe') {
+    assert.equal(opts.headers['xi-api-key'], 'xi-test');
+    return new Response(JSON.stringify({ token: 'sutkn_test' }), { headers: { 'content-type': 'application/json' } });
+  }
   if (u.startsWith('https://eleven.test/')) {
     tts.push({ path: new URL(u).pathname, body: JSON.parse(opts.body) });
     return new Response(Buffer.from('ID3-lina'));
@@ -253,6 +257,32 @@ test('a pause in the middle of a request is not the end: the app hears whether t
   const { id } = await res.json();
   assert.deepEqual((await api('GET', '/api/voice/prepare/' + id)).body, { heard: 'add a task.', finished: false });
   assert.equal((await api('GET', '/api/voice/prepare/prep_nope')).status, 404);
+});
+
+test('live transcription: the app gets a single-use token, sends the words, and the answer needs no speech-to-text', async () => {
+  setSetting('lina', { people: [], quick: true, instant: true });
+  const tok = await api('POST', '/api/voice/live-token');
+  assert.deepEqual(tok.body, { token: 'sutkn_test', url: 'wss://eleven.test/v1/speech-to-text/realtime' });
+
+  sttCalls = 0; tts.length = 0;
+  // half a request: he is still talking, nothing to voice yet
+  let p = (await api('POST', '/api/voice/prepare', { text: 'Hey Lina, add a task.' })).body;
+  assert.deepEqual([p.heard, p.finished], ['add a task.', false]);
+  // the whole request: known at once, and its answer is voiced ahead
+  p = (await api('POST', '/api/voice/prepare', { text: 'Hey Lina, add a task. Feed the cat tomorrow.' })).body;
+  assert.equal(p.finished, true);
+  await new Promise(r => setTimeout(r, 30));
+  assert.equal(tts.length, 1);
+  assert.equal(db.get("SELECT COUNT(*) n FROM todos WHERE title = 'Feed the cat'").n, 0);   // nothing changed yet
+
+  const r = await app.fetch(new Request('http://test.local/api/voice/turn?prepared=' + p.id, {
+    method: 'POST', headers: { Authorization: 'Bearer test-master-token', 'Content-Type': 'audio/wav' }
+  })).then(x => x.json());
+  assert.equal(r.reply, 'Added “Feed the cat” for tomorrow.');
+  assert.equal(sttCalls, 0);                                              // the app's live transcript was enough
+  assert.equal(tts.length, 1);                                            // the voice from the pause, reused
+  assert.equal(db.get("SELECT COUNT(*) n FROM todos WHERE title = 'Feed the cat'").n, 1);
+  assert.equal((await api('POST', '/api/voice/prepare', { text: ' ' })).status, 400);
 });
 
 test('a lookup or a failed change still gets the second call, and its answer is what Lina says', async () => {

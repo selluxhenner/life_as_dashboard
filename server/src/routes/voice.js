@@ -4,7 +4,7 @@ import { config } from '../config.js';
 import { HttpError, body } from '../http.js';
 import { getSetting } from '../settings.js';
 import { synthesize, transcribe, ttsEngine, sttEngine, elevenChoice } from '../voice/speech.js';
-import { elevenVoices, elevenAccount, ELEVEN_MODELS } from '../voice/eleven.js';
+import { elevenVoices, elevenAccount, elevenRealtimeToken, REALTIME_STT_URL, ELEVEN_MODELS } from '../voice/eleven.js';
 import { briefingScript } from '../jobs/briefing.js';
 import { worldScript } from '../jobs/news.js';
 import { linaTurn, prepareTurn, hasPrepared, preparedState } from '../voice/lina.js';
@@ -38,9 +38,6 @@ voice.post('/voice/tts', async c => {
   return mp3(c, out);
 });
 
-/* One spoken exchange in one request (speech in, answer + voice out), for "Hey Lina" on the phone and the desktop and
-   for push-to-talk. Query: conversationId (follow-ups), awaiting (comma-separated action ids Lina just asked yes/no
-   about), wake=1, context=briefing|world (what Kevin just listened to). */
 async function recording(c) {
   const buf = Buffer.from(await c.req.arrayBuffer());
   if (buf.length < 1000) throw new HttpError(400, 'Empty recording');
@@ -48,7 +45,10 @@ async function recording(c) {
   return buf;
 }
 
-/* prepared=<id from /voice/prepare>: no audio, the words were sent when Kevin paused. 409 when the id is unknown
+/* One spoken exchange in one request (speech in, answer + voice out), for "Hey Lina" on the phone and the desktop and
+   for push-to-talk. Query: conversationId (follow-ups), awaiting (comma-separated action ids Lina just asked yes/no
+   about), wake=1, context=briefing|world (what Kevin just listened to).
+   prepared=<id from /voice/prepare>: no audio, the words were sent when Kevin paused. 409 when the id is unknown
    (expired, server restarted): the app then sends the recording itself. */
 voice.post('/voice/turn', async c => {
   const type = c.req.header('Content-Type') || 'audio/wav';
@@ -62,10 +62,26 @@ voice.post('/voice/turn', async c => {
   return c.json(await linaTurn({ audio: buf, type, prepared, conversationId, awaiting, viaWake: q.wake === '1', context }));
 });
 
-/* Kevin paused: what he said so far. Transcribed and thought through ahead, nothing is changed. Returns {id} at once. */
+/* Kevin paused (or the live transcript looks like a whole request): what he said so far, thought through ahead;
+   nothing is changed. Audio: transcribed here, returns {id} at once (GET /voice/prepare/:id tells if he was done).
+   JSON {text}: the app's live transcript, so the answer is immediate: {id, heard, finished}. */
 voice.post('/voice/prepare', async c => {
   const type = c.req.header('Content-Type') || 'audio/wav';
+  if (type.includes('json')) {
+    const text = String((await body(c)).text || '').slice(0, 2000);
+    if (!text.trim()) throw new HttpError(400, 'No text');
+    const id = prepareTurn({ text });
+    return c.json({ id, ...(await preparedState(id)) });
+  }
   return c.json({ id: prepareTurn({ audio: await recording(c), type }) });
+});
+
+/* A single-use token for the app to stream its microphone to ElevenLabs' live transcription (Scribe v2 Realtime).
+   404 without an ElevenLabs key: the app then sends recordings as before. */
+voice.post('/voice/live-token', async c => {
+  if (!config.elevenKey) throw new HttpError(404, 'Live transcription needs ELEVENLABS_API_KEY on the server');
+  try { return c.json({ token: await elevenRealtimeToken(), url: REALTIME_STT_URL }); }
+  catch (e) { throw new HttpError(502, e.message); }
 });
 
 /* Was the paused sentence finished? Waits for the transcript: {heard, finished}. The app keeps listening when not. */

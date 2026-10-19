@@ -94,16 +94,18 @@ const instantOn = () => quickFor('voice') && getSetting('lina').instant !== fals
 const prepared = new Map();
 const PREPARED_MS = 60000;
 
-export function prepareTurn({ audio, type }) {
+/* text: the app already has the words (live transcription while he talks), so nothing waits for speech-to-text. */
+export function prepareTurn({ audio, type, text }) {
   warmQuick().catch(() => {});
   for (const [k, p] of prepared) if (Date.now() - p.at > PREPARED_MS) prepared.delete(k);
   const id = uid('prep_');
   const t0 = Date.now();
-  const raw = transcribe(audio, type);
-  prepared.set(id, { at: t0, raw, sttMs: raw.then(() => Date.now() - t0, () => 0) });
-  raw.then(text => {
-    const heard = stripWake(text);
-    const plan = heard && instantOn() ? planCommand(heard, loadWorld()) : null;
+  const raw = text != null ? Promise.resolve(String(text)) : transcribe(audio, type);
+  prepared.set(id, { at: t0, raw });
+  raw.then(said => {
+    const heard = stripWake(said);
+    if (!finished(heard)) return;                                 // half a request: nothing to voice yet
+    const plan = instantOn() ? planCommand(heard, loadWorld()) : null;
     const say = plan && (plan.calls.length ? plan.expect : plan.reply);
     if (say) speak(say, plan.lang).catch(() => {});              // on disk by the time the turn asks for it
   }).catch(() => {});

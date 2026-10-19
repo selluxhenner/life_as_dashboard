@@ -1,8 +1,9 @@
 // Talk to Lina (the agent) from anywhere, hands-free like the phone: tap once, then just talk. She notices when you
 // stop (voice/mic.js), answers in the same natural voice and listens again, until you say nothing for a few seconds or
 // close the bar. Each turn is one request (/api/voice/turn: speech-to-text, Claude with all of the agent's tools,
-// the voice). She starts before you're done: at your first short pause what you said so far goes up (prepareTurn),
-// so the server is already transcribing it and voicing the likely answer while the app waits to be sure you stopped.
+// the voice). She starts before you're done: your words are transcribed live while you talk (voice/live.js), and at your
+// first short pause they go up (prepareText; without live transcription the recording, prepareTurn), so the server
+// already plans and voices the likely answer while the app waits to be sure you stopped.
 // context = what Kevin just heard ('briefing' | 'world'), so "tell me more about the second one" makes sense to the agent.
 import { notify } from '../core/store.js';
 import { apiConfig } from '../core/api.js';
@@ -11,7 +12,8 @@ import { runSync } from '../core/sync.js';
 import { speak, stopSpeaking } from './tts.js';
 import { canRecord } from './stt.js';
 import { openMic, record } from './mic.js';
-import { voiceTurn, prepareTurn, preparedFinished, warmLina } from './turn.js';
+import { voiceTurn, prepareTurn, prepareText, preparedFinished, warmLina } from './turn.js';
+import { openLive } from './live.js';
 import { chatConversationId, logVoiceExchange } from '../views/assistant.js';
 
 const MAX_TURNS = 8;
@@ -62,18 +64,40 @@ async function converse(context) {
   try { mic = await openMic(); } catch { toast('Microphone permission denied.', 'flare'); set({ state: 'idle' }); return; }
   if (my !== run) { closeMic(); return; }
   warmLina();
+  // Live transcription (voice/live.js): his words are written down while he talks. Audio from before it is connected
+  // waits in `early` and goes up once it is; without it (no ElevenLabs key, no connection) recordings go up as before.
+  let live = null, early = [], peeked = { text: '', at: 0 };
+  openLive({
+    onPartial: text => {
+      // thinking while he talks: a partial that may already be the whole request gets its answer voiced ahead
+      if (talk.state !== 'listening' || text === peeked.text || Date.now() - peeked.at < 400 || text.split(/\s+/).length < 3) return;
+      peeked = { text, at: Date.now() };
+      prepareText(text);
+    }
+  }).then(l => {
+    if (my !== run || !l) { l?.close(); early = null; return; }
+    live = l; early.forEach(a => l.send(a)); early = null;
+  });
   let last = {};                                                  // shown after the conversation ends
   try {
     for (let turn = 0; turn < MAX_TURNS && my === run; turn++) {
       tick('open');
       set({ state: 'listening', heard: '', reply: '' });
+      live?.reset();
       // think ahead while we make sure he's done; the server also says whether the sentence was finished
       let prep = null, done = null;
       const wav = await record(mic, {
         waitMs: turn ? NEXT_WAIT : FIRST_WAIT,
+        onAudio: pcm => { if (live && live.ok) live.send(pcm); else if (early) early.push(pcm); },
         onPause: soFar => {
-          const p = prep = prepareTurn(soFar);
           done = null;
+          if (live && live.ok) {                                  // the words are already there: send them, not audio
+            const p = live.commit().then(text => (text ? prepareText(text) : null));
+            const mine = prep = p.then(x => x && x.id);
+            p.then(x => { if (prep === mine) done = x ? x.finished : true; });
+            return;
+          }
+          const p = prep = prepareTurn(soFar);
           p.then(id => (id ? preparedFinished(id) : true)).then(f => { if (prep === p) done = f; });
         },
         onResume: () => { prep = null; done = null; },          // he went on: what was sent is out of date
@@ -100,6 +124,7 @@ async function converse(context) {
       });
     }
   } finally {
+    live?.close(); early = null;
     if (my === run) { closeMic(); set({ state: 'idle', ...last }); }
   }
 }

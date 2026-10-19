@@ -1,7 +1,7 @@
 // Hands-free turns: the recorder ends a turn when Kevin pauses, hands over what he said at the first short pause,
 // and takes that back when he goes on talking.
 import { describe, it, expect } from 'vitest';
-import { record, END_MS, PAUSE_MS, UNSURE_MS, OPEN_MS } from '../src/voice/mic.js';
+import { record, END_MS, PAUSE_MS, FINISHED_MS, UNSURE_MS, OPEN_MS } from '../src/voice/mic.js';
 
 const RATE = 48000, FRAME = 2048, FRAME_MS = (FRAME / RATE) * 1000;
 const tone = (amp = 0.3) => Float32Array.from({ length: FRAME }, (_, i) => amp * Math.sin(i / 8));
@@ -43,7 +43,8 @@ describe('record', () => {
       const wav = await p;
       return (wav.size - 44) / 32 - 1000;                        // ms of quiet at the end
     };
-    expect(await quietAfter(() => true, [['speak', 1000], ['quiet', 4000]])).toBeLessThan(END_MS + 100);   // whole 43 ms frames
+    expect(await quietAfter(() => true, [['speak', 1000], ['quiet', 4000]])).toBeLessThan(FINISHED_MS + 100);   // whole 43 ms frames
+    expect(await quietAfter(undefined, [['speak', 1000], ['quiet', 4000]])).toBeGreaterThan(END_MS - 50);   // no verdict: the plain rule
     expect(await quietAfter(() => null, [['speak', 1000], ['quiet', 4000]])).toBeGreaterThan(UNSURE_MS - 50);
     expect(await quietAfter(() => false, [['speak', 1000], ['quiet', 4000]])).toBeGreaterThan(OPEN_MS - 50);
     // not finished, and he goes on: one turn with all of it

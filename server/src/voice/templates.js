@@ -341,7 +341,7 @@ const FLUFF = /^(?:(?:hey|hi|hoi|hallo|okay|ok|lina|please|bitte|can you|could y
 export function planCommand(heard, world, now = new Date()) {
   const raw = String(heard || '').trim();
   if (!raw || raw.length > 160) return null;
-  let text = raw.replace(/[“”„"]/g, '').replace(/[?!]+\s*$/, '').replace(/[,;]/g, ' ').replace(/\s+/g, ' ').replace(/\.$/, '').trim();
+  let text = raw.replace(/[“”„"]/g, '').replace(/[?!]+\s*$/, '').replace(/[,;]/g, ' ').replace(/(\p{L})[.!?]+\s+/gu, '$1 ').replace(/\s+/g, ' ').replace(/\.$/, '').trim();
   text = text.replace(FLUFF, '').replace(/\s+(?:please|bitte|thanks|danke)$/i, '').trim();
   if (!text) return null;
   const today = localDate(now), nowTime = localTime(now);

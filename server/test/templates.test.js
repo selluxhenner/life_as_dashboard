@@ -75,6 +75,7 @@ test('adding to the calendar and to the tasks', () => {
   assert.deepEqual(call(plan('add run tomorrow morning at 6')), [['add_calendar_block', { title: 'Run', date: TOMORROW, time: '06:00' }]]);
   assert.equal(plan('schedule dentist'), null);                                     // when? the model asks
   assert.equal(plan('add a task'), null);                                           // what? still coming
+  assert.deepEqual(call(plan('Hey Lina, add a task. Buy some groceries for tomorrow.')), [['create_todo', { title: 'Buy some groceries', due: TOMORROW }]]);
   // a task at a time: the task plus a block on the calendar
   assert.deepEqual(call(plan('add task gym tomorrow at 7')), [
     ['create_todo', { title: 'Gym', due: TOMORROW }], ['add_calendar_block', { title: 'Gym', date: TOMORROW, time: '07:00' }]]);

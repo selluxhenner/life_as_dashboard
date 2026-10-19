@@ -49,6 +49,19 @@ export async function prepareTurn(audio, type = audio.type || 'audio/wav') {
   } catch { return null; }
 }
 
+/**
+ * The same with the words instead of the audio (live transcription): the answer is immediate,
+ * {id, heard, finished} or null. The server voices the likely answer ahead when the request is finished.
+ */
+export async function prepareText(text) {
+  const cfg = apiConfig();
+  if (!cfg) return null;
+  try {
+    const res = await fetch(base(cfg) + '/api/voice/prepare', { method: 'POST', headers: { Authorization: 'Bearer ' + cfg.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+    return res.ok ? await res.json() : null;
+  } catch { return null; }
+}
+
 /** Was the sentence up to that pause a finished request? false keeps the app listening; when unsure, true. */
 export async function preparedFinished(id) {
   const cfg = apiConfig();

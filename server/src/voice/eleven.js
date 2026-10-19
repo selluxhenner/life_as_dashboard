@@ -104,6 +104,16 @@ export async function elevenTranscribe(buf, type = 'audio/webm') {
   return (data.text || '').trim();
 }
 
+/* Scribe v2 Realtime: the app streams its microphone straight to ElevenLabs while Kevin talks, so his words are
+   written down by the time he stops. It connects with a single-use token (15 minutes, one connection), never the key. */
+export const REALTIME_STT_URL = API.replace(/^http/, 'ws') + '/v1/speech-to-text/realtime';
+export async function elevenRealtimeToken() {
+  const res = await fetch(API + '/v1/single-use-token/realtime_scribe', { method: 'POST', headers: { 'xi-api-key': config.elevenKey }, signal: AbortSignal.timeout(10000) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.token) throw new ElevenError(res.status, data);
+  return data.token;
+}
+
 let voiceCache = null;
 /** The account's voices (premade, cloned and saved library voices), cached for an hour. */
 export async function elevenVoices() {
