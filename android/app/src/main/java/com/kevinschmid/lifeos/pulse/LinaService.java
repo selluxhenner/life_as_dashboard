@@ -73,7 +73,7 @@ public class LinaService extends Service {
     // Quiet that ends what he says. A short command ends fast once the server has read it as a whole request; after a
     // longer stretch of talking he may just be thinking, so she waits longer. Up to MAX_MS in one go.
     private static final int END_MS = 800, FINISHED_MS = 450, UNSURE_MS = 1200, OPEN_MS = 2500, LONG_MS = 1800, LONG_DONE_MS = 900, LONG_SPEECH_MS = 5000;
-    private static final int MAX_MS = 360000;                                  // 6 minutes in one go: effectively no limit
+    private static final int MAX_MS = 1800000;                                 // 30 minutes in one go: no limit in practice
     private static final int ACK_MIN_MS = 4000;                               // after this much talking she says "Okay, got it" at once
     private static final int PAUSE_MS = 250;                                  // at this much quiet the words so far go up
     private static volatile boolean alive;

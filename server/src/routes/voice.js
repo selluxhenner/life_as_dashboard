@@ -104,7 +104,7 @@ voice.get('/voice/prepare/:id/voice', async c => {
 
 /* The short acknowledgement the phone plays the moment Kevin stops talking after a long stretch ("Okay, got it.") while the
    real answer is still being worked out. A few fixed phrases per language, so the audio cache makes it instant. */
-const ACKS = { en: ['Okay, got it.', 'Alright, got it.'], de: ['Okay, verstanden.', 'Alles klar, verstanden.'] };
+const ACKS = { en: ['Okay, I got you.', 'Alright, I got you.'], de: ['Okay, ich hab dich.', 'Alles klar, ich hab dich.'] };
 voice.get('/voice/ack', async c => {
   const lang = c.req.query('lang') === 'de' ? 'de' : 'en';
   const text = ACKS[lang][Number(c.req.query('n')) % ACKS[lang].length || 0];
