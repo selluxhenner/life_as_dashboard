@@ -71,7 +71,7 @@ public class LinaService extends Service {
     private static final int RATE = Wake.RATE, FRAME = RATE / 10;           // 100 ms
     private static final int PRE_ROLL = RATE * 3 / 2;                         // "Hey Lina" goes up with the question
     // Quiet that ends what he says. A short command ends fast once the server has read it as a whole request; after a
-    // longer stretch of talking he may just be thinking, so she waits longer. Up to MAX_MS in one go.
+    // longer stretch of talking he may just be thinking, so she waits longer.
     private static final int END_MS = 800, FINISHED_MS = 450, UNSURE_MS = 1200, OPEN_MS = 2500, LONG_MS = 1800, LONG_DONE_MS = 900, LONG_SPEECH_MS = 5000;
     private static final int ACK_MIN_MS = 4000;                               // after this much talking she says "Okay, got it" at once
     private static final int PAUSE_MS = 250;                                  // at this much quiet the words so far go up
@@ -464,7 +464,7 @@ public class LinaService extends Service {
 
     /**
      * Records until Kevin is done: ends after a pause that fits what he said (see the constants), or after `waitMs` if
-     * he never starts, at most MAX_MS. A simple energy detector with a moving noise floor; the pre-roll is sent along but
+     * he never starts, with no time limit. A simple energy detector with a moving noise floor; the pre-roll is sent along but
      * doesn't count as the start.
      */
     private byte[] record(Source rec, short[] pre, int waitMs, Prep prep, Prefs prefs, Live live) {
