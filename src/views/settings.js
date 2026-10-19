@@ -300,6 +300,10 @@ function linaPanel() {
         ? 'When you talk to her, Lina answers in about a second: a fast model, and changes to tasks, habits, notes and your calendar done in one step. Typed chat stays thorough.'
         : 'Off: spoken answers use the thorough model and the voice from Settings › Voice, and take several seconds.',
         toggle(lina.quick !== false, v => patchLina({ quick: v }), 'Quick answers')),
+      lina.quick !== false ? row('Instant commands', lina.instant !== false
+        ? 'The usual ones skip the model and answer right away: “add dentist tomorrow at 3”, “move the dentist to 4”, “cancel the dentist”, “add task buy milk”, “mark gym as done”, “delete the gym task”, “give me an overview”. Anything else goes to Lina as before.'
+        : 'Off: every spoken command goes to the model.',
+        toggle(lina.instant !== false, v => patchLina({ instant: v }), 'Instant commands')) : null,
       h('div.set-sep'),
       h('div.title', { style: { margin: '4px 0 6px' } }, 'People Lina knows'),
       people.length ? h('div.rows', people.map(p => h('div.row',

@@ -3,7 +3,9 @@
 // The yes/no to an outward action is matched here with fixed word lists, never by the model, so nothing an email or a
 // web page says can approve anything: only Kevin's own short spoken answer right after Lina's question.
 import { db } from '../db.js';
-import { runAgent, decideAction, quickFor, warmQuick } from '../agent/runner.js';
+import { runAgent, runDirect, recordExchange, decideAction, quickFor, warmQuick } from '../agent/runner.js';
+import { getSetting } from '../settings.js';
+import { planCommand, loadWorld } from './templates.js';
 import { asData } from '../ai/claude.js';
 import { briefingSpeech } from '../jobs/briefing.js';
 import { worldSpeech } from '../jobs/news.js';
@@ -62,18 +64,40 @@ const DONE = {
   schedule_call: { en: 'Okay, I’ll call you.', de: 'Okay, ich rufe dich an.' }
 };
 
+const speak = (text, lang) => synthesize({ text, lang, fast: true }).then(r => r.audio.toString('base64'));
+
+/* The prepared commands (Settings › Lina › Instant commands, on unless switched off): a plan from templates.js, run
+   without the model. The sentence it will most likely say is voiced while the calls still run. */
+async function instantTurn(plan, heard, cid) {
+  let early = null;
+  if (plan.calls.length && plan.expect) { early = speak(plan.expect, plan.lang); early.catch(() => {}); }
+  let reply = plan.reply || '', pending = [], tools = [];
+  if (plan.calls.length) {
+    const r = await runDirect(plan.calls);
+    tools = r.tools;
+    const failed = r.results.find(x => x.isError);
+    const waits = r.results.some(x => x.queued || x.result?.waiting);
+    if (failed) reply = SAY[plan.lang].fail + failed.content.replace(/^Tool failed: /, '');
+    else reply = waits ? plan.ask || plan.done : plan.done;
+    if (waits) pending = db.all("SELECT id, summary FROM agent_actions WHERE run_id = ? AND status = 'pending' ORDER BY created_at", r.runId);
+  }
+  return { reply, lang: plan.lang, pending, tools, cid: recordExchange(cid, heard, reply), early: reply === plan.expect ? early : null };
+}
+
 /**
  * One spoken exchange. awaiting = ids of actions Lina just asked about; context = what Kevin just listened to
  * ('briefing' | 'world'). Returns {heard, reply, lang, conversationId, awaiting:[{id, summary}], tools:[{name, status,
- * summary}], listen, audio (base64 mp3 | null), voiceError}.
+ * summary}], listen, audio (base64 mp3 | null), voiceError, instant (answered by a prepared command), ms {stt, think, voice}}.
  */
 export async function linaTurn({ audio, type, conversationId, awaiting = [], viaWake = false, context = null }) {
   warmQuick().catch(() => {});                                     // the model gets ready while Scribe listens
+  const t0 = Date.now();
   const raw = await transcribe(audio, type);
+  const t1 = Date.now();
   if (viaWake && !saidLina(raw)) return { heard: '', reply: '', lang: 'en', conversationId, awaiting: [], listen: false, audio: null, falseWake: true };
   const heard = stripWake(raw);
-  let reply = '', lang = 'en', pending = [], cid = conversationId;
-  const tools = [];
+  let reply = '', lang = 'en', pending = [], cid = conversationId, early = null, plan = null;
+  let tools = [];
   const waiting = awaiting.length ? db.all(`SELECT id, tool FROM agent_actions WHERE status = 'pending' AND id IN (${awaiting.map(() => '?').join(',')})`, ...awaiting) : [];
   const yn = waiting.length ? yesNo(heard) : null;
 
@@ -91,6 +115,11 @@ export async function linaTurn({ audio, type, conversationId, awaiting = [], via
     const kinds = [...new Set(waiting.map(a => a.tool))];
     reply = errors.length ? SAY[lang].fail + errors[0] : yn.answer === 'no' ? SAY[lang].no
       : kinds.length === 1 && DONE[kinds[0]] ? DONE[kinds[0]][lang] : SAY[lang].done;
+  } else if (quickFor('voice') && getSetting('lina').instant !== false &&!(waiting.length && /^\W*(ja|jo|yes|yeah|nein|no|nö|nope)\b/i.test(heard)) &&
+             (plan = planCommand(heard, loadWorld()))) {
+    const r = await instantTurn(plan, heard, cid);
+    ({ reply, lang, pending, tools, early } = r);
+    cid = r.cid;
   } else {
     const onEvent = ev => { if (ev.type === 'tool') tools.push({ name: ev.name, status: ev.status, summary: ev.summary }); };
     const r = await runAgent({ message: heard, conversationId: cid, trigger: 'voice', onEvent, extraSystem: voiceContext(context) });
@@ -100,13 +129,15 @@ export async function linaTurn({ audio, type, conversationId, awaiting = [], via
     pending = db.all("SELECT id, summary FROM agent_actions WHERE run_id = ? AND status = 'pending' ORDER BY created_at", r.runId);
   }
 
+  const t2 = Date.now();
   let mp3 = null, voiceError = null;
   if (reply) {
-    try { mp3 = (await synthesize({ text: reply, lang, fast: quickFor('voice') })).audio.toString('base64'); }
+    try { mp3 = await (early || (plan || quickFor('voice') ? speak(reply, lang) : synthesize({ text: reply, lang }).then(r => r.audio.toString('base64')))); }
     catch (e) { voiceError = e.message; }                          // the device speaks it with its own voice then
   }
   return {
     heard, reply, lang, conversationId: cid, awaiting: pending, tools,
-    listen: pending.length > 0 || /\?\s*$/.test(reply), audio: mp3, voiceError
+    listen: pending.length > 0 || /\?\s*$/.test(reply), audio: mp3, voiceError,
+    instant: !!plan, ms: { stt: t1 - t0, think: t2 - t1, voice: Date.now() - t2 }
   };
 }

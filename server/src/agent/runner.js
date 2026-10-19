@@ -199,6 +199,32 @@ export async function runAgent({ message, conversationId, trigger = 'chat', allo
   return { conversationId: cid, text: finalText.trim(), answer: (lastText.trim() || finalText.trim()), runId };
 }
 
+/**
+ * A prepared spoken command (voice/templates.js): the tool calls the model would have made, run under the same policy
+ * (internal ones run and are logged, outward ones are queued). Returns {runId, results:[{content, result, isError,
+ * queued}], tools:[{name, status, summary}]}.
+ */
+export async function runDirect(calls, { trigger = 'voice', allowed = ['read', 'internal', 'outward'] } = {}) {
+  const runId = uid('run_');
+  db.run('INSERT INTO agent_runs (id, trigger, started_at, status) VALUES (?, ?, ?, ?)', runId, trigger, Date.now(), 'running');
+  const tools = [];
+  const ctx = { runId, trigger, allowed, source: trigger === 'phone' ? 'phone' : 'voice',
+    onEvent: ev => { if (ev.type === 'tool') tools.push({ name: ev.name, status: ev.status, summary: ev.summary }); } };
+  const results = await Promise.all(calls.map(c => runTool(c.name, c.input, ctx)));
+  const failed = results.find(r => r.isError);
+  db.run('UPDATE agent_runs SET finished_at = ?, status = ?, summary = ? WHERE id = ?', Date.now(), failed ? 'error' : 'done',
+    (failed ? failed.content : calls.map(c => c.name).join(', ')).slice(0, 200), runId);
+  return { runId, results, tools };
+}
+
+/* A spoken exchange answered without the model still belongs to the conversation, so "and move it to 5" can follow. */
+export function recordExchange(conversationId, said, reply) {
+  const cid = conversationId || uid('conv_');
+  saveMsg(cid, 'user', [{ type: 'text', text: said }]);
+  saveMsg(cid, 'assistant', [{ type: 'text', text: reply }]);
+  return cid;
+}
+
 /* Approve / reject queued outward actions. */
 export async function decideAction(id, approve) {
   const a = db.get('SELECT * FROM agent_actions WHERE id = ?', id);

@@ -69,7 +69,8 @@ before(async () => {
   ({ setSetting } = await import('../src/settings.js'));
   ({ localDate, addDays } = await import('../src/lib/time.js'));
 });
-beforeEach(() => { calls.length = 0; tts.length = 0; script = []; setSetting('lina', { people: [], quick: true }); });
+// instant commands off: these tests are about the model path (the prepared commands have their own test below)
+beforeEach(() => { calls.length = 0; tts.length = 0; script = []; setSetting('lina', { people: [], quick: true, instant: false }); });
 
 async function api(method, path, body) {
   const res = await app.fetch(new Request('http://test.local' + path, {
@@ -163,6 +164,52 @@ test('habits and notes by voice land in the synced documents the app reads', asy
   await turn('delete the stretching habit');
   const after = (await api('POST', '/api/docs/sync', { since: 0, upserts: [] })).body.docs.find(d => d.key === stretch.key);
   assert.equal(after.deleted, true);
+});
+
+test('instant commands: the usual ones skip the model entirely, and a cancel still asks first', async () => {
+  setSetting('lina', { people: [], quick: true, instant: true });
+  const { zonedInstant } = await import('../src/lib/time.js');
+  const tomorrow = addDays(localDate(), 1);
+
+  let r = await turn('Hey Lina, add pick up the parcel for tomorrow', '?wake=1');
+  assert.equal(r.reply, 'Added “Pick up the parcel” for tomorrow.');
+  assert.equal(r.instant, true);
+  assert.equal(modelCalls().length, 0);                                  // no model call at all
+  assert.deepEqual(r.tools.map(t => [t.name, t.status]), [['create_todo', 'done']]);
+  const todo = db.get("SELECT * FROM todos WHERE title = 'Pick up the parcel'");
+  assert.deepEqual([todo.due, todo.source], [tomorrow, 'voice']);
+  assert.equal(tts.length, 1);                                           // voiced while the change ran, used as is
+  assert.equal(tts[0].body.model_id, 'eleven_flash_v2_5');
+  assert.equal(Buffer.from(r.audio, 'base64').toString(), 'ID3-lina');
+
+  r = await turn('mark pick up the parcel as done', '?conversationId=' + r.conversationId);
+  assert.equal(r.reply, 'Marked “Pick up the parcel” as done.');
+  assert.equal(db.get('SELECT done FROM todos WHERE id = ?', todo.id).done, 1);
+  // the exchange is in the conversation, so the model has it for a follow-up
+  const said = db.all('SELECT role, content FROM agent_messages WHERE conversation_id = ? ORDER BY id', r.conversationId).map(m => m.role);
+  assert.deepEqual(said, ['user', 'assistant', 'user', 'assistant']);
+
+  db.run(`INSERT INTO calendar_events (id, connection_id, kind, title, start, end, all_day, updated_at) VALUES (?, 'g1', 'event', 'Dentist', ?, ?, 0, ?)`,
+    'g1:dentist', zonedInstant(tomorrow, '15:00').toISOString(), zonedInstant(tomorrow, '16:00').toISOString(), Date.now());
+  tts.length = 0;
+  r = await turn('cancel the dentist');
+  assert.equal(r.reply, 'Shall I cancel “Dentist”?');
+  assert.equal(r.listen, true);
+  assert.equal(r.awaiting.length, 1);
+  assert.equal(db.get('SELECT tool, status FROM agent_actions WHERE id = ?', r.awaiting[0].id).status, 'pending');
+  assert.equal(tts.length, 1);
+  const no = await turn('no', '?awaiting=' + r.awaiting[0].id);
+  assert.equal(no.reply, 'Okay, I’ll leave it.');
+  assert.equal(db.get('SELECT status FROM agent_actions WHERE id = ?', r.awaiting[0].id).status, 'rejected');
+
+  r = await turn('what\'s on tomorrow');
+  assert.match(r.reply, /^1 event tomorrow: Dentist at 3 PM\./);
+  assert.equal(modelCalls().length, 0);
+
+  // not a prepared command: the model, as before
+  script.push(() => [{ type: 'text', text: 'Nothing new from Max.' }]);
+  assert.equal((await turn('did Max write me?')).instant, false);
+  assert.equal(modelCalls().length, 1);
 });
 
 test('a lookup or a failed change still gets the second call, and its answer is what Lina says', async () => {

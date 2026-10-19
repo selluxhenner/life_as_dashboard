@@ -14,7 +14,8 @@ export const DEFAULTS = {
   ai: { monthlyCapUsd: 40 },
   // Lina, the assistant. people: who "my business partner", "mom" … are, so she can schedule with them ({name, email, relation}).
   // quick: spoken turns use the fast model and the fast voice (about a second instead of several).
-  lina: { people: [], quick: true },
+  // instant: in quick mode the usual commands (calendar, tasks, overview) skip the model (voice/templates.js).
+  lina: { people: [], quick: true, instant: true },
   jobs: { profile: 'Student in Berlin. Looking for Werkstudent, part-time or startup roles in web development, product, design or marketing. Max 20 h/week.' }
 };
 
