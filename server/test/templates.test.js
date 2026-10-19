@@ -129,3 +129,9 @@ test('anything unclear goes to the model', () => {
     else assert.equal(p, null, s);
   }
 });
+
+test('transcripts as they come from live speech: stutters, sentence stops, a few words after the question', () => {
+  assert.match(plan('Hey, Lena. C-c-can you tell me what are my open tasks right now?').reply, /^4 open tasks: /);
+  assert.deepEqual(call(plan('Hey, Lena, add a task. Buy some groceries for tomorrow.')), [['create_todo', { title: 'Buy some groceries', due: TOMORROW }]]);
+  assert.deepEqual(call(plan('add task e-mail the landlord')), [['create_todo', { title: 'E-mail the landlord' }]]);   // not a stutter
+});

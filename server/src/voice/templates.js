@@ -178,7 +178,7 @@ const OVERVIEW = [
   full('was\\s+(?:steht|habe\\s+ich|hab\\s+ich|liegt|ist\\s+los)\\b.*'),
   full('wie\\s+sieht\\s+mein\\s+(?:tag|heute|morgen|plan|kalender)\\b.*')
 ];
-const TASKS_ASK = full('(?:what(?:\'s|\\s+is|\\s+are)?|which|list|show|read|tell|give)\\b.*\\b(?:tasks|todos|to-dos|open tasks)|(?:was|welche|zeig|lies|nenn|sag)\\b.*\\b(?:aufgaben|todos)');
+const TASKS_ASK = full('(?:(?:what(?:\'s|\\s+is|\\s+are)?|which|list|show|read|tell|give)\\b.*\\b(?:tasks|todos|to-dos|open tasks)|(?:was|welche|zeig|lies|nenn|sag)\\b.*\\b(?:aufgaben|todos))(?:\\s+(?:right\\s+now|now|today|for\\s+today|please|jetzt|gerade|heute|bitte))?');
 
 function overview(low, world, today, lang) {
   const w = extractWhen(low, today);
@@ -330,7 +330,7 @@ function planEdit(text, today, world, lang) {
   };
 }
 
-const FLUFF = /^(?:(?:hey|hi|hoi|hallo|okay|ok|lina|please|bitte|can you|could you|would you|kannst du|könntest du|kannst du mir|würdest du)[\s,]+)+/iu;
+const FLUFF = /^(?:(?:hey|hi|hoi|hallo|okay|ok|l(?:i|ee|e|ea|y)n+a|please|bitte|can you|could you|would you|kannst du|könntest du|kannst du mir|würdest du)[\s,]+)+/iu;
 
 /**
  * planCommand(heard, world, now) -> null | {lang, kind, calls:[{name, input}], done?, ask?, expect?, reply?}
@@ -342,7 +342,8 @@ export function planCommand(heard, world, now = new Date()) {
   const raw = String(heard || '').trim();
   if (!raw || raw.length > 160) return null;
   let text = raw.replace(/[“”„"]/g, '').replace(/[?!]+\s*$/, '').replace(/[,;]/g, ' ').replace(/(\p{L})[.!?]+\s+/gu, '$1 ').replace(/\s+/g, ' ').replace(/\.$/, '').trim();
-  text = text.replace(FLUFF, '').replace(/\s+(?:please|bitte|thanks|danke)$/i, '').trim();
+  text = text.replace(/(?<![\p{L}-])(\p{L})(?:-\1)*-(?=\1\p{L})/giu, '')    // a stutter in the transcript: "C-c-can you" → "can you"
+    .replace(FLUFF, '').replace(/\s+(?:please|bitte|thanks|danke)$/i, '').trim();
   if (!text) return null;
   const today = localDate(now), nowTime = localTime(now);
   const lang = langOf(text);
