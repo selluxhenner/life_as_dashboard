@@ -369,7 +369,7 @@ public class LinaService extends Service {
     /** Starts "Okay, got it." (the server's voice, kept on the phone) and returns the thread playing it; null without a file. */
     private Thread ack(String lang) {
         List<File> have = new ArrayList<>();
-        for (int i = 0; i < 2; i++) { File f = new File(getFilesDir(), "lina-ack-" + lang + "-" + i + ".mp3"); if (f.length() > 0) have.add(f); }
+        for (int i = 0; i < 2; i++) { File f = new File(getFilesDir(), "lina-ack2-" + lang + "-" + i + ".mp3"); if (f.length() > 0) have.add(f); }
         if (have.isEmpty()) return null;
         File f = have.get((int) (Math.random() * have.size()));
         Thread t = new Thread(() -> playFile(f), "lina-ack");
@@ -383,7 +383,7 @@ public class LinaService extends Service {
     private void fetchAcks(Prefs prefs) {
         new Thread(() -> {
             for (String lang : new String[] { "en", "de" }) for (int i = 0; i < 2; i++) {
-                File f = new File(getFilesDir(), "lina-ack-" + lang + "-" + i + ".mp3");
+                File f = new File(getFilesDir(), "lina-ack2-" + lang + "-" + i + ".mp3");
                 if (f.length() > 0) continue;
                 try {
                     byte[] b = Server.getBytes(prefs, "/api/voice/ack?lang=" + lang + "&n=" + i);
