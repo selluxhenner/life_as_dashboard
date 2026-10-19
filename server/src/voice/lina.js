@@ -21,6 +21,9 @@ export function voiceContext(kind) {
     : 'Kevin just listened to the spoken world news summary (below). For details use get_news.\n') + asData(kind + '_heard', heard);
 }
 
+/* The phone already said "Okay, got it" the moment he stopped; this reply follows it straight away. */
+const ACKED = '\nThe phone already spoke a short acknowledgement ("Okay, got it"). Do not acknowledge again: start directly with what you did or found ("Added the dentist and moved gym to 5."), in one or two short sentences.';
+
 /* "Hey Lina," / "Hoi Lina" / "Hallo Leena" at the start of a transcript (the phone sends the wake word along). */
 const WAKE = /^\s*(?:(?:hey|hi|hoi|hallo|hello|okay|ok|he|hej)[\s,!.]+)?l(?:i|ee|e|ea|y)n+a\b[\s,!.:;-]*/i;
 export const stripWake = text => String(text || '').replace(WAKE, '').trim();
@@ -155,7 +158,7 @@ export async function preparedState(id) {
  * conversationId, awaiting:[{id, summary}], tools:[{name, status, summary}], listen, audio (base64 mp3 | null),
  * voiceError, instant (answered by a prepared command), ms {stt, think, voice}}.
  */
-export async function linaTurn({ audio, type, prepared: prepId, conversationId, awaiting = [], viaWake = false, context = null }) {
+export async function linaTurn({ audio, type, prepared: prepId, conversationId, awaiting = [], viaWake = false, context = null, acked = false }) {
   warmQuick().catch(() => {});                                     // the model gets ready while Scribe listens
   const t0 = Date.now();
   const prep = prepId && prepared.get(prepId);
@@ -190,7 +193,7 @@ export async function linaTurn({ audio, type, prepared: prepId, conversationId, 
     cid = r.cid;
   } else {
     const onEvent = ev => { if (ev.type === 'tool') tools.push({ name: ev.name, status: ev.status, summary: ev.summary }); };
-    const r = await runAgent({ message: heard, conversationId: cid, trigger: 'voice', onEvent, extraSystem: voiceContext(context) });
+    const r = await runAgent({ message: heard, conversationId: cid, trigger: 'voice', onEvent, extraSystem: voiceContext(context) + (acked ? ACKED : '') });
     cid = r.conversationId;
     reply = r.answer;
     lang = guessLang(reply);

@@ -61,7 +61,7 @@ voice.post('/voice/turn', async c => {
   const conversationId = /^conv_\w+$/.test(q.conversationId || '') ? q.conversationId : null;
   const awaiting = String(q.awaiting || '').split(',').filter(id => /^act_\w+$/.test(id)).slice(0, 5);
   const context = ['briefing', 'world'].includes(q.context) ? q.context : null;
-  return c.json(await linaTurn({ audio: buf, type, prepared, conversationId, awaiting, viaWake: q.wake === '1', context }));
+  return c.json(await linaTurn({ audio: buf, type, prepared, conversationId, awaiting, viaWake: q.wake === '1', context, acked: q.acked === '1' }));
 });
 
 /* Kevin paused (or the live transcript looks like a whole request): what he said so far, thought through ahead;
@@ -100,6 +100,15 @@ voice.get('/voice/prepare/:id/voice', async c => {
   const audio = /^prep_\w+$/.test(id) ? await preparedVoice(id) : null;
   if (!audio) throw new HttpError(404, 'No voice for this turn');
   return mp3(c, { audio, engine: 'ahead', cached: true });
+});
+
+/* The short acknowledgement the phone plays the moment Kevin stops talking after a long stretch ("Okay, got it.") while the
+   real answer is still being worked out. A few fixed phrases per language, so the audio cache makes it instant. */
+const ACKS = { en: ['Okay, got it.', 'Alright, got it.'], de: ['Okay, verstanden.', 'Alles klar, verstanden.'] };
+voice.get('/voice/ack', async c => {
+  const lang = c.req.query('lang') === 'de' ? 'de' : 'en';
+  const text = ACKS[lang][Number(c.req.query('n')) % ACKS[lang].length || 0];
+  return mp3(c, await synthesize({ text, lang, fast: quickFor('voice') }));
 });
 
 /* Kevin started talking to Lina: get the model ready (prompt cache, connection) while he speaks. Returns at once. */
