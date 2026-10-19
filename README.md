@@ -48,6 +48,8 @@ npm run installer:preview
 npm run build:android
 ```
 
+**Android without a PC:** every push to `main` that touches the app (and every PR) is built on GitHub by `.github/workflows/android-apk.yml`. Open [releases/android-latest](https://github.com/selluxhenner/life_as_dashboard/releases/tag/android-latest) on the phone and tap `agentic-os.apk`. The repo is public, so these builds carry no server token: pair once in Settings › Server. To install them over a build from Android Studio, add your PC's debug key as the repo secret `ANDROID_DEBUG_KEYSTORE` (Git Bash: `base64 -w0 ~/.android/debug.keystore`); without it, uninstall the PC build once first.
+
 **Server locally** (inside `server/`; needs a `server/.env` with at least `API_TOKEN`):
 ```bash
 npm --prefix server run dev

@@ -1,0 +1,77 @@
+# Builds the Android app on GitHub (its runners have the Android SDK) and puts the APK on the "android-latest" release,
+# so the phone can download and install it straight from
+# https://github.com/selluxhenner/life_as_dashboard/releases/tag/android-latest
+#
+# The repo is public, so these builds never carry a server token: pair the app once in Settings › Server.
+# Optional secret ANDROID_DEBUG_KEYSTORE: your PC's %USERPROFILE%\.android\debug.keystore as base64
+# (Git Bash: base64 -w0 ~/.android/debug.keystore). With it these builds have the same signing key as the ones from
+# Android Studio and install over them; without it, uninstall the PC build once before installing this one.
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore: ['server/**', 'backend/**', 'legacy/**', 'src-tauri/**', 'scripts/**', '**.md']
+  pull_request:
+    paths-ignore: ['server/**', 'backend/**', 'legacy/**', 'src-tauri/**', 'scripts/**', '**.md']
+
+permissions:
+  contents: write          # to update the android-latest release
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Signing key (optional)
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_DEBUG_KEYSTORE }}
+        run: |
+          if [ -n "$KEYSTORE" ]; then
+            mkdir -p ~/.android && echo "$KEYSTORE" | base64 -d > ~/.android/debug.keystore
+            echo "Using the debug key from the ANDROID_DEBUG_KEYSTORE secret"
+          else
+            echo "No ANDROID_DEBUG_KEYSTORE secret: the APK gets this runner's debug key"
+          fi
+
+      - run: npm ci
+      - name: Web app into the Android project
+        run: npm run build && npx cap sync android
+      - name: APK
+        working-directory: android
+        run: bash ./gradlew assembleDebug --no-daemon
+      - run: cp android/app/build/outputs/apk/debug/app-debug.apk agentic-os.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agentic-os-apk
+          path: agentic-os.apk
+
+      - name: Publish to the android-latest release
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          FROM: ${{ github.head_ref || github.ref_name }}
+        run: |
+          notes="Built from ${SHA::7} ($FROM) on $(date -u '+%Y-%m-%d %H:%M UTC'). Open this page on the phone and tap agentic-os.apk to install. No server token inside: pair once in Settings › Server."
+          gh release view android-latest >/dev/null 2>&1 \
+            || gh release create android-latest --prerelease --title "Android app (latest build)" --notes "$notes" --target "$SHA"
+          gh release upload android-latest agentic-os.apk --clobber
+          gh release edit android-latest --notes "$notes"
