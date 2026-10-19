@@ -15,6 +15,7 @@ import { notify } from '../notify/index.js';
 import { localDate } from '../lib/time.js';
 import { uid } from '../lib/crypto.js';
 import { config } from '../config.js';
+import { searchVault, readNote, writeNote } from '../connectors/obsidian.js';
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
@@ -144,6 +145,22 @@ export const TOOLS = {
       return { id, ...(capture ? { capture } : {}) };
     },
     summary: i => `Noted “${i.title}”`
+  },
+  search_vault: {
+    risk: 'read', description: "Search Kevin's Obsidian vault (his notes on himself, projects, clients, school, jobs, Berlin). All words must match; empty query = most recently changed notes. Returns paths with a snippet; read_note opens one.",
+    schema: z.object({ query: z.string().max(200).optional(), limit: z.number().int().min(1).max(25).optional() }),
+    run: ({ query, limit }) => { try { return searchVault(query, limit || 10); } catch (e) { return { error: e.message }; } }
+  },
+  read_note: {
+    risk: 'read', description: "Full text of one note in Kevin's Obsidian vault, by path from search_vault or by its name (\"Home\"). Also lists the notes it links to, so you can follow links.",
+    schema: z.object({ path: z.string().max(300) }),
+    run: ({ path }) => { try { return readNote(path); } catch (e) { return { error: e.message }; } }
+  },
+  write_vault_note: {
+    risk: 'internal', description: "Add to Kevin's Obsidian vault: create a new markdown note (path like \"03 Projekte/Idea.md\") or, with append true, add text to the end of an existing one. Never overwrites. Search first and prefer appending to the matching note; write in his notes' language and style, with [[links]] to related notes. Never write passwords or keys.",
+    schema: z.object({ path: z.string().max(300), content: z.string().min(1).max(20000), append: z.boolean().optional() }),
+    run: i => writeNote(i),
+    summary: i => `${i.append ? 'Added to' : 'Created'} vault note “${i.path.replace(/\.md$/i, '')}”`
   },
   list_habits: {
     risk: 'read', description: 'Habits with id, label, how often (daily or weekly with a target) and whether they are ticked off today.',

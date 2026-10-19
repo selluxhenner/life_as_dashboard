@@ -9,6 +9,8 @@ import { briefingScript } from '../jobs/briefing.js';
 import { worldScript } from '../jobs/news.js';
 import { linaTurn, prepareTurn, hasPrepared, preparedState, preparedVoice } from '../voice/lina.js';
 import { warmQuick, quickFor } from '../agent/runner.js';
+import { accessSync, constants as fsConstants } from 'node:fs';
+import { vaultConnected, vaultRoot, vaultOverview, readNote } from '../connectors/obsidian.js';
 
 export const voice = new Hono();
 
@@ -134,4 +136,17 @@ voice.get('/voice/voices', async c => {
   if (!config.elevenKey) throw new HttpError(503, 'Set ELEVENLABS_API_KEY on the server to choose an ElevenLabs voice');
   try { return c.json({ voices: await elevenVoices() }); }
   catch (e) { throw new HttpError(502, e.message); }
+});
+
+/* Is the Obsidian vault connected? For Settings › Lina › Obsidian: a real check (folder found, a note read, writable). */
+voice.get('/vault/status', c => {
+  if (!config.obsidian.vault) return c.json({ connected: false, reason: 'OBSIDIAN_VAULT is not set in the server’s .env' });
+  if (!vaultConnected()) return c.json({ connected: false, reason: 'Folder not found on the server: ' + vaultRoot() });
+  try {
+    const o = vaultOverview();
+    const first = o.recent[0] ? readNote(o.recent[0]) : null;
+    let writable = true;
+    try { accessSync(vaultRoot(), fsConstants.W_OK); } catch { writable = false; }
+    return c.json({ connected: true, path: vaultRoot(), notes: o.notes, folders: o.folders, sample: first?.path || null, readable: !!first, writable });
+  } catch (e) { return c.json({ connected: false, reason: e.message }); }
 });
