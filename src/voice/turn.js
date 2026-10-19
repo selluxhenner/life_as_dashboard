@@ -62,6 +62,19 @@ export async function prepareText(text) {
   } catch { return null; }
 }
 
+/** The voice of the answer the server expects for a prepared turn, as base64 mp3, or null. */
+export async function preparedVoice(id) {
+  const cfg = apiConfig();
+  try {
+    const res = await fetch(base(cfg) + '/api/voice/prepare/' + encodeURIComponent(id) + '/voice', { headers: { Authorization: 'Bearer ' + cfg.token } });
+    if (!res.ok) return null;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  } catch { return null; }
+}
+
 /** Was the sentence up to that pause a finished request? false keeps the app listening; when unsure, true. */
 export async function preparedFinished(id) {
   const cfg = apiConfig();

@@ -103,15 +103,28 @@ export function prepareTurn({ audio, type, text }) {
   const id = uid('prep_');
   const t0 = Date.now();
   const raw = (text != null ? Promise.resolve(String(text)) : transcribe(audio, type)).then(cleanTranscript);
-  prepared.set(id, { at: t0, raw });
+  const entry = { at: t0, raw, say: null, voice: null };
+  prepared.set(id, entry);
   raw.then(said => {
     const heard = stripWake(said);
     if (!finished(heard)) return;                                 // half a request: nothing to voice yet
     const plan = instantOn() ? planCommand(heard, loadWorld()) : null;
     const say = plan && (plan.calls.length ? plan.expect : plan.reply);
-    if (say) speak(say, plan.lang).catch(() => {});              // on disk by the time the turn asks for it
+    if (!say) return;
+    // voiced now: on disk by the time the turn asks for it, and the app may play it the moment he stops
+    entry.say = { text: say, lang: plan.lang };
+    entry.voice = synthesize({ text: say, lang: plan.lang, fast: true }).then(r => r.audio);
+    entry.voice.catch(() => {});
   }).catch(() => {});
   return id;
+}
+
+/** The voice of the answer prepareTurn expects (mp3 Buffer), or null when there is none. */
+export async function preparedVoice(id) {
+  const p = prepared.get(id);
+  if (!p) return null;
+  await p.raw.catch(() => '');
+  return p.voice ? p.voice.catch(() => null) : null;
 }
 export const hasPrepared = id => prepared.has(id);
 
@@ -127,12 +140,13 @@ export function finished(heard) {
   return true;
 }
 
-/** What the pause brought: {heard, finished}, once transcribed (null for an unknown id). */
+/** What the pause brought: {heard, finished, say, lang}, once transcribed (null for an unknown id). say is the answer an
+    instant command will give if this is the end (its voice: preparedVoice). */
 export async function preparedState(id) {
   const p = prepared.get(id);
   if (!p) return null;
   const heard = stripWake(await p.raw.catch(() => ''));
-  return { heard, finished: finished(heard) };
+  return { heard, finished: finished(heard), say: p.say ? p.say.text : null, lang: p.say ? p.say.lang : null };
 }
 
 /**

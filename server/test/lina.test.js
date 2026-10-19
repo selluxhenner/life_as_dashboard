@@ -255,7 +255,7 @@ test('a pause in the middle of a request is not the end: the app hears whether t
     method: 'POST', headers: { Authorization: 'Bearer test-master-token', 'Content-Type': 'audio/wav' }, body: new Uint8Array(8000)
   }));
   const { id } = await res.json();
-  assert.deepEqual((await api('GET', '/api/voice/prepare/' + id)).body, { heard: 'add a task.', finished: false });
+  assert.deepEqual((await api('GET', '/api/voice/prepare/' + id)).body, { heard: 'add a task.', finished: false, say: null, lang: null });
   assert.equal((await api('GET', '/api/voice/prepare/prep_nope')).status, 404);
 });
 
@@ -277,7 +277,10 @@ test('live transcription: the app gets a single-use token, sends the words, and 
   // the whole request: known at once, and its answer is voiced ahead
   p = (await api('POST', '/api/voice/prepare', { text: 'Hey Lina, add a task. Feed the cat tomorrow.' })).body;
   assert.equal(p.finished, true);
-  await new Promise(r => setTimeout(r, 30));
+  assert.deepEqual([p.say, p.lang], ['Added “Feed the cat” for tomorrow.', 'en']);   // what she will say …
+  const v = await app.fetch(new Request('http://test.local/api/voice/prepare/' + p.id + '/voice', { headers: { Authorization: 'Bearer test-master-token' } }));
+  assert.equal(v.status, 200);                                            // … and its voice, before the turn
+  assert.equal(Buffer.from(await v.arrayBuffer()).toString(), 'ID3-lina');
   assert.equal(tts.length, 1);
   assert.equal(db.get("SELECT COUNT(*) n FROM todos WHERE title = 'Feed the cat'").n, 0);   // nothing changed yet
 

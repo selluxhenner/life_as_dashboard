@@ -7,7 +7,7 @@ import { synthesize, transcribe, ttsEngine, sttEngine, elevenChoice } from '../v
 import { elevenVoices, elevenAccount, elevenRealtimeToken, REALTIME_STT_URL, ELEVEN_MODELS } from '../voice/eleven.js';
 import { briefingScript } from '../jobs/briefing.js';
 import { worldScript } from '../jobs/news.js';
-import { linaTurn, prepareTurn, hasPrepared, preparedState } from '../voice/lina.js';
+import { linaTurn, prepareTurn, hasPrepared, preparedState, preparedVoice } from '../voice/lina.js';
 import { warmQuick, quickFor } from '../agent/runner.js';
 
 export const voice = new Hono();
@@ -90,6 +90,14 @@ voice.get('/voice/prepare/:id', async c => {
   const st = /^prep_\w+$/.test(id) ? await preparedState(id) : null;
   if (!st) throw new HttpError(404, 'Unknown prepared turn');
   return c.json(st);
+});
+
+/* The expected answer's voice (mp3), so the app can speak the moment Kevin stops while the turn saves the change. */
+voice.get('/voice/prepare/:id/voice', async c => {
+  const id = c.req.param('id');
+  const audio = /^prep_\w+$/.test(id) ? await preparedVoice(id) : null;
+  if (!audio) throw new HttpError(404, 'No voice for this turn');
+  return mp3(c, { audio, engine: 'ahead', cached: true });
 });
 
 /* Kevin started talking to Lina: get the model ready (prompt cache, connection) while he speaks. Returns at once. */
