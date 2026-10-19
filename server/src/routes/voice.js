@@ -7,7 +7,7 @@ import { synthesize, transcribe, ttsEngine, sttEngine, elevenChoice } from '../v
 import { elevenVoices, elevenAccount, ELEVEN_MODELS } from '../voice/eleven.js';
 import { briefingScript } from '../jobs/briefing.js';
 import { worldScript } from '../jobs/news.js';
-import { linaTurn } from '../voice/lina.js';
+import { linaTurn, prepareTurn, hasPrepared, preparedState } from '../voice/lina.js';
 import { warmQuick, quickFor } from '../agent/runner.js';
 
 export const voice = new Hono();
@@ -41,16 +41,39 @@ voice.post('/voice/tts', async c => {
 /* One spoken exchange in one request (speech in, answer + voice out), for "Hey Lina" on the phone and the desktop and
    for push-to-talk. Query: conversationId (follow-ups), awaiting (comma-separated action ids Lina just asked yes/no
    about), wake=1, context=briefing|world (what Kevin just listened to). */
-voice.post('/voice/turn', async c => {
-  const type = c.req.header('Content-Type') || 'audio/wav';
+async function recording(c) {
   const buf = Buffer.from(await c.req.arrayBuffer());
   if (buf.length < 1000) throw new HttpError(400, 'Empty recording');
   if (buf.length > 12 * 1024 * 1024) throw new HttpError(413, 'Recording too long');
+  return buf;
+}
+
+/* prepared=<id from /voice/prepare>: no audio, the words were sent when Kevin paused. 409 when the id is unknown
+   (expired, server restarted): the app then sends the recording itself. */
+voice.post('/voice/turn', async c => {
+  const type = c.req.header('Content-Type') || 'audio/wav';
   const q = c.req.query();
+  const prepared = /^prep_\w+$/.test(q.prepared || '') ? q.prepared : null;
+  if (q.prepared && !(prepared && hasPrepared(prepared))) throw new HttpError(409, 'Unknown prepared turn');
+  const buf = prepared ? null : await recording(c);
   const conversationId = /^conv_\w+$/.test(q.conversationId || '') ? q.conversationId : null;
   const awaiting = String(q.awaiting || '').split(',').filter(id => /^act_\w+$/.test(id)).slice(0, 5);
   const context = ['briefing', 'world'].includes(q.context) ? q.context : null;
-  return c.json(await linaTurn({ audio: buf, type, conversationId, awaiting, viaWake: q.wake === '1', context }));
+  return c.json(await linaTurn({ audio: buf, type, prepared, conversationId, awaiting, viaWake: q.wake === '1', context }));
+});
+
+/* Kevin paused: what he said so far. Transcribed and thought through ahead, nothing is changed. Returns {id} at once. */
+voice.post('/voice/prepare', async c => {
+  const type = c.req.header('Content-Type') || 'audio/wav';
+  return c.json({ id: prepareTurn({ audio: await recording(c), type }) });
+});
+
+/* Was the paused sentence finished? Waits for the transcript: {heard, finished}. The app keeps listening when not. */
+voice.get('/voice/prepare/:id', async c => {
+  const id = c.req.param('id');
+  const st = /^prep_\w+$/.test(id) ? await preparedState(id) : null;
+  if (!st) throw new HttpError(404, 'Unknown prepared turn');
+  return c.json(st);
 });
 
 /* Kevin started talking to Lina: get the model ready (prompt cache, connection) while he speaks. Returns at once. */

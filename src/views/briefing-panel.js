@@ -9,7 +9,7 @@ import { panel } from '../components/panel.js';
 import { agendaFor } from '../core/agenda.js';
 import { liveTasks, weekCount, trainingHabit, liveJobs } from '../core/model.js';
 import { apiConfig, api, apiFetch, errorText } from '../core/api.js';
-import { speak, stopSpeaking, speakingWhat, secondsFor } from '../voice/tts.js';
+import { speak, stopSpeaking, speakingWhat, secondsFor, prefetchAudio } from '../voice/tts.js';
 import { talk, toggleTalk, canTalk } from '../voice/talk.js';
 import { icon } from '../core/icons.js';
 import { chip } from '../components/ui.js';
@@ -173,6 +173,7 @@ export function briefingPanel() {
   const b = current();
   const text = spokenTextOf(b);
   const playingThis = speakingWhat() === 'briefing';
+  if (!b.local && b.spoken && !playingThis) prefetchAudio(text, '/api/voice/briefing');   // Listen then starts at once
   const listenBtn = h('button.btn.sm' + (playingThis ? '' : '.primary'), {
     type: 'button', title: 'The short spoken version: the few things that matter most',
     onclick: () => (playingThis ? stopSpeaking() : playBriefing())

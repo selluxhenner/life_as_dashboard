@@ -108,7 +108,7 @@ const cache = new Map();          // premium audio, so replaying the briefing is
 export const isSpeaking = () => speaking;
 /* What is being read right now ('briefing', 'world', 'talk' …), so a view can turn its Listen button into Stop. */
 export const speakingWhat = () => (speaking ? playing : null);
-export function clearVoiceCache() { for (const u of cache.values()) URL.revokeObjectURL(u); cache.clear(); }
+export function clearVoiceCache() { for (const u of cache.values()) URL.revokeObjectURL(u); cache.clear(); failedAt.clear(); }
 
 export function stopSpeaking() {
   gen++;
@@ -119,24 +119,48 @@ export function stopSpeaking() {
   if (cap) cap.stop().catch(() => {});
 }
 
+/* Premium audio by key: from the cache, from a download already under way (a prefetch), or fetched now. */
+const loading = new Map(), failedAt = new Map();
+function loadAudio(key, request) {
+  if (cache.has(key)) return Promise.resolve(cache.get(key));
+  if (!loading.has(key)) {
+    loading.set(key, request().then(async res => {
+      if (!res.ok) throw new Error('tts ' + res.status);
+      const url = URL.createObjectURL(await res.blob());
+      cache.set(key, url);
+      if (cache.size > 12) { const [k, u] = cache.entries().next().value; URL.revokeObjectURL(u); cache.delete(k); }
+      return url;
+    }).catch(e => { failedAt.set(key, Date.now()); throw e; }).finally(() => loading.delete(key)));
+  }
+  return loading.get(key);
+}
+const serverAudio = audioPath => () => {
+  const cfg = apiConfig();
+  return fetch(cfg.url.replace(/\/+$/, '') + audioPath, { headers: { Authorization: 'Bearer ' + cfg.token } });
+};
+
+/**
+ * Downloads server-rendered audio (the briefing / world Listen buttons) while the card is on screen, so pressing
+ * Listen starts at once. Same text and path as the later speak() call; a failure waits a minute before retrying.
+ */
+export function prefetchAudio(text, audioPath) {
+  const v = voiceSettings();
+  if (!audioPath || !apiConfig() || !(v.provider === 'premium' || v.provider === 'auto')) return;
+  const key = audioPath + '|' + speakable(text);
+  if (cache.has(key) || loading.has(key) || Date.now() - (failedAt.get(key) || 0) < 60000) return;
+  loadAudio(key, serverAudio(audioPath)).catch(() => {});
+}
+
 async function speakPremium(text, lang, v, my, audioPath, audioData, fast) {
   const key = (audioPath || v.premiumVoice + '|' + lang + (fast ? '|fast' : '')) + '|' + text;
-  let url = audioData ? 'data:audio/mpeg;base64,' + audioData : cache.get(key);
-  if (!url) {
+  const url = audioData ? 'data:audio/mpeg;base64,' + audioData : await loadAudio(key, audioPath ? serverAudio(audioPath) : () => {
     const cfg = apiConfig();
-    const base = cfg.url.replace(/\/+$/, '');
-    const res = audioPath
-      ? await fetch(base + audioPath, { headers: { Authorization: 'Bearer ' + cfg.token } })
-      : await fetch(base + '/api/voice/tts', {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + cfg.token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, lang, voice: v.premiumVoice, fast })
-      });
-    if (!res.ok) throw new Error('tts ' + res.status);
-    url = URL.createObjectURL(await res.blob());
-    cache.set(key, url);
-    if (cache.size > 12) { const [k, u] = cache.entries().next().value; URL.revokeObjectURL(u); cache.delete(k); }
-  }
+    return fetch(cfg.url.replace(/\/+$/, '') + '/api/voice/tts', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + cfg.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, lang, voice: v.premiumVoice, fast })
+    });
+  });
   if (my !== gen) return;
   await new Promise((resolve, reject) => {
     audio = new Audio(url);

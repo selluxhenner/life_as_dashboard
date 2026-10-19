@@ -59,8 +59,8 @@ async function turn(b64, viaWake) {
   setTalk({ state: 'speaking', heard: r.heard, reply: r.reply });
   await new Promise(done => speak(r.reply, done, { lang: r.lang, what: 'talk', audioData: r.audio || undefined }));
   if (talk.source !== 'wake' || talk.state !== 'speaking') return send('resume');
-  if (r.listen) { tick('open'); setTalk({ state: 'listening', heard: '' }); send('listen'); }
-  else { setTalk({ state: 'idle', source: null }); send('resume'); }
+  // listen again right away, like the Ask button; saying nothing ends the conversation (lina://nospeech)
+  tick('open'); setTalk({ state: 'listening', heard: '' }); send('listen');
 }
 
 export async function initDesktopWake() {

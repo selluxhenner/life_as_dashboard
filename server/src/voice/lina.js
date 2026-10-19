@@ -3,6 +3,7 @@
 // The yes/no to an outward action is matched here with fixed word lists, never by the model, so nothing an email or a
 // web page says can approve anything: only Kevin's own short spoken answer right after Lina's question.
 import { db } from '../db.js';
+import { uid } from '../lib/crypto.js';
 import { runAgent, runDirect, recordExchange, decideAction, quickFor, warmQuick } from '../agent/runner.js';
 import { getSetting } from '../settings.js';
 import { planCommand, loadWorld } from './templates.js';
@@ -84,15 +85,62 @@ async function instantTurn(plan, heard, cid) {
   return { reply, lang: plan.lang, pending, tools, cid: recordExchange(cid, heard, reply), early: reply === plan.expect ? early : null };
 }
 
+const instantOn = () => quickFor('voice') && getSetting('lina').instant !== false;
+
+/* Thinking ahead. The app sends what Kevin said so far the moment he pauses (prepareTurn), while it waits to be sure
+   he has finished. The words are transcribed and the likely answer is planned and already voiced, but nothing is
+   changed: that only happens in linaTurn once the pause turns out to be the end ({prepared: id}). If he goes on
+   talking, the app forgets the id and the entry expires. */
+const prepared = new Map();
+const PREPARED_MS = 60000;
+
+export function prepareTurn({ audio, type }) {
+  warmQuick().catch(() => {});
+  for (const [k, p] of prepared) if (Date.now() - p.at > PREPARED_MS) prepared.delete(k);
+  const id = uid('prep_');
+  const t0 = Date.now();
+  const raw = transcribe(audio, type);
+  prepared.set(id, { at: t0, raw, sttMs: raw.then(() => Date.now() - t0, () => 0) });
+  raw.then(text => {
+    const heard = stripWake(text);
+    const plan = heard && instantOn() ? planCommand(heard, loadWorld()) : null;
+    const say = plan && (plan.calls.length ? plan.expect : plan.reply);
+    if (say) speak(say, plan.lang).catch(() => {});              // on disk by the time the turn asks for it
+  }).catch(() => {});
+  return id;
+}
+export const hasPrepared = id => prepared.has(id);
+
+/* Is what he said up to the pause a finished request? "Hey Lina, add a task." is not ("… buy groceries" follows), so the
+   app keeps listening; anything a prepared command understands, or any other sentence, is. */
+const OPEN_END = /\b(and|und|or|oder|to|zu|for|für|with|mit|the|a|an|der|die|das|den|dem|ein|eine|einen|my|mein|meine|meinen|also|dann|then|um|at|on|am|but|aber|called|named|namens|that|dass)$/i;
+const LEAD_ONLY = /^(?:please\s+|bitte\s+|can you\s+|kannst du\s+)?(?:add|create|new|make|remind me(?:\s+to)?|schedule|put|book|move|delete|remove|cancel|mark|rename|change|füge|trag\w*|erstell\w*|erinner\w*(?:\s+mich)?|lösch\w*|verschieb\w*|änder\w*|neue?[rn]?)(?:\s+(?:a|an|the|my|new|another|task|todo|to-do|event|meeting|appointment|reminder|termin|aufgabe|einen?|eine|neue[nr]?|mir|mich))*$/i;
+export function finished(heard) {
+  const t = String(heard || '').replace(/[.,!?;:…\s]+$/u, '').trim();
+  if (!t || OPEN_END.test(t) || LEAD_ONLY.test(t)) return false; // only "Hey Lina", or a request that is still coming
+  return true;
+}
+
+/** What the pause brought: {heard, finished}, once transcribed (null for an unknown id). */
+export async function preparedState(id) {
+  const p = prepared.get(id);
+  if (!p) return null;
+  const heard = stripWake(await p.raw.catch(() => ''));
+  return { heard, finished: finished(heard) };
+}
+
 /**
  * One spoken exchange. awaiting = ids of actions Lina just asked about; context = what Kevin just listened to
- * ('briefing' | 'world'). Returns {heard, reply, lang, conversationId, awaiting:[{id, summary}], tools:[{name, status,
- * summary}], listen, audio (base64 mp3 | null), voiceError, instant (answered by a prepared command), ms {stt, think, voice}}.
+ * ('briefing' | 'world'); prepared = the id from prepareTurn instead of audio. Returns {heard, reply, lang,
+ * conversationId, awaiting:[{id, summary}], tools:[{name, status, summary}], listen, audio (base64 mp3 | null),
+ * voiceError, instant (answered by a prepared command), ms {stt, think, voice}}.
  */
-export async function linaTurn({ audio, type, conversationId, awaiting = [], viaWake = false, context = null }) {
+export async function linaTurn({ audio, type, prepared: prepId, conversationId, awaiting = [], viaWake = false, context = null }) {
   warmQuick().catch(() => {});                                     // the model gets ready while Scribe listens
   const t0 = Date.now();
-  const raw = await transcribe(audio, type);
+  const prep = prepId && prepared.get(prepId);
+  if (prep) prepared.delete(prepId);
+  const raw = prep ? await prep.raw : await transcribe(audio, type);
   const t1 = Date.now();
   if (viaWake && !saidLina(raw)) return { heard: '', reply: '', lang: 'en', conversationId, awaiting: [], listen: false, audio: null, falseWake: true };
   const heard = stripWake(raw);
@@ -115,7 +163,7 @@ export async function linaTurn({ audio, type, conversationId, awaiting = [], via
     const kinds = [...new Set(waiting.map(a => a.tool))];
     reply = errors.length ? SAY[lang].fail + errors[0] : yn.answer === 'no' ? SAY[lang].no
       : kinds.length === 1 && DONE[kinds[0]] ? DONE[kinds[0]][lang] : SAY[lang].done;
-  } else if (quickFor('voice') && getSetting('lina').instant !== false &&!(waiting.length && /^\W*(ja|jo|yes|yeah|nein|no|nö|nope)\b/i.test(heard)) &&
+  } else if (instantOn() && !(waiting.length && /^\W*(ja|jo|yes|yeah|nein|no|nö|nope)\b/i.test(heard)) &&
              (plan = planCommand(heard, loadWorld()))) {
     const r = await instantTurn(plan, heard, cid);
     ({ reply, lang, pending, tools, early } = r);
@@ -138,6 +186,6 @@ export async function linaTurn({ audio, type, conversationId, awaiting = [], via
   return {
     heard, reply, lang, conversationId: cid, awaiting: pending, tools,
     listen: pending.length > 0 || /\?\s*$/.test(reply), audio: mp3, voiceError,
-    instant: !!plan, ms: { stt: t1 - t0, think: t2 - t1, voice: Date.now() - t2 }
+    instant: !!plan, ahead: !!prep, ms: { stt: t1 - t0, think: t2 - t1, voice: Date.now() - t2 }
   };
 }

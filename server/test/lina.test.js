@@ -17,7 +17,7 @@ process.env.ELEVENLABS_API_KEY = 'xi-test';              // the voice
 process.env.ELEVENLABS_API_URL = 'https://eleven.test';
 
 /* ---------- fake upstream APIs (installed before the SDK captures fetch) ---------- */
-let heard = '', script = [];
+let heard = '', script = [], sttCalls = 0;
 const calls = [], tts = [];
 const realFetch = globalThis.fetch;
 
@@ -52,7 +52,7 @@ globalThis.fetch = async (url, opts = {}) => {
     const content = next(body);
     return sse(body.model, content, content.some(b => b.type === 'tool_use') ? 'tool_use' : 'end_turn');
   }
-  if (u.endsWith('/v1/audio/transcriptions')) return new Response(JSON.stringify({ text: heard }), { headers: { 'content-type': 'application/json' } });
+  if (u.endsWith('/v1/audio/transcriptions')) return (sttCalls++, new Response(JSON.stringify({ text: heard }), { headers: { 'content-type': 'application/json' } }));
   if (u.startsWith('https://eleven.test/')) {
     tts.push({ path: new URL(u).pathname, body: JSON.parse(opts.body) });
     return new Response(Buffer.from('ID3-lina'));
@@ -210,6 +210,49 @@ test('instant commands: the usual ones skip the model entirely, and a cancel sti
   script.push(() => [{ type: 'text', text: 'Nothing new from Max.' }]);
   assert.equal((await turn('did Max write me?')).instant, false);
   assert.equal(modelCalls().length, 1);
+});
+
+test('thinking ahead: what Kevin said up to a pause is transcribed and voiced early, and changed only at the end', async () => {
+  setSetting('lina', { people: [], quick: true, instant: true });
+  const post = (path, body = new Uint8Array(8000)) => app.fetch(new Request('http://test.local' + path, {
+    method: 'POST', headers: { Authorization: 'Bearer test-master-token', 'Content-Type': 'audio/wav' }, body
+  }));
+
+  heard = 'add water the plants for tomorrow';
+  sttCalls = 0;
+  const { id } = await (await post('/api/voice/prepare')).json();
+  assert.match(id, /^prep_/);
+  await new Promise(r => setTimeout(r, 50));                              // the pause goes on: thinking ahead runs
+  assert.equal(db.get("SELECT COUNT(*) n FROM todos WHERE title = 'Water the plants'").n, 0);   // nothing changed yet
+  assert.equal(tts.length, 1);                                            // but the answer is already voiced
+
+  const r = await (await post('/api/voice/turn?prepared=' + id, null)).json();
+  assert.equal(r.reply, 'Added “Water the plants” for tomorrow.');
+  assert.equal(r.ahead, true);
+  assert.equal(sttCalls, 1);                                              // transcribed once, during the pause
+  assert.equal(tts.length, 1);                                            // and voiced once
+  assert.equal(modelCalls().length, 0);
+  assert.equal(db.get("SELECT COUNT(*) n FROM todos WHERE title = 'Water the plants'").n, 1);
+
+  // used once; an unknown or used id is refused, so the app sends the recording instead
+  assert.equal((await post('/api/voice/turn?prepared=' + id, null)).status, 409);
+});
+
+test('a pause in the middle of a request is not the end: the app hears whether the sentence is finished', async () => {
+  setSetting('lina', { people: [], quick: true, instant: true });
+  const { finished } = await import('../src/voice/lina.js');
+  for (const s of ['', 'add a task.', 'Add a new task', 'remind me to', 'Erinnere mich', 'füge einen Termin', 'add milk and', 'move the dentist to'])
+    assert.equal(finished(s), false, s);
+  for (const s of ['add a task buy some groceries for tomorrow', 'Add buy milk.', 'what\'s on tomorrow?', 'Did Max write me?', 'neue Aufgabe Wäsche waschen'])
+    assert.equal(finished(s), true, s);
+
+  heard = 'Hey Lina, add a task.';
+  const res = await app.fetch(new Request('http://test.local/api/voice/prepare', {
+    method: 'POST', headers: { Authorization: 'Bearer test-master-token', 'Content-Type': 'audio/wav' }, body: new Uint8Array(8000)
+  }));
+  const { id } = await res.json();
+  assert.deepEqual((await api('GET', '/api/voice/prepare/' + id)).body, { heard: 'add a task.', finished: false });
+  assert.equal((await api('GET', '/api/voice/prepare/prep_nope')).status, 404);
 });
 
 test('a lookup or a failed change still gets the second call, and its answer is what Lina says', async () => {

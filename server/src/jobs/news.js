@@ -9,6 +9,7 @@ import { getSetting } from '../settings.js';
 import { notify } from '../notify/index.js';
 import { shapeSpoken, spokenText, spokenScript, MAX_WORDS, TONE_IDS, TONE_RULE } from '../voice/script.js';
 import { localTime } from '../lib/time.js';
+import { synthesize, ttsEngine } from '../voice/speech.js';
 
 const COUNTRIES = JSON.parse(readFileSync(new URL('../data/countries.json', import.meta.url), 'utf8'));
 const COUNTRY_NAMES = Object.keys(COUNTRIES).sort();
@@ -237,6 +238,9 @@ Clean, precise, neutral — like a wire service. Merge items about the same even
     .catch(e => { console.error('news: spoken summary', e.message); return null; });
   db.run('INSERT OR REPLACE INTO news_digests (slot, created_at, regions, top, elections, spoken) VALUES (?, ?, ?, ?, ?, ?)',
     slot, Date.now(), j.str(regions), j.str(top), j.str(elections), j.str(spoken));
+  // the spoken summary's audio, rendered in the background so Listen starts instantly
+  const script = ttsEngine() && worldScript();
+  if (script) synthesize({ text: script, lang: 'en' }).catch(e => console.error('news: voice', e.message));
   return { slot, top: top.length, elections: elections.length, stories: Object.values(regions).reduce((n, l) => n + l.length, 0) };
 }
 

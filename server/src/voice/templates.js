@@ -228,7 +228,8 @@ function planAdd(text, today, nowTime, world, lang) {
   if (p) { priority = priorityOf(p[1] || p[2]); body = body.replace(PRIO, ' '); }
   let title = trimEdges(body.replace(/\s+/g, ' ').trim().replace(/^(?:daran|dass|an)\s+/i, ''));
   if (remind) title = trimEdges(title.replace(/\s+zu\s+([\p{L}]+)$/u, ' $1'));          // "die Miete zu zahlen" → "Miete zahlen"
-  if (title.length < 2 || title.length > 120 || /^(it|that|this|das|es|dies)$/i.test(title)) return null;
+  if (title.length < 2 || title.length > 120 || /^(it|that|this|das|es|dies)$/i.test(title)
+      || new RegExp(`^(?:new\\s+|neue[nr]?\\s+)?(?:${KIND_TODO}|${KIND_EVENT})s?$`, 'i').test(title)) return null;   // "add a task": which one is still to come
   const T = cap(title);
 
   if (cal || w.time) {

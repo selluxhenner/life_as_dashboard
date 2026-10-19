@@ -12,7 +12,6 @@ import { triageInbox } from './triage.js';
 import { refreshCalendar, refreshInbox } from './refresh.js';
 import { notify } from '../notify/index.js';
 import { config } from '../config.js';
-import { getSetting } from '../settings.js';
 import { todayWeather } from '../lib/weather.js';
 import { marketPulse } from './markets.js';
 import { shapeSpoken, spokenText, spokenScript, MAX_WORDS, TONE_IDS, TONE_RULE } from '../voice/script.js';
@@ -90,8 +89,8 @@ async function writeSpoken(date, ctx, card) {
   });
   const spoken = shapeSpoken(out, r => valid.has(r));
   db.run('UPDATE briefings SET spoken = ? WHERE date = ?', j.str(spoken), date);
-  // When it will be read out on its own, render the audio now so it starts instantly (cached on disk).
-  if (getSetting('voice').autoRead && ttsEngine()) await synthesize({ text: spokenScript(spoken), lang: 'en' }).catch(e => console.error('briefing: voice', e.message));
+  // Render the audio now, in the background, so Listen starts instantly (cached on disk) instead of waiting ~5 s for it.
+  if (ttsEngine()) synthesize({ text: spokenScript(spoken), lang: 'en' }).catch(e => console.error('briefing: voice', e.message));
   return spoken;
 }
 

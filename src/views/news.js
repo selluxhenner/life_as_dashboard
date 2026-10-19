@@ -8,7 +8,7 @@ import { fmt } from '../core/dates.js';
 import { notify } from '../core/store.js';
 import COUNTRIES from '../assets/country-centroids.json';
 import { go } from '../core/router.js';
-import { speak, stopSpeaking, speakingWhat } from '../voice/tts.js';
+import { speak, stopSpeaking, speakingWhat, prefetchAudio } from '../voice/tts.js';
 import { talk, toggleTalk, canTalk } from '../voice/talk.js';
 import { icon } from '../core/icons.js';
 
@@ -151,6 +151,7 @@ export function worldSpeech(digest, stories, label = '', matches = () => true) {
 
 function listenButton(speech, cls = 'btn') {
   const on = speakingWhat() === 'world';
+  if (speech && speech.audioPath && !on) prefetchAudio(speech.text, speech.audioPath);   // Listen then starts at once
   return h('button.' + cls, {
     type: 'button', disabled: !speech && !on, title: 'The world in 30 seconds: what matters and why',
     onclick: () => (on ? stopSpeaking() : speak(speech.text, null, { what: 'world', lang: 'en', audioPath: speech.audioPath }))

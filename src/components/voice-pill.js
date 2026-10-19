@@ -6,7 +6,7 @@ import { icon } from '../core/icons.js';
 import { talk, toggleTalk, cancelTalk } from '../voice/talk.js';
 
 const LINGER = 15000;
-const LABEL = { listening: 'Lina is listening — tap Send when you’re done', thinking: 'Lina is thinking…', speaking: 'Lina', idle: 'Lina' };
+const LABEL = { listening: 'Lina is listening — just talk', thinking: 'Lina is thinking…', speaking: 'Lina', idle: 'Lina' };
 const ABOUT = { briefing: 'about your briefing', world: 'about the world' };
 
 export function mountVoicePill() {
@@ -22,7 +22,7 @@ export function mountVoicePill() {
     if (recent) hideTimer = setTimeout(render, LINGER - (Date.now() - talk.at) + 50);
     const st = talk.state;
     const action = st === 'listening' && talk.source === 'wake' ? null           // "Hey Lina" ends by itself when Kevin pauses
-      : st === 'listening' ? h('button.btn.sm.primary', { type: 'button', onclick: () => toggleTalk() }, 'Send')
+      : st === 'listening' ? h('button.btn.sm', { type: 'button', title: 'She answers by herself when you pause', onclick: () => toggleTalk() }, 'Send now')
       : st === 'speaking' ? h('button.btn.sm', { type: 'button', onclick: () => toggleTalk() }, icon('pause'), 'Stop')
       : recent ? h('button.btn.sm', { type: 'button', onclick: () => toggleTalk(talk.context) }, icon('mic'), 'Ask again') : null;
     host.replaceChildren(h('div.voice-pill', { role: 'status', dataset: { state: st } },

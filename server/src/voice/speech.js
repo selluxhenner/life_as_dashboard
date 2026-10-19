@@ -72,7 +72,15 @@ export async function synthesize({ text, lang = 'en', openaiVoice, elevenVoice, 
   mkdirSync(CACHE_DIR, { recursive: true });
   const file = resolve(CACHE_DIR, key + '.mp3');
   if (existsSync(file)) return { audio: readFileSync(file), engine, cached: true };
+  // the same text already being rendered (Lina voices a likely answer while Kevin pauses): wait for that one
+  if (rendering.has(key)) return rendering.get(key);
+  const job = render(engine, eleven, oaVoice, text, lang, file).finally(() => rendering.delete(key));
+  rendering.set(key, job);
+  return job;
+}
 
+const rendering = new Map();
+async function render(engine, eleven, oaVoice, text, lang, file) {
   let audio;
   if (engine === 'elevenlabs') {
     try {
