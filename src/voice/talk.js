@@ -122,7 +122,7 @@ async function converse(context) {
       const opts = { type: 'audio/wav', conversationId: chatConversationId(), context, awaiting: Date.now() - awaiting.at < 10 * 60000 ? awaiting.ids : '' };
       const id = prep ? await prep : null;
       // "Zack, zack": the expected answer is already voiced, so she says it now while the turn saves the change
-      const said = ahead && ahead.id === id ? await Promise.race([ahead.audio, new Promise(r => setTimeout(() => r(null), 150))]) : null;
+      const said = ahead && ahead.id === id ? await Promise.race([ahead.audio, new Promise(r => setTimeout(() => r(null), 1500))]) : null;   // never later than the turn, which waits for the same voice
       const pending = voiceTurn(wav, { ...opts, prepared: id });
       pending.catch(() => {});
       if (said) {
