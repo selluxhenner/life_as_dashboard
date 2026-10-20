@@ -289,7 +289,8 @@ html.is-dragging .un-day[data-drop] { box-shadow: inset 0 0 0 1px color-mix(in o
 .wa-items { display: flex; flex-direction: column; border-top: 1px solid var(--seam); }
 .wa-item { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 56px 1fr; gap: 0 var(--s-3); padding: var(--s-2) var(--s-4); box-shadow: inset 3px 0 0 var(--c); cursor: pointer; }
 .wa-item + .wa-item { border-top: 1px solid var(--seam); }
-.wa-item.task { cursor: default; }
+.ad-pill.task { cursor: pointer; }
+.ad-pill.task:hover, .wa-item.task:hover { background: color-mix(in oklab, var(--c) 28%, transparent); }
 .wa-item.done .wa-title { color: var(--ink-3); text-decoration: line-through; }
 .wa-time { font-size: var(--fs-xs); color: var(--ink-3); padding-top: 2px; }
 .wa-title { font-size: var(--fs-sm); overflow-wrap: anywhere; }
@@ -335,6 +336,11 @@ html.is-dragging .un-day[data-drop] { box-shadow: inset 0 0 0 1px color-mix(in o
 .now-pill { position: absolute; right: 4px; top: -9px; background: var(--flare); color: #fff; font-family: var(--font-data); font-size: 10px; padding: 0 5px; border-radius: var(--r-pill); }
 .ev-detail { position: fixed; right: var(--s-6); bottom: var(--s-6); width: min(380px, calc(100vw - 32px)); z-index: var(--z-overlay); box-shadow: 0 30px 80px rgb(0 0 0 / .6), inset 3px 0 0 var(--c); background: var(--hull); }
 .ev-detail .row .micro { width: 60px; }
+/* phone: sit above the dock (64px + its margin + the gesture bar), never under it; long titles scroll inside */
+@media (max-width: 860px) {
+  .ev-detail { left: var(--s-3); right: var(--s-3); width: auto; z-index: calc(var(--z-rail) + 1);
+    bottom: calc(64px + var(--s-3) * 2 + var(--sa-bottom)); max-height: calc(100dvh - 64px - var(--s-3) * 3 - var(--sa-bottom) - var(--sa-top) - 56px); overflow: auto; }
+}
 .week-board { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--s-2); }
 .wb-day { border: 1px solid var(--seam); border-radius: var(--r-md); padding: var(--s-3); min-height: 180px; display: flex; flex-direction: column; gap: var(--s-2); }
 .wb-day.today { border-color: var(--signal); box-shadow: inset 0 2px 0 var(--signal); }
