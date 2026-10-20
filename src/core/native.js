@@ -64,6 +64,23 @@ export async function nativeTakeCaptures() {
   try { return (await native.takeCaptures()).captures || []; } catch { return []; }
 }
 
+/** The Tasks widget lists the open todos. The app reports them on every change, so it is right even without a server. */
+let tasksShown = null;
+export function nativeTasks(tasks) {
+  if (!native) return;
+  const open = tasks.filter(t => !t.done && !t.deleted);
+  const key = JSON.stringify(open.map(t => [t.id, t.updatedAt]));
+  if (key === tasksShown) return;
+  tasksShown = key;
+  native.setTasks({ tasks: open }).catch(() => { tasksShown = null; });
+}
+
+/** Tasks ticked off or added in the Tasks widget that have not reached the server (offline, or never paired). */
+export async function nativeTakeTasks() {
+  if (!native) return [];
+  try { return (await native.takeTasks()).tasks || []; } catch { return []; }
+}
+
 /** Ask the native side to check the server now (the app does this every minute while it is open). */
 export function nativeCheck() { if (native && apiConfig()) native.checkNow().then(setStatus).catch(() => {}); }
 

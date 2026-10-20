@@ -43,7 +43,8 @@ import lab from './views/lab.js';
 import captures from './views/captures.js';
 import { unsorted, settleCaptures, takeCaptures } from './features/capture/captures.js';
 import { initNotifications } from './core/notifications.js';
-import { initNative, onNativeAction, nativeCaptures, nativeTakeCaptures } from './core/native.js';
+import { initNative, onNativeAction, nativeCaptures, nativeTakeCaptures, nativeTasks, nativeTakeTasks } from './core/native.js';
+import { liveTasks, applyWidgetTasks } from './core/model.js';
 import { initDesktopWake } from './voice/wake.js';
 
 const ROUTES = [
@@ -277,9 +278,14 @@ function startServices() {
   const takeWidgetCaptures = () => nativeTakeCaptures().then(takeCaptures);
   takeWidgetCaptures();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) takeWidgetCaptures(); });
+  // the Tasks widget ticks tasks off and adds them on the home screen; it lists what the app reports
+  const takeWidgetTasks = () => nativeTakeTasks().then(applyWidgetTasks);
+  takeWidgetTasks();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) takeWidgetTasks(); });
   settleCaptures();
   nativeCaptures(unsorted().length);
-  subscribe(() => { settleCaptures(); nativeCaptures(unsorted().length); });
+  nativeTasks(liveTasks());
+  subscribe(() => { settleCaptures(); nativeCaptures(unsorted().length); nativeTasks(liveTasks()); });
   updatePings();
   // Spoken morning briefing (if switched on): now, and whenever the window comes back to front later in the morning.
   autoReadBriefing();

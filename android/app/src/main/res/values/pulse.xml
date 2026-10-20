@@ -12,6 +12,13 @@
     <string name="capture_widget_hint">Capture anything…</string>
     <string name="capture_widget_count">to sort</string>
     <string name="capture_send">Save capture</string>
+    <string name="task_widget_name">Agentic OS · Tasks</string>
+    <string name="task_widget_description">Your open tasks in a list that scrolls. Tick them off or add one from the home screen</string>
+    <string name="task_widget_title">Tasks</string>
+    <string name="task_widget_add">Add a task</string>
+    <string name="task_widget_empty">Nothing open. Tap + to add a task.</string>
+    <string name="task_widget_hint">New task…</string>
+    <string name="task_send">Save task</string>
     <string name="sc_briefing_short">Briefing</string>
     <string name="sc_briefing_long">Listen to today\'s briefing</string>
     <string name="sc_world_short">World</string>

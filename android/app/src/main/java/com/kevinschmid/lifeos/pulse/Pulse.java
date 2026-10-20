@@ -91,6 +91,8 @@ public final class Pulse {
         Prefs p = Prefs.of(ctx);
         if (!p.configured()) return "Not connected to a server yet.";
         Captures.flush(ctx);                                                  // widget captures that missed the network
+        if (TaskWidget.count(ctx) > 0) Tasks.refresh(ctx);                    // sends ticked-off tasks too
+        else Tasks.flush(ctx);
         String error = null;
         JSONObject briefingNote = null;
         long now = System.currentTimeMillis();

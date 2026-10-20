@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tasks: a list that scrolls, any size from a few rows up. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="180dp"
+    android:minResizeWidth="150dp"
+    android:minResizeHeight="110dp"
+    android:targetCellWidth="3"
+    android:targetCellHeight="3"
+    android:maxResizeWidth="600dp"
+    android:maxResizeHeight="800dp"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_tasks"
+    android:previewLayout="@layout/widget_tasks"
+    android:previewImage="@mipmap/ic_launcher"
+    android:description="@string/task_widget_description"
+    android:widgetCategory="home_screen" />

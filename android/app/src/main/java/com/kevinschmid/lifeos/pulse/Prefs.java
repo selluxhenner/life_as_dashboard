@@ -70,6 +70,20 @@ public final class Prefs {
     public String captureDraft() { return sp.getString("captureDraft", ""); }
     public void setCaptureDraft(String text) { sp.edit().putString("captureDraft", text).apply(); }
 
+    /** The Tasks widget's list as a JSON array of todos (see Tasks), and when the server last sent it. */
+    public String tasks() { return sp.getString("tasks", "[]"); }
+    public long tasksAt() { return sp.getLong("tasksAt", 0); }
+    public void setTasks(String json, boolean fromServer) {
+        SharedPreferences.Editor e = sp.edit().putString("tasks", json);
+        if (fromServer) e.putLong("tasksAt", System.currentTimeMillis());
+        e.apply();
+    }
+    /** Tasks ticked off or added in the widget that the server does not have yet, as a JSON array of todos. */
+    public String taskQueue() { return sp.getString("taskQueue", "[]"); }
+    public void setTaskQueue(String json) { sp.edit().putString("taskQueue", json).apply(); }
+    public String taskDraft() { return sp.getString("taskDraft", ""); }
+    public void setTaskDraft(String text) { sp.edit().putString("taskDraft", text).apply(); }
+
     public boolean askedNotifications() { return sp.getBoolean("askedNotifications", false); }
     public void setAskedNotifications() { sp.edit().putBoolean("askedNotifications", true).apply(); }
 
