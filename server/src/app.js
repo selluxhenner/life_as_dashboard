@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { config } from './config.js';
 import { HttpError, page } from './http.js';
-import { requireAuth } from './auth.js';
+import { requireAuth, requireOps } from './auth.js';
 import { callback as googleCallback } from './connectors/google.js';
 import { twiml, callStatus, validTwilioSignature } from './phone/twilio.js';
 import { safeEqual, hmac } from './lib/crypto.js';
@@ -11,6 +11,7 @@ import { docs } from './routes/docs.js';
 import { connections } from './routes/connections.js';
 import { voice } from './routes/voice.js';
 import { misc } from './routes/misc.js';
+import { ops, postReport } from './routes/ops.js';
 
 export const app = new Hono();
 
@@ -52,6 +53,9 @@ const twilioOk = async (c, id) => {
 app.post('/api/phone/twiml/:id', async c => { await twilioOk(c, c.req.param('id')); return c.body(twiml(c.req.param('id')), 200, { 'Content-Type': 'text/xml' }); });
 app.post('/api/phone/status/:id', async c => { callStatus(c.req.param('id'), await twilioOk(c, c.req.param('id'))); return c.body(null, 204); });
 
+/* The agent box posts its reports with an ops-scope token, which every route below refuses. */
+app.post('/api/ops/report', requireOps, postReport);
+
 /* ---------- everything else needs a device token ---------- */
 const api = new Hono();
 api.use('*', requireAuth);
@@ -61,6 +65,7 @@ api.route('/', docs);
 api.route('/', connections);
 api.route('/', voice);
 api.route('/', misc);
+api.route('/', ops);
 app.route('/api', api);
 
 app.notFound(c => c.json({ error: 'Not found' }, 404));

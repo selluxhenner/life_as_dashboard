@@ -64,6 +64,7 @@ async function maintenance() {
   db.run('DELETE FROM job_runs WHERE started_at < ?', now - 30 * day);
   db.run('DELETE FROM agent_runs WHERE started_at < ?', now - 90 * day);
   db.run('DELETE FROM notifications WHERE created_at < ?', now - 30 * day);
+  db.run('DELETE FROM ops_reports WHERE created_at < ?', now - 90 * day);
   db.exec('PRAGMA optimize');
   return { ok: true };
 }
