@@ -21,6 +21,7 @@ import { taskRow } from './today.js';
 import { aiData, toneFor, vendorName } from './ai-models.js';
 import { briefingPanel } from './briefing-panel.js';
 import { worldPulsePanel } from './news.js';
+import { serverPulse } from './ops.js';
 import { rankCard } from '../features/points/points.js';
 import { phoneQuery, isPhone } from '../core/platform.js';
 
@@ -257,7 +258,7 @@ function columns() {
     : [['upNext', 'captures', 'tasks', 'habits', 'world', 'extra']];
   return [
     h('div.grid.home-grid', { style: { '--cols': cols.length } }, cols.map(c => h('div.stack', c.map(k => P[k])))),
-    h('div.grid.home-launch', jobsPulse(), aiPulse())
+    h('div.grid.home-launch', jobsPulse(), aiPulse(), serverPulse())
   ];
 }
 
@@ -270,7 +271,7 @@ function phoneOverview(root) {
     h('section.phone-hero',
       title,
       h('div.hero-sub', fmt.long(new Date()) + ' · ' + state.settings.home.city, h('span.day-score.data', 'Day ' + s.score + '%'))),
-    h('div.stack', liveUpNext(), briefingPanel(), tasksPanel(), habitsPanel(), jobsPulse(), aiPulse())));
+    h('div.stack', liveUpNext(), briefingPanel(), tasksPanel(), habitsPanel(), jobsPulse(), aiPulse(), serverPulse())));
   return title;
 }
 

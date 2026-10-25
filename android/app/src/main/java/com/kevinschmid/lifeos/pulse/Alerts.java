@@ -40,6 +40,7 @@ public final class Alerts {
         channel(nm, "calendar", "Meeting prep", "A short prep note 30 minutes before a meeting.", NotificationManager.IMPORTANCE_DEFAULT);
         channel(nm, "jobs", "Job hunt", "Follow-ups that are due.", NotificationManager.IMPORTANCE_DEFAULT);
         channel(nm, "agent", "Assistant", "Approvals and call summaries.", NotificationManager.IMPORTANCE_DEFAULT);
+        channel(nm, "ops", "Server", "Problems the agent box found on your servers and sites.", NotificationManager.IMPORTANCE_DEFAULT);
         channel(nm, "general", "Other", "Anything else from your server.", NotificationManager.IMPORTANCE_DEFAULT);
         // Not low: many phones hide silent notifications on the lock screen, and this one is there to be seen. It has no sound instead.
         NotificationChannel pin = new NotificationChannel(CH_PINNED, "Lock-screen card", NotificationManager.IMPORTANCE_DEFAULT);
@@ -62,7 +63,7 @@ public final class Alerts {
 
     private static String channelFor(String kind) {
         switch (kind) {
-            case "briefing": case "breaking": case "ai": case "calendar": case "jobs": case "agent": return kind;
+            case "briefing": case "breaking": case "ai": case "calendar": case "jobs": case "agent": case "ops": return kind;
             default: return "general";
         }
     }

@@ -8,6 +8,7 @@ import { listOpenTodos } from '../routes/todos.js';
 import { listJobs } from '../routes/jobs.js';
 import { latestDigest } from './news.js';
 import { aiToday } from './aimodels.js';
+import { latestOps } from '../routes/ops.js';
 import { triageInbox } from './triage.js';
 import { refreshCalendar, refreshInbox } from './refresh.js';
 import { notify } from '../notify/index.js';
@@ -17,7 +18,7 @@ import { marketPulse } from './markets.js';
 import { shapeSpoken, spokenText, spokenScript, MAX_WORDS, TONE_IDS, TONE_RULE } from '../voice/script.js';
 import { synthesize, ttsEngine } from '../voice/speech.js';
 
-const SECTION_IDS = ['schedule', 'school', 'inbox', 'slack', 'tasks', 'jobs', 'news', 'ai'];
+const SECTION_IDS = ['schedule', 'school', 'inbox', 'slack', 'tasks', 'jobs', 'ops', 'news', 'ai'];
 const BriefingSchema = z.object({
   headline: z.string().describe('One sentence, the single most important thing about today'),
   sections: z.array(z.object({
@@ -53,7 +54,8 @@ who has read everything would tell him in half a minute while he gets ready:
   what it is and what to do about it. Merge and count instead of listing: "Seven new emails; only Anna's needs a reply."
   "Three tasks are overdue, and the CV fix is the one that matters." Connect things: "Your lesson ends at twelve, so you've
   got an hour to prep for the one o'clock call." Cover fixed commitments and what to prepare, clashes or tight gaps, the one
-  message that really needs an answer, deadlines and overdue tasks, a job follow-up that is due.
+  message that really needs an answer, deadlines and overdue tasks, a job follow-up that is due, a site or server that is
+  down ("ops", one short sentence, only when something is actually broken).
   Add what the card does not show when it matters: rain while he's out, unusual heat or cold, one world event that truly
   matters ("world" or "breaking"), a big market move. Skip the weather on an ordinary day.
 - ${TONE_RULE}
@@ -79,7 +81,7 @@ async function extras() {
 
 async function writeSpoken(date, ctx, card) {
   const more = await extras();
-  const valid = new Set([...ctx.events, ...ctx.emails, ...ctx.slack, ...ctx.todos, ...ctx.jobs, ...ctx.news, ...more.world, ...more.breaking, ...more.markets]
+  const valid = new Set([...ctx.events, ...ctx.emails, ...ctx.slack, ...ctx.todos, ...ctx.jobs, ...ctx.ops, ...ctx.news, ...more.world, ...more.breaking, ...more.markets]
     .map(x => x.id).concat(ctx.ai ? ['ai:today'] : [], more.weather ? ['weather'] : []));
   const out = await structured({
     feature: 'briefing-voice', tier: 'main', schema: SpokenSchema, maxTokens: 3000, effort: 'low',
@@ -134,8 +136,11 @@ export function gatherContext(date = localDate()) {
   const news = latestDigest();
   const newsLines = [];
   for (const [region, list] of Object.entries(news.digest?.regions || {})) list.slice(0, 2).forEach((s, i) => newsLines.push({ id: `news:${region}:${i}`, region, headline: s.headline }));
+  // Server health from the agent box: only reports from the last 26 h that found something.
+  const ops = latestOps({ days: 26 / 24 }).filter(r => r.status !== 'ok')
+    .map(r => ({ id: 'ops:' + r.id, job: r.job, status: r.status, summary: r.summary, findings: r.findings.filter(f => f.level !== 'ok').slice(0, 6).map(f => f.text) }));
   const ai = aiToday();
-  return { date, weekday: new Date(date + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'long' }), events, emails, slack, todos, jobs, news: newsLines, ai: ai.summaryMd ? { id: 'ai:today', summary: ai.summaryMd.slice(0, 1200) } : null };
+  return { date, weekday: new Date(date + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'long' }), events, emails, slack, todos, jobs, ops, news: newsLines, ai: ai.summaryMd ? { id: 'ai:today', summary: ai.summaryMd.slice(0, 1200) } : null };
 }
 
 export async function generateBriefing({ date = localDate(), refresh = true } = {}) {
@@ -152,12 +157,12 @@ looking for Werkstudent / part-time / startup work. Write in English, plain and 
 ${DATA_RULE}
 Rules:
 - Only state facts present in the data. Every bullet lists the ids it is based on in "refs".
-- Sections in this order, only when there is something to say: schedule (meetings/events), school (lessons), inbox (emails needing action), slack (who needs a reply), tasks, jobs (follow-ups), news (2-3 world headlines), ai (one line on AI news).
+- Sections in this order, only when there is something to say: schedule (meetings/events), school (lessons), inbox (emails needing action), slack (who needs a reply), tasks, jobs (follow-ups), ops (server and website problems from the overnight checks: at most 3 bullets, worst first, what is broken), news (2-3 world headlines), ai (one line on AI news).
 - Mention times. Point out conflicts, tight gaps and anything overdue.
 - "focus": up to 3 short things that would make today a good day.`,
     prompt: asData('today', ctx)
   });
-  const valid = new Set([...ctx.events, ...ctx.emails, ...ctx.slack, ...ctx.todos, ...ctx.jobs, ...ctx.news].map(x => x.id).concat(ctx.ai ? ['ai:today'] : []));
+  const valid = new Set([...ctx.events, ...ctx.emails, ...ctx.slack, ...ctx.todos, ...ctx.jobs, ...ctx.ops, ...ctx.news].map(x => x.id).concat(ctx.ai ? ['ai:today'] : []));
   const sections = out.sections.map(s => ({ ...s, bullets: s.bullets.filter(b => b.refs.length && b.refs.every(r => valid.has(r))) })).filter(s => s.bullets.length);
   db.run('INSERT OR REPLACE INTO briefings (date, created_at, model, headline, sections, focus) VALUES (?, ?, ?, ?, ?, ?)',
     date, Date.now(), MODELS.main, out.headline, j.str(sections), j.str(out.focus));

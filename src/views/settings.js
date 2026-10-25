@@ -161,7 +161,7 @@ function serverSettingsPanel() {
    whether the phone can actually receive it: permission, the exact morning alarm, battery, plus tile, widget and card. */
 const AI_LEVELS = [{ value: 10, label: 'Frontier only' }, { value: 9, label: 'Big launches' }, { value: 8, label: 'Notable' }];
 const PER_DAY = [{ value: 3, label: '3' }, { value: 6, label: '6' }, { value: 10, label: '10' }];
-const CHANNEL_NAMES = { briefing: 'Morning briefing', breaking: 'Breaking world news', ai: 'Major AI news', calendar: 'Meeting prep', jobs: 'Job hunt', agent: 'Assistant', lina: 'Lina’s answers', lina_wake: 'Lina is listening', general: 'Other', pinned: 'Lock-screen card' };
+const CHANNEL_NAMES = { briefing: 'Morning briefing', breaking: 'Breaking world news', ai: 'Major AI news', calendar: 'Meeting prep', jobs: 'Job hunt', agent: 'Assistant', ops: 'Server', lina: 'Lina’s answers', lina_wake: 'Lina is listening', general: 'Other', pinned: 'Lock-screen card' };
 let watchingNative = false;
 
 function whenText(t) {
@@ -212,7 +212,7 @@ function phoneSection() {
 function notificationsPanel() {
   const { data, connected } = remote('serverSettings', '/api/settings', 5 * 60000);
   const ss = (data && data.settings) || {};
-  const a = { briefing: true, breaking: true, ai: true, calendar: true, jobs: true, agent: true, aiThreshold: 9, homeCountry: 'Germany', maxPerDay: 6, ...(ss.alerts || {}) };
+  const a = { briefing: true, breaking: true, ai: true, calendar: true, jobs: true, agent: true, ops: true, aiThreshold: 9, homeCountry: 'Germany', maxPerDay: 6, ...(ss.alerts || {}) };
   const patch = async v => {
     try { await api.patch('/api/settings', { alerts: { ...a, ...v } }); refresh('serverSettings', '/api/settings'); toast('Saved'); }
     catch (e) { toast(errorText(e), 'flare'); }
@@ -232,7 +232,8 @@ function notificationsPanel() {
       a.breaking || a.ai ? row('News alerts per day', 'Breaking and AI together; the rest waits on the World and AI pages.',
         seg(PER_DAY, a.maxPerDay, v => patch({ maxPerDay: v }), 'News alerts per day')) : null,
       row('Meeting prep', 'A short prep note 30 minutes before a meeting.', toggle(!!a.calendar, v => patch({ calendar: v }), 'Meeting prep')),
-      row('Job hunt and Lina', 'Due follow-ups, approvals and call summaries.', toggle(!!(a.jobs && a.agent), v => patch({ jobs: v, agent: v }), 'Job hunt and Lina'))));
+      row('Job hunt and Lina', 'Due follow-ups, approvals and call summaries.', toggle(!!(a.jobs && a.agent), v => patch({ jobs: v, agent: v }), 'Job hunt and Lina')),
+      row('Server', 'Problems the agent box finds on your servers and sites.', toggle(!!a.ops, v => patch({ ops: v }), 'Server alerts'))));
 }
 
 /* ---------- Lina ----------

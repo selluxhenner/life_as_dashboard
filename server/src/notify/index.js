@@ -7,8 +7,8 @@ import { localDate, zonedInstant } from '../lib/time.js';
 import { fcmPing } from './fcm.js';
 
 // briefing: the morning briefing · breaking: world news · ai: major AI news · calendar: meeting prep
-// jobs: job-hunt nudges · agent: approvals and call summaries · general: anything else
-export const KINDS = ['briefing', 'breaking', 'ai', 'calendar', 'jobs', 'agent', 'general'];
+// jobs: job-hunt nudges · agent: approvals and call summaries · ops: server problems from the agent box · general: anything else
+export const KINDS = ['briefing', 'breaking', 'ai', 'calendar', 'jobs', 'agent', 'ops', 'general'];
 const NEWSY = ['breaking', 'ai'];
 
 /** Breaking + AI alerts raised since local midnight (they share the daily cap). */
