@@ -61,7 +61,8 @@ const ROUTES = [
   { id: 'jobs', label: 'Job hunt', icon: 'briefcase', view: jobs, key: 'G J', nav: false },
   { id: 'goals', label: 'Plan', icon: 'target', view: goals },
   { id: 'rank', label: 'Rank', icon: 'rank', view: rankView, hidden: () => !pointsOn() },
-  { id: 'assistant', label: 'Lina', icon: 'agent', view: assistant, key: 'G .' },
+  // Lina opens from the corner menu, the mic in the top bar, Ctrl K or G .
+  { id: 'assistant', label: 'Lina', icon: 'agent', view: assistant, key: 'G .', nav: false },
   { id: 'hub', label: 'Hub', icon: 'server', view: hub, key: 'G U' },
   // Settings opens the corner menu; Lina setup and Connectors are reached from there (and with Ctrl K)
   { id: 'settings', label: 'Settings', icon: 'settings', view: settings, bottom: true, menu: true },
@@ -86,7 +87,8 @@ function navLinks(filter, short = false) {
 /* The corner menu behind Settings: this month's usage, then the pages that are setup rather than settings. */
 const MENU = [
   { id: 'settings', icon: 'settings', label: 'Settings', sub: 'Server, notifications, automation, appearance' },
-  { id: 'lina-setup', icon: 'agent', label: 'Lina setup', sub: '“Hey Lina”, voice, vault, people' },
+  { id: 'assistant', icon: 'agent', label: 'Lina', sub: 'Chat with your assistant' },
+  { id: 'lina-setup', icon: 'mic', label: 'Lina setup', sub: '“Hey Lina”, voice, vault, people' },
   { id: 'connectors', icon: 'sync', label: 'Connectors', sub: 'Google, Slack, Fuxam' }
 ];
 const MENU_PAGES = MENU.map(m => m.id);
