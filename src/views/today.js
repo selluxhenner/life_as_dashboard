@@ -5,7 +5,7 @@ import { panel } from '../components/panel.js';
 import { viewHead, check, removeBtn, addRow, empty, meter, chip } from '../components/ui.js';
 import { dropdown, timePicker } from '../components/overlay.js';
 import {
-  planFor, addPlanBlock, removePlanBlock, liveTasks, addTask, toggleTask, deleteTask, PRIORITIES,
+  planFor, addPlanBlock, removePlanBlock, liveTasks, archivedTask, addTask, toggleTask, deleteTask, PRIORITIES,
   lastDays, weekCount, currentStreak, toggleHabit, addHabit, routineFor, routineItems, trainingHabit
 } from '../core/model.js';
 import { agendaFor } from '../core/agenda.js';
@@ -135,7 +135,7 @@ function tasks() {
   const cols = h('div.todo-cols');
   let open = 0;
   for (const p of PRIORITIES) {
-    const list = liveTasks().filter(t => t.priority === p.key).sort((a, b) => a.done - b.done);
+    const list = liveTasks().filter(t => t.priority === p.key && !archivedTask(t)).sort((a, b) => a.done - b.done);
     open += list.filter(t => !t.done).length;
     cols.append(h('div.todo-col.prio-' + p.key,
       h('div.todo-col-head', h('i'), p.label, h('span.data.muted', String(list.filter(t => !t.done).length))),

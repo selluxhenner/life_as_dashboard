@@ -62,7 +62,7 @@ function appearancePanel() {
     row('Home location', 'Used for sunrise, sunset and the map marker.', h('span.data', `${s.home.city} · ${s.home.lat}, ${s.home.lon}`)));
 }
 
-function connectionsPanel() {
+export function connectionsPanel() {
   const { data, connected, error } = remote('connections', '/api/connections', 60000);
   if (!connected) return panel({ title: 'Connections' }, empty('Pair this device first', 'Google, Slack and Fuxam are connected on the server, so every device sees them.'));
   const list = (data && data.connections) || [];
@@ -288,7 +288,7 @@ function vaultRow() {
       btn('Check', check, 'sm ghost')));
 }
 
-function linaPanel() {
+export function linaPanel() {
   if (native && !watchingNative) { watchingNative = true; onNativeStatus(() => notify()); }
   const { data, connected } = remote('serverSettings', '/api/settings', 5 * 60000);
   const lina = (data && data.settings && data.settings.lina) || {};
@@ -368,7 +368,7 @@ function elevenSection(info, paired) {
       : h('div.hint', error ? 'Couldn’t load the voices: ' + errorText(error) : 'Loading voices…'));
 }
 
-function voicePanel() {
+export function voicePanel() {
   const v = voiceSettings();
   const set = patch => { state.settings.voice = { ...v, ...patch }; save(); };
   if (!voicesLoaded) systemVoices().then(() => { voicesLoaded = true; notify(); });
@@ -407,7 +407,7 @@ function voicePanel() {
       h('button.btn.sm.ghost', { type: 'button', onclick: () => { stopSpeaking(); if (previewAudio) previewAudio.pause(); } }, 'Stop')));
 }
 
-function usagePanel() {
+export function usagePanel() {
   const { data, connected } = remote('usage', '/api/usage', 10 * 60000);
   if (!connected || !data) return null;
   const u = data.usage || {};
@@ -440,9 +440,9 @@ export default {
   id: 'settings',
   render(root) {
     root.append(h('div.view.settings',
-      viewHead('Settings', 'Server, connections, appearance and automation.'),
+      viewHead('Settings', 'Server, notifications, automation and appearance. Lina, voice and connectors open from the menu in the corner.'),
       h('div.grid.g-2',
-        h('div.stack', serverPanel(), notificationsPanel(), connectionsPanel(), serverSettingsPanel()),
-        h('div.stack', linaPanel(), appearancePanel(), voicePanel(), featuresPanel(), usagePanel(), dataPanel()))));
+        h('div.stack', serverPanel(), notificationsPanel(), serverSettingsPanel()),
+        h('div.stack', appearancePanel(), featuresPanel(), dataPanel()))));
   }
 };

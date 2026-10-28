@@ -69,7 +69,22 @@ test('scopes: only ops asks and consumes, only apps decide and list', async () =
   assert.equal((await api('GET', '/api/approvals', undefined, hermes)).status, 403);
   assert.equal((await api('GET', '/api/approvals', undefined, phone)).status, 200);
   assert.equal((await api('GET', '/api/approvals/' + id, undefined, null)).status, 401);
-  assert.equal((await api('GET', '/api/hub/state', undefined, hermes)).status, 403);
+  assert.equal((await api('GET', '/api/hub/state', undefined, null)).status, 401);
+});
+
+test('hub state for an ops token: read-only summary without device or approval ids', async () => {
+  const { id } = (await ask({ verb: 'deploy', args: ['agentic-os'] })).body;
+  const s = await api('GET', '/api/hub/state', undefined, hermes);
+  assert.equal(s.status, 200);
+  assert.ok(s.body.devices.length >= 3);
+  assert.ok(s.body.devices.every(d => !('id' in d)), 'no device ids');
+  assert.ok(s.body.devices.some(d => d.name === 'agent-box' && d.current));
+  const mine = s.body.approvals.find(a => a.verb === 'deploy' && a.args[0] === 'agentic-os');
+  assert.ok(mine && mine.status === 'pending');
+  assert.ok(s.body.approvals.every(a => !('id' in a) && !('decidedBy' in a)), 'no approval ids');
+  assert.ok(!JSON.stringify(s.body).includes(id));
+  assert.ok(Array.isArray(s.body.ops));
+  assert.equal((await api('GET', '/api/todos', undefined, hermes)).status, 403, 'other routes stay closed to ops');
 });
 
 test('rejected and expired approvals cannot be consumed', async () => {

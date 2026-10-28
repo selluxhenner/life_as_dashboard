@@ -99,3 +99,20 @@ describe('captures to the board', () => {
     expect(state.tasks.filter(t => !t.deleted)).toHaveLength(1);
   });
 });
+
+describe('archive', () => {
+  it('tasks done before today leave the board; today\'s and open ones stay', () => {
+    const now = new Date();
+    const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+    const old = model.addTask('done yesterday'); model.updateTask(old, { done: true }); old.completedAt = yesterday.getTime();
+    const legacy = model.addTask('done long ago, no time'); legacy.done = true; legacy.completedAt = null;
+    const fresh = model.addTask('done today'); model.updateTask(fresh, { done: true });
+    model.addTask('still open');
+    expect(model.archivedTask(old)).toBe(true);
+    expect(model.archivedTask(legacy)).toBe(true);
+    expect(model.archivedTask(fresh)).toBe(false);
+    expect(board.boardTasks().map(t => t.title).sort()).toEqual(['done today', 'still open']);
+    // archived is hidden, not gone: it still syncs and still counts as done this week
+    expect(model.liveTasks()).toHaveLength(4);
+  });
+});

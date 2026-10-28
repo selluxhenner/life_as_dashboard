@@ -532,3 +532,15 @@ html.is-dragging .panel[data-drop] > .frame path:first-child {
 .status .talk:hover { border-color: var(--seam-strong); color: var(--ink); }
 .status .talk[aria-pressed="true"] { border-color: var(--flare); color: var(--flare); }
 .status .talk svg { width: 14px; height: 14px; }
+
+/* Corner menu behind Settings (bottom of the rail, or More on the phone) */
+.popover.cm-pop { padding: 6px; width: 290px; }
+.corner-menu .cm-usage { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 8px 10px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--seam); font-size: var(--fs-xs); color: var(--ink-3); }
+.corner-menu .cm-usage .k { flex-basis: 100%; text-transform: uppercase; letter-spacing: .08em; font-size: 10px; }
+.corner-menu .cm-usage b { color: var(--ink); font-weight: 500; }
+.corner-menu .cm-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 10px; border: 0; border-radius: var(--r-sm); background: none; color: var(--ink-2); text-align: left; cursor: pointer; font: inherit; }
+.corner-menu .cm-item:hover, .corner-menu .cm-item:focus-visible { background: color-mix(in oklab, var(--ink) 8%, transparent); color: var(--ink); }
+.corner-menu .cm-item[aria-current='page'] { color: var(--signal); }
+.corner-menu .cm-item svg { width: 18px; height: 18px; flex: none; }
+.corner-menu .cm-item .title { display: block; color: inherit; }
+.corner-menu .cm-item .sub { display: block; font-size: var(--fs-xs); color: var(--ink-3); }

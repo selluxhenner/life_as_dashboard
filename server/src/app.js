@@ -13,7 +13,8 @@ import { voice } from './routes/voice.js';
 import { misc } from './routes/misc.js';
 import { ops, postReport } from './routes/ops.js';
 import { approvals } from './routes/approvals.js';
-import { hub } from './routes/hub.js';
+import { hubState } from './routes/hub.js';
+import { githubStats } from './hub/github.js';
 import { workbench } from './routes/workbench.js';
 
 export const app = new Hono();
@@ -62,6 +63,8 @@ app.post('/api/ops/report', requireOps, postReport);
 app.use('/api/approvals/*', requireDevice);
 app.use('/api/approvals', requireDevice);
 app.route('/api', approvals);
+/* Hub state: the apps see everything, an ops token (Hermes's hub-status skill) a summary without ids. */
+app.get('/api/hub/state', requireDevice, hubState);
 
 /* ---------- everything else needs a device token ---------- */
 const api = new Hono();
@@ -73,7 +76,8 @@ api.route('/', connections);
 api.route('/', voice);
 api.route('/', misc);
 api.route('/', ops);
-api.route('/', hub);
+/* GitHub numbers for the Hub tab (apps only; the tokens never leave the server). ?fresh=1 skips the 10-minute cache. */
+api.get('/hub/github', async c => c.json(await githubStats({ fresh: c.req.query('fresh') === '1' })));
 api.route('/', workbench);
 app.route('/api', api);
 

@@ -22,8 +22,8 @@ import { mountLaunch, playLaunch, playClose } from './components/launch.js';
 import { replayIntro } from './components/chronosphere.js';
 import { settle, forgivePenalties, pointsOn, totalPoints, rankView } from './features/points/points.js';
 import { remote } from './core/remote.js';
+import { popover, closePopover } from './components/overlay.js';
 import { newsData, digestStories } from './views/news.js';
-import { pendingActions } from './views/assistant.js';
 import { autoReadBriefing, listenNow } from './views/briefing-panel.js';
 import { talk, toggleTalk } from './voice/talk.js';
 import { mountVoicePill } from './components/voice-pill.js';
@@ -42,6 +42,7 @@ import settings from './views/settings.js';
 import lab from './views/lab.js';
 import captures from './views/captures.js';
 import hub, { pendingApprovalCount } from './views/hub.js';
+import { linaSetup, connectors } from './views/setup.js';
 import { unsorted, settleCaptures, takeCaptures } from './features/capture/captures.js';
 import { initNotifications } from './core/notifications.js';
 import { initNative, onNativeAction, nativeCaptures, nativeTakeCaptures, nativeTasks, nativeTakeTasks } from './core/native.js';
@@ -60,9 +61,13 @@ const ROUTES = [
   { id: 'jobs', label: 'Job hunt', icon: 'briefcase', view: jobs, key: 'G J', nav: false },
   { id: 'goals', label: 'Plan', icon: 'target', view: goals },
   { id: 'rank', label: 'Rank', icon: 'rank', view: rankView, hidden: () => !pointsOn() },
-  { id: 'assistant', label: 'Lina', icon: 'agent', view: assistant, key: 'G .' },
+  // Lina opens from the corner menu, the mic in the top bar, Ctrl K or G .
+  { id: 'assistant', label: 'Lina', icon: 'agent', view: assistant, key: 'G .', nav: false },
   { id: 'hub', label: 'Hub', icon: 'server', view: hub, key: 'G U' },
-  { id: 'settings', label: 'Settings', icon: 'settings', view: settings, bottom: true },
+  // Settings opens the corner menu; Lina setup and Connectors are reached from there (and with Ctrl K)
+  { id: 'settings', label: 'Settings', icon: 'settings', view: settings, bottom: true, menu: true },
+  { id: 'lina-setup', label: 'Lina setup', icon: 'agent', view: linaSetup, nav: false },
+  { id: 'connectors', label: 'Connectors', icon: 'sync', view: connectors, nav: false },
   { id: 'lab', label: 'Design lab', icon: 'spark', view: lab, hidden: () => location.hash !== '#/lab' }
 ];
 
@@ -74,7 +79,31 @@ const mark = () => h('svg', { viewBox: '0 0 32 32', 'aria-hidden': 'true' },
 
 function navLinks(filter, short = false) {
   return routeList().filter(r => r.id !== 'lab' && r.nav !== false).filter(filter).map(r =>
-    h('a', { href: '#/' + r.id, dataset: { route: r.id }, title: r.label }, icon(r.icon), h('span', short && r.short || r.label)));
+    h('a', { href: '#/' + r.id, dataset: { route: r.id }, title: r.label,
+      ...(r.menu ? { role: 'button', 'aria-haspopup': 'menu', onclick: e => { e.preventDefault(); openCornerMenu(e.currentTarget); } } : {}) },
+      icon(r.icon), h('span', short && r.short || r.label)));
+}
+
+/* The corner menu behind Settings: this month's usage, then the pages that are setup rather than settings. */
+const MENU = [
+  { id: 'settings', icon: 'settings', label: 'Settings', sub: 'Server, notifications, automation, appearance' },
+  { id: 'assistant', icon: 'agent', label: 'Lina', sub: 'Chat with your assistant' },
+  { id: 'lina-setup', icon: 'mic', label: 'Lina setup', sub: '“Hey Lina”, voice, vault, people' },
+  { id: 'connectors', icon: 'sync', label: 'Connectors', sub: 'Google, Slack, Fuxam' }
+];
+const MENU_PAGES = MENU.map(m => m.id);
+const money = (sign, n) => sign + (n || 0).toFixed(2);
+function openCornerMenu(anchor) {
+  const u = remote('usage', '/api/usage', 10 * 60000);
+  const usage = u.data && u.data.usage;
+  const pick = id => { closePopover(); showMore(false); go(id); };
+  popover(anchor, h('div.corner-menu', { role: 'menu' },
+    usage ? h('div.cm-usage', { title: 'Usage this month' }, h('span.k', u.data.month || 'This month'),
+      h('span', 'AI ', h('b.data', money('$', usage.aiUsd)), h('small', ' of ' + money('$', usage.aiCapUsd || 40))),
+      h('span', 'Voice ', h('b.data', money('$', usage.voiceUsd))),
+      h('span', 'Phone ', h('b.data', money('€', usage.phoneEur)))) : null,
+    MENU.map(m => h('button.cm-item', { type: 'button', role: 'menuitem', 'aria-current': currentRoute() && currentRoute().id === m.id ? 'page' : null, onclick: () => pick(m.id) },
+      icon(m.icon), h('span.grow', h('span.title', m.label), h('span.sub', m.sub))))), { cls: 'cm-pop' });
 }
 
 const clockEl = h('span.clock.data');
@@ -88,7 +117,7 @@ const talkBtn = h('button.talk', { type: 'button', 'aria-label': 'Talk to Lina',
 const paintTalk = () => talkBtn.setAttribute('aria-pressed', String(talk.state === 'listening'));
 const rail = h('nav.rail', { 'aria-label': 'Main' });
 // picking a page from More puts the dock back (after the tap, so the link still navigates)
-const dock = h('nav.dock', { 'aria-label': 'Main', onclick: e => { if (more && e.target.closest('a')) setTimeout(() => showMore(false), 0); } });
+const dock = h('nav.dock', { 'aria-label': 'Main', onclick: e => { if (more && e.target.closest('a:not([aria-haspopup])')) setTimeout(() => showMore(false), 0); } });
 let moreBtn = null, more = false;
 
 function buildNav() {
@@ -103,7 +132,8 @@ function buildDock(swap = false) {
   dock.setAttribute('aria-label', more ? 'More pages' : 'Main');
   dock.classList.toggle('swap', swap);
 }
-const touchedOutside = e => { if (!dock.contains(e.target)) showMore(false); };
+// the corner menu opens from More: tapping inside it is not "outside" (picking an item closes More itself)
+const touchedOutside = e => { if (!dock.contains(e.target) && !e.target.closest('.popover')) showMore(false); };
 function showMore(on) {
   if (more === on) return;
   more = on;
@@ -113,10 +143,11 @@ function showMore(on) {
   else document.removeEventListener('pointerdown', touchedOutside, true);
 }
 function markCurrent() {
-  const id = currentRoute() && currentRoute().id;
+  const at = currentRoute() && currentRoute().id;
+  const id = MENU_PAGES.includes(at) ? 'settings' : at;    // the menu's pages light up the Settings button
   document.querySelectorAll('[data-route]').forEach(a => { if (a.dataset.route === id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   crumb.textContent = currentRoute() ? currentRoute().label : '';
-  const badges = { assistant: ((pendingActions().data || {}).actions || []).length, captures: unsorted().length, hub: pendingApprovalCount() };
+  const badges = { captures: unsorted().length, hub: pendingApprovalCount() };
   for (const [id, n] of Object.entries(badges)) {
     document.querySelectorAll(`[data-route="${id}"] .badge`).forEach(b => b.remove());
     if (n) document.querySelectorAll(`[data-route="${id}"]`).forEach(a => a.append(h('span.badge' + (id === 'captures' ? '.soft' : ''), String(n))));

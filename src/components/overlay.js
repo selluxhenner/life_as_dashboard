@@ -58,7 +58,7 @@ export async function confirmDelete(what, onYes, { kind = 'item', detail, confir
 let openPop = null;
 export function closePopover() { if (openPop) openPop.close(); }
 
-function popover(anchor, content, { onClose, align = 'start', cls = '' } = {}) {
+export function popover(anchor, content, { onClose, align = 'start', cls = '' } = {}) {
   closePopover();
   const pop = h('div.popover' + (cls ? '.' + cls : ''), { role: 'dialog' }, content);
   document.body.append(pop);

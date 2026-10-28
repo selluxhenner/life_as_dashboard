@@ -35,6 +35,13 @@ export const config = {
   workbench: { url: (e.WORKBENCH_URL || '').replace(/\/+$/, ''), token: e.WORKBENCH_TOKEN || '' },
   twilio: { sid: e.TWILIO_ACCOUNT_SID || '', token: e.TWILIO_AUTH_TOKEN || '', from: e.TWILIO_FROM || '' },
   ntfy: { url: (e.NTFY_URL || 'https://ntfy.sh').replace(/\/+$/, ''), topic: e.NTFY_TOPIC || '' },
+  // Hub tab GitHub stats: read-only tokens. GITHUB_TOKEN (selluxhenner) also covers the orgs he is in;
+  // Elaria is a separate account with its own login and token.
+  github: {
+    api: (e.GITHUB_API_URL || 'https://api.github.com').replace(/\/+$/, ''),
+    token: e.GITHUB_TOKEN || '',
+    elaria: { login: e.GITHUB_ELARIA_LOGIN || '', token: e.GITHUB_TOKEN_ELARIA || '' }
+  },
   fcmCredentials: ''                     // set below, once dataDir is known
 };
 config.fcmCredentials = resolve(ROOT, e.FCM_CREDENTIALS || resolve(config.dataDir, 'fcm-service-account.json'));
