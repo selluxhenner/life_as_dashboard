@@ -46,6 +46,7 @@ export function freshState() {
     sync: { cursor: 0, dirty: {}, lastSync: 0 },
     gcal: { connected: false, pushed: {}, events: [], range: null, lastFetch: 0 },
     captures: [],
+    board: { projects: [] },
     settings: defaultSettings()
   };
 }
@@ -72,6 +73,7 @@ export function migrate(s) {
   if (!s.sync) s.sync = { cursor: 0, dirty: {}, lastSync: 0 };
   if (!s.gcal) s.gcal = { connected: false, pushed: {}, events: [], range: null, lastFetch: 0 };
   if (!Array.isArray(s.captures)) s.captures = [];
+  if (!s.board || !Array.isArray(s.board.projects)) s.board = { projects: [] };
   delete s.health;                 // Garmin vitals were dropped
   s.settings = { ...defaultSettings(), ...(s.settings || {}) };
   s.settings.flags = { ...defaultSettings().flags, ...(s.settings.flags || {}) };
@@ -101,7 +103,7 @@ export function makeTask(f) {
   const now = Date.now();
   return {
     id: f.id || uid(), title: f.title, notes: f.notes || '', done: !!f.done,
-    priority: f.priority || 'med', due: f.due || null, project: f.project || null,
+    priority: f.priority || 'med', status: f.status || null, due: f.due || null, project: f.project || null,
     sort: f.sort || now, source: f.source || 'app', createdAt: now, updatedAt: now,
     completedAt: f.done ? now : null, deleted: false
   };

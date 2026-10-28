@@ -31,6 +31,8 @@ export const config = {
   aaKey: e.AA_API_KEY || '',
   // Kevin's Obsidian vault on this machine (folder of markdown); empty = not connected
   obsidian: { vault: e.OBSIDIAN_VAULT || '', exclude: (e.OBSIDIAN_EXCLUDE || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean) },
+  // Workbench on the home PC (agent feed, wbk_ token); empty = the Plan board shows no sessions
+  workbench: { url: (e.WORKBENCH_URL || '').replace(/\/+$/, ''), token: e.WORKBENCH_TOKEN || '' },
   twilio: { sid: e.TWILIO_ACCOUNT_SID || '', token: e.TWILIO_AUTH_TOKEN || '', from: e.TWILIO_FROM || '' },
   ntfy: { url: (e.NTFY_URL || 'https://ntfy.sh').replace(/\/+$/, ''), topic: e.NTFY_TOPIC || '' },
   fcmCredentials: ''                     // set below, once dataDir is known

@@ -5,11 +5,12 @@ import { db } from '../db.js';
 import { HttpError, body } from '../http.js';
 
 const PRIORITIES = ['high', 'med', 'low'];
+export const STATUSES = ['backlog', 'todo', 'doing', 'done'];   // Kanban column on the Plan board
 const SOURCES = ['app', 'widget', 'claude', 'api', 'agent', 'voice', 'phone', 'capture'];
 const MAX_BATCH = 200;
 
 const rowToTodo = r => ({
-  id: r.id, title: r.title, notes: r.notes, done: !!r.done, priority: r.priority, due: r.due, project: r.project,
+  id: r.id, title: r.title, notes: r.notes, done: !!r.done, priority: r.priority, status: r.status ?? null, due: r.due, project: r.project,
   sort: r.sort, source: r.source, createdAt: r.created_at, updatedAt: r.updated_at, completedAt: r.completed_at, deleted: !!r.deleted
 });
 
@@ -39,6 +40,7 @@ export function validate(input, { partial = false } = {}) {
   t.notes = str(input.notes, 'notes', 5000);
   if (input.done !== undefined) { if (typeof input.done !== 'boolean') throw new HttpError(400, 'done must be boolean'); t.done = input.done; }
   if (input.priority !== undefined) { if (!PRIORITIES.includes(input.priority)) throw new HttpError(400, `priority must be ${PRIORITIES.join('|')}`); t.priority = input.priority; }
+  if (input.status !== undefined && input.status !== null) { if (!STATUSES.includes(input.status)) throw new HttpError(400, `status must be ${STATUSES.join('|')}`); t.status = input.status; }
   t.due = str(input.due, 'due', 10, { nullable: true });
   if (t.due && !/^\d{4}-\d{2}-\d{2}$/.test(t.due)) throw new HttpError(400, 'due must be YYYY-MM-DD');
   t.project = str(input.project, 'project', 80, { nullable: true });
@@ -55,7 +57,7 @@ export function validate(input, { partial = false } = {}) {
 function complete(t, now, defaultSource) {
   const done = !!t.done;
   return {
-    id: t.id || randomUUID(), title: t.title, notes: t.notes || '', done, priority: t.priority || 'med',
+    id: t.id || randomUUID(), title: t.title, notes: t.notes || '', done, priority: t.priority || 'med', status: t.status ?? null,
     due: t.due ?? null, project: t.project ?? null, sort: t.sort ?? now, source: t.source || defaultSource,
     createdAt: t.createdAt ?? now, updatedAt: t.updatedAt ?? now, completedAt: done ? (t.completedAt ?? now) : null, deleted: !!t.deleted
   };
@@ -64,14 +66,16 @@ function complete(t, now, defaultSource) {
 const bumpRev = () => { db.run("UPDATE meta SET value = value + 1 WHERE key = 'rev'"); return db.get("SELECT value FROM meta WHERE key = 'rev'").value; };
 
 function upsert(t, rev) {
-  db.run(`INSERT INTO todos (id, title, notes, done, priority, due, project, sort, source, created_at, updated_at, completed_at, deleted, rev)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  // status: old app versions don't send it, so a missing one keeps what the board set
+  db.run(`INSERT INTO todos (id, title, notes, done, priority, status, due, project, sort, source, created_at, updated_at, completed_at, deleted, rev)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (id) DO UPDATE SET
        title = excluded.title, notes = excluded.notes, done = excluded.done, priority = excluded.priority,
+       status = COALESCE(excluded.status, todos.status),
        due = excluded.due, project = excluded.project, sort = excluded.sort,
        updated_at = excluded.updated_at, completed_at = excluded.completed_at, deleted = excluded.deleted, rev = excluded.rev
      WHERE excluded.updated_at > todos.updated_at`,
-    t.id, t.title, t.notes, t.done, t.priority, t.due, t.project, t.sort, t.source, t.createdAt, t.updatedAt, t.completedAt, t.deleted, rev);
+    t.id, t.title, t.notes, t.done, t.priority, t.status, t.due, t.project, t.sort, t.source, t.createdAt, t.updatedAt, t.completedAt, t.deleted, rev);
 }
 
 export function getTodo(id) { const r = db.get('SELECT * FROM todos WHERE id = ?', id); return r ? rowToTodo(r) : null; }

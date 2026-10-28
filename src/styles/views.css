@@ -624,6 +624,72 @@ button.mail:focus-visible { outline: 2px solid var(--signal); outline-offset: -2
 .inline-toggle input { accent-color: var(--signal); }
 @media (max-width: 1000px) { .g-assist { grid-template-columns: 1fr; } .chat { height: 70vh; } }
 
+/* ---------- Plan: projects, board, capture inbox, Workbench ---------- */
+.plan-filters { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
+.plan-projects { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: stretch; margin-bottom: var(--s-4); }
+.plan-proj {
+  display: grid; gap: 2px; text-align: left; min-width: 150px; padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--seam); border-left: 3px solid var(--c); border-radius: var(--r-md);
+  background: var(--panel-bg); color: var(--ink); cursor: pointer; font: inherit;
+}
+.plan-proj:hover { border-color: var(--seam-strong); border-left-color: var(--c); }
+.plan-proj.on { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); }
+.plan-proj-name { font-weight: 600; }
+.plan-proj-meta { font-size: var(--fs-xs); color: var(--ink-3); }
+.plan-proj-wb { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--pulse); }
+.plan-proj-wb svg { width: 13px; height: 13px; }
+.plan-proj-add { width: 140px; align-self: center; }
+.plan-projects .hint { align-self: center; margin: 0; }
+
+.plan-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); gap: var(--s-4); align-items: start; }
+.kb { display: grid; grid-template-columns: repeat(4, minmax(190px, 1fr)); gap: var(--s-3); overflow-x: auto; padding-bottom: var(--s-1); }
+.kb-col {
+  display: flex; flex-direction: column; gap: var(--s-2); min-height: 160px; padding: var(--s-2); border-radius: var(--r-md);
+  background: color-mix(in oklab, var(--hull-2) 55%, transparent); border: 1px dashed transparent; transition: border-color var(--t-fast);
+}
+.kb-col.over { border-color: var(--signal); }
+.kb-col-h { display: flex; justify-content: space-between; align-items: center; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: var(--track-micro); color: var(--ink-2); padding: 2px 4px; }
+.kb-cards { display: flex; flex-direction: column; gap: var(--s-2); flex: 1; }
+.kb-empty { font-size: var(--fs-xs); color: var(--ink-3); text-align: center; padding: var(--s-4) 0; border: 1px dashed var(--seam); border-radius: var(--r-sm); }
+.kb-card {
+  display: grid; gap: 6px; padding: var(--s-2) var(--s-3); border-radius: var(--r-sm); background: var(--hull);
+  border: 1px solid var(--seam); border-left: 3px solid var(--c); cursor: grab;
+}
+.kb-card.dragging { opacity: .45; }
+.kb-card.done .kb-card-title { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--seam-strong); }
+.kb-card-title { overflow-wrap: anywhere; line-height: var(--lh-tight); }
+.kb-card-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: var(--fs-xs); color: var(--ink-3); }
+.kb-card-meta:empty { display: none; }
+.kb-tag { color: var(--c, var(--ink-2)); }
+.kb-prio { color: var(--c); }
+.kb-src svg { width: 12px; height: 12px; vertical-align: -2px; }
+.kb-card-actions { display: flex; align-items: center; gap: 2px; opacity: .55; transition: opacity var(--t-fast); }
+.kb-card:hover .kb-card-actions, .kb-card:focus-within .kb-card-actions { opacity: 1; }
+.kb-card-actions .kb-proj-dd { margin-left: auto; max-width: 120px; }
+.kb-card-actions .btn.icon.sm { font-size: var(--fs-md); }
+.kb-card-actions .x {
+  border: 0; background: transparent; color: var(--ink-3); width: 26px; height: 26px; border-radius: var(--r-xs);
+  display: grid; place-items: center; flex: none; cursor: pointer;
+}
+.kb-card-actions .x:hover { color: var(--flare); }
+.kb-card-actions .x svg { width: 14px; height: 14px; }
+
+.plan-inbox-list, .plan-wb-list { display: grid; gap: 2px; }
+.plan-inbox-row { display: grid; gap: var(--s-2); padding: var(--s-2) 0; border-bottom: 1px solid var(--seam); }
+.plan-inbox-row:last-child { border-bottom: 0; }
+.plan-inbox-row .title { overflow-wrap: anywhere; }
+.plan-inbox-row .sub { font-size: var(--fs-xs); color: var(--ink-3); }
+.plan-inbox-actions { display: flex; gap: var(--s-2); align-items: center; flex-wrap: wrap; }
+.plan-wb-row {
+  display: flex; align-items: center; gap: var(--s-2); width: 100%; text-align: left; padding: var(--s-2); border-radius: var(--r-sm);
+  background: none; border: 0; color: var(--ink); font: inherit; cursor: pointer;
+}
+.plan-wb-row:hover { background: color-mix(in oklab, var(--hull-2) 70%, transparent); }
+.plan-wb-row .grow { flex: 1; min-width: 0; }
+.plan-wb-row .sub { font-size: var(--fs-xs); color: var(--ink-3); overflow-wrap: anywhere; }
+.plan-section { margin: var(--s-6) 0 var(--s-3); color: var(--ink-3); }
+@media (max-width: 1200px) { .plan-main { grid-template-columns: minmax(0, 1fr); } }
+
 /* ---------- Settings ---------- */
 .set-row { display: flex; gap: var(--s-4); align-items: center; padding: var(--s-3) 0; }
 .set-row > :not(.grow) { flex-shrink: 0; white-space: nowrap; }   /* the text wraps, the control keeps its size */
@@ -668,6 +734,10 @@ button.mail:focus-visible { outline: 2px solid var(--signal); outline-offset: -2
   .job-add input.field { flex: 1 0 100%; }
   .kanban { grid-template-columns: repeat(5, 78vw); scroll-snap-type: x mandatory; }
   .k-col { scroll-snap-align: start; }
+  .kb { grid-template-columns: repeat(4, 78vw); scroll-snap-type: x mandatory; }
+  .kb-col { scroll-snap-align: start; }
+  .kb-card-actions { opacity: 1; }
+  .plan-proj { min-width: 0; flex: 1 1 140px; }
   .theme-cards { grid-template-columns: 1fr; }
   .brief-sections { grid-template-columns: 1fr; }
   .capture-bar select { width: 100px; }
