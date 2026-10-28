@@ -23,12 +23,13 @@ import com.kevinschmid.lifeos.R;
 /**
  * The Capture widget's popup: a capture bar over the home screen with the keyboard up, so a thought is written down
  * without opening the app. Enter saves (a pasted list becomes one capture per line, as in Notes). Leaving any other way
- * (back, a tap outside, home) keeps the text as a draft for next time.
+ * (back, a tap outside, home) keeps the text as a draft for next time. The Tasks widget's + opens it as a task bar.
  */
 public class CaptureActivity extends AppCompatActivity {
+    static final String MODE = "mode", MODE_TASK = "task";
     private EditText field;
     private View send;
-    private boolean saved;
+    private boolean saved, task;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -46,6 +47,8 @@ public class CaptureActivity extends AppCompatActivity {
 
         field = findViewById(R.id.cap_text);
         send = findViewById(R.id.cap_send);
+        task = MODE_TASK.equals(getIntent().getStringExtra(MODE));
+        if (task) { field.setHint(R.string.task_widget_hint); send.setContentDescription(getString(R.string.task_send)); }
         // Wraps like a multi-line field, but the keyboard shows a Send key instead of a new-line key.
         field.setRawInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES | InputType.TYPE_TEXT_FLAG_AUTO_CORRECT);
         field.setOnEditorActionListener((v, action, ev) -> {
@@ -63,7 +66,7 @@ public class CaptureActivity extends AppCompatActivity {
         send.setOnClickListener(v -> save());
 
         if (state == null) {
-            String draft = Prefs.of(this).captureDraft();
+            String draft = task ? Prefs.of(this).taskDraft() : Prefs.of(this).captureDraft();
             field.setText(draft);
             field.setSelection(draft.length());
         }
@@ -87,17 +90,25 @@ public class CaptureActivity extends AppCompatActivity {
     private void save() {
         String text = field.getText().toString();
         if (text.trim().isEmpty()) return;
-        int n = Captures.add(getApplicationContext(), text);
         saved = true;
-        Prefs.of(this).setCaptureDraft("");
-        Toast.makeText(getApplicationContext(), n == 1 ? "Captured" : n + " captures added", Toast.LENGTH_SHORT).show();
+        if (task) {
+            int n = Tasks.add(getApplicationContext(), text);
+            Prefs.of(this).setTaskDraft("");
+            Toast.makeText(getApplicationContext(), n == 1 ? "Task added" : n + " tasks added", Toast.LENGTH_SHORT).show();
+        } else {
+            int n = Captures.add(getApplicationContext(), text);
+            Prefs.of(this).setCaptureDraft("");
+            Toast.makeText(getApplicationContext(), n == 1 ? "Captured" : n + " captures added", Toast.LENGTH_SHORT).show();
+        }
         finish();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        if (!saved) Prefs.of(this).setCaptureDraft(field.getText().toString());
+        if (saved) return;
+        if (task) Prefs.of(this).setTaskDraft(field.getText().toString());
+        else Prefs.of(this).setCaptureDraft(field.getText().toString());
     }
 
     /** A popup, not a place to come back to: once it is out of sight it is gone (the draft stays). */

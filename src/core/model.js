@@ -55,6 +55,19 @@ export function updateTask(t, patch) {
   if ('done' in patch) t.completedAt = patch.done ? (t.completedAt || Date.now()) : null;
   markDirty(t); save();
 }
+/** Changes made in the Android Tasks widget (ticked off, added) that the server has not passed on yet. Newer wins. */
+export function applyWidgetTasks(list) {
+  let changed = false;
+  for (const r of list || []) {
+    if (!r || !r.id || !r.title) continue;
+    const local = state.tasks.find(t => t.id === r.id);
+    if (local && (local.updatedAt || 0) >= r.updatedAt) continue;
+    if (local) Object.assign(local, r); else state.tasks.push(makeTask({ ...r, source: 'widget' }));
+    markDirty(local || state.tasks[state.tasks.length - 1]);
+    changed = true;
+  }
+  if (changed) save();
+}
 export function deleteHabit(h) { state.habits = state.habits.filter(x => x.id !== h.id); save(); }
 
 /* ---------- habits ---------- */

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tasks widget: an open task's ring. White here; the row tints it with the priority colour. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <stroke android:width="2dp" android:color="#FFFFFFFF" />
+    <size android:width="20dp" android:height="20dp" />
+</shape>

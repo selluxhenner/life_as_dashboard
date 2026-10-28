@@ -41,9 +41,11 @@ import assistant from './views/assistant.js';
 import settings from './views/settings.js';
 import lab from './views/lab.js';
 import captures from './views/captures.js';
+import hub, { pendingApprovalCount } from './views/hub.js';
 import { unsorted, settleCaptures, takeCaptures } from './features/capture/captures.js';
 import { initNotifications } from './core/notifications.js';
-import { initNative, onNativeAction, nativeCaptures, nativeTakeCaptures } from './core/native.js';
+import { initNative, onNativeAction, nativeCaptures, nativeTakeCaptures, nativeTasks, nativeTakeTasks } from './core/native.js';
+import { liveTasks, applyWidgetTasks } from './core/model.js';
 import { initDesktopWake } from './voice/wake.js';
 
 const ROUTES = [
@@ -59,6 +61,7 @@ const ROUTES = [
   { id: 'goals', label: 'Goals', icon: 'target', view: goals },
   { id: 'rank', label: 'Rank', icon: 'rank', view: rankView, hidden: () => !pointsOn() },
   { id: 'assistant', label: 'Lina', icon: 'agent', view: assistant, key: 'G .' },
+  { id: 'hub', label: 'Hub', icon: 'server', view: hub, key: 'G U' },
   { id: 'settings', label: 'Settings', icon: 'settings', view: settings, bottom: true },
   { id: 'lab', label: 'Design lab', icon: 'spark', view: lab, hidden: () => location.hash !== '#/lab' }
 ];
@@ -113,7 +116,7 @@ function markCurrent() {
   const id = currentRoute() && currentRoute().id;
   document.querySelectorAll('[data-route]').forEach(a => { if (a.dataset.route === id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   crumb.textContent = currentRoute() ? currentRoute().label : '';
-  const badges = { assistant: ((pendingActions().data || {}).actions || []).length, captures: unsorted().length };
+  const badges = { assistant: ((pendingActions().data || {}).actions || []).length, captures: unsorted().length, hub: pendingApprovalCount() };
   for (const [id, n] of Object.entries(badges)) {
     document.querySelectorAll(`[data-route="${id}"] .badge`).forEach(b => b.remove());
     if (n) document.querySelectorAll(`[data-route="${id}"]`).forEach(a => a.append(h('span.badge' + (id === 'captures' ? '.soft' : ''), String(n))));
@@ -277,9 +280,14 @@ function startServices() {
   const takeWidgetCaptures = () => nativeTakeCaptures().then(takeCaptures);
   takeWidgetCaptures();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) takeWidgetCaptures(); });
+  // the Tasks widget ticks tasks off and adds them on the home screen; it lists what the app reports
+  const takeWidgetTasks = () => nativeTakeTasks().then(applyWidgetTasks);
+  takeWidgetTasks();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) takeWidgetTasks(); });
   settleCaptures();
   nativeCaptures(unsorted().length);
-  subscribe(() => { settleCaptures(); nativeCaptures(unsorted().length); });
+  nativeTasks(liveTasks());
+  subscribe(() => { settleCaptures(); nativeCaptures(unsorted().length); nativeTasks(liveTasks()); });
   updatePings();
   // Spoken morning briefing (if switched on): now, and whenever the window comes back to front later in the morning.
   autoReadBriefing();

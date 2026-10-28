@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { config } from './config.js';
 import { HttpError, page } from './http.js';
-import { requireAuth, requireOps } from './auth.js';
+import { requireAuth, requireOps, requireDevice } from './auth.js';
 import { callback as googleCallback } from './connectors/google.js';
 import { twiml, callStatus, validTwilioSignature } from './phone/twilio.js';
 import { safeEqual, hmac } from './lib/crypto.js';
@@ -12,6 +12,8 @@ import { connections } from './routes/connections.js';
 import { voice } from './routes/voice.js';
 import { misc } from './routes/misc.js';
 import { ops, postReport } from './routes/ops.js';
+import { approvals } from './routes/approvals.js';
+import { hub } from './routes/hub.js';
 
 export const app = new Hono();
 
@@ -55,6 +57,10 @@ app.post('/api/phone/status/:id', async c => { callStatus(c.req.param('id'), awa
 
 /* The agent box posts its reports with an ops-scope token, which every route below refuses. */
 app.post('/api/ops/report', requireOps, postReport);
+/* Approvals are shared: Hermes asks and consumes with ops tokens, the apps decide. Each handler checks the scope. */
+app.use('/api/approvals/*', requireDevice);
+app.use('/api/approvals', requireDevice);
+app.route('/api', approvals);
 
 /* ---------- everything else needs a device token ---------- */
 const api = new Hono();
@@ -66,6 +72,7 @@ api.route('/', connections);
 api.route('/', voice);
 api.route('/', misc);
 api.route('/', ops);
+api.route('/', hub);
 app.route('/api', api);
 
 app.notFound(c => c.json({ error: 'Not found' }, 404));

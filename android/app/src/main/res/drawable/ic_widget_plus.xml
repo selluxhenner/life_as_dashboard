@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tasks widget: add a task (a plus in the hull colour on the signal disc). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp" android:height="20dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#00000000" android:strokeColor="#FF0A0E14" android:strokeWidth="2.4"
+        android:strokeLineCap="round" android:pathData="M12,5V19M5,12H19" />
+</vector>

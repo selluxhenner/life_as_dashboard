@@ -150,13 +150,14 @@ public class AgenticPlugin extends Plugin {
             });
     }
 
-    /** The launcher asks where to put the widget. which: "day" (day plan with rooms), "capture" (capture bar) or "glance" (briefing + news). */
+    /** The launcher asks where to put the widget. which: "day" (day plan with rooms), "capture" (capture bar), "tasks" (open todos) or "glance" (briefing + news). */
     @PluginMethod
     public void addWidget(PluginCall call) {
         AppWidgetManager m = AppWidgetManager.getInstance(ctx());
         JSObject r = new JSObject();
         String which = call.getString("which", "glance");
-        Class<?> provider = "day".equals(which) ? DayWidget.class : "capture".equals(which) ? CaptureWidget.class : GlanceWidget.class;
+        Class<?> provider = "day".equals(which) ? DayWidget.class : "capture".equals(which) ? CaptureWidget.class
+            : "tasks".equals(which) ? TaskWidget.class : GlanceWidget.class;
         boolean ok = Build.VERSION.SDK_INT >= 26 && m.isRequestPinAppWidgetSupported()
             && m.requestPinAppWidget(new ComponentName(ctx(), provider), null, null);
         r.put("result", ok ? "asked" : "unsupported");
@@ -178,6 +179,23 @@ public class AgenticPlugin extends Plugin {
         JSObject r = new JSObject();
         try { r.put("captures", new JSArray(Captures.take(ctx()).toString())); }
         catch (JSONException e) { r.put("captures", new JSArray()); }
+        call.resolve(r);
+    }
+
+    /** The app's todos (every live one); the Tasks widget shows the open ones. */
+    @PluginMethod
+    public void setTasks(PluginCall call) {
+        JSArray tasks = call.getArray("tasks", new JSArray());
+        Tasks.fromApp(ctx(), tasks);
+        call.resolve();
+    }
+
+    /** Tasks ticked off or added in the Tasks widget that the server does not have yet; the app applies them itself. */
+    @PluginMethod
+    public void takeTasks(PluginCall call) {
+        JSObject r = new JSObject();
+        try { r.put("tasks", new JSArray(Tasks.take(ctx()).toString())); }
+        catch (JSONException e) { r.put("tasks", new JSArray()); }
         call.resolve(r);
     }
 
@@ -278,6 +296,7 @@ public class AgenticPlugin extends Plugin {
         s.put("widgets", GlanceWidget.count(c));
         s.put("dayWidgets", DayWidget.count(c));
         s.put("captureWidgets", CaptureWidget.count(c));
+        s.put("taskWidgets", TaskWidget.count(c));
         s.put("sdk", Build.VERSION.SDK_INT);
         JSObject lina = new JSObject();
         lina.put("wake", p.linaWake());

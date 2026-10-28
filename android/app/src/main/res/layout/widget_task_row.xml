@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One task in the Tasks widget: the ring ticks it off (its colour is the priority), the rest opens Today. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:minHeight="50dp"
+        android:orientation="horizontal">
+
+        <FrameLayout
+            android:id="@+id/tr_ring_hit"
+            android:layout_width="34dp"
+            android:layout_height="46dp">
+
+            <ImageView
+                android:id="@+id/tr_ring"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center_vertical|start"
+                android:importantForAccessibility="no"
+                android:src="@drawable/task_ring" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:id="@+id/tr_body"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:minHeight="46dp"
+            android:orientation="vertical"
+            android:paddingTop="8dp"
+            android:paddingEnd="6dp"
+            android:paddingBottom="8dp">
+
+            <TextView
+                android:id="@+id/tr_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="#FFE6EDF3"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/tr_meta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.08"
+                android:maxLines="1"
+                android:textColor="#FF6B7A8C"
+                android:textSize="10sp"
+                android:visibility="gone" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/tr_rule"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginStart="34dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/task_rule" />
+</LinearLayout>

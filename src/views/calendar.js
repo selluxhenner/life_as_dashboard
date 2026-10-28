@@ -7,6 +7,7 @@ import { agendaFor, dueTasksOn, SOURCE_COLORS } from '../core/agenda.js';
 import { ensureCalRange } from '../core/calendar-sync.js';
 import { createChronosphere } from '../components/chronosphere.js';
 import { addTask } from '../core/model.js';
+import { openTask } from './details.js';
 import { toast } from '../core/fx.js';
 import { confirmDelete } from '../components/overlay.js';
 import { icon } from '../core/icons.js';
@@ -57,6 +58,13 @@ function eventBlock(it) {
     height >= 34 ? h('span.ev-time', `${it.time}${it.end ? '–' + pad2(Math.floor(it.end / 60) % 24) + ':' + pad2(it.end % 60) : ''}${it.location ? ' · ' + it.location : ''}`) : null);
 }
 
+/* A task due that day, in the all-day row: tap to edit, reschedule, complete or delete it. */
+function taskPill(t) {
+  const pill = h('button.ad-pill.task' + (t.done ? '.done' : ''), { type: 'button', title: 'Edit task', dataset: { detail: 'task:' + t.id }, style: { '--c': SOURCE_COLORS.todo },
+    onclick: () => { selected = null; openTask(t, pill); } }, (t.done ? '☑ ' : '☐ ') + t.title);
+  return pill;
+}
+
 function timeGrid(days) {
   const tk = todayKey();
   const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
@@ -67,7 +75,7 @@ function timeGrid(days) {
   const allDay = h('div.cg-allday', h('div.cg-corner', h('span.micro', 'all day')),
     days.map(dk => h('div.cg-ad-cell',
       agendaFor(dk).filter(i => i.allDay).map(i => h('button.ad-pill', { type: 'button', style: { '--c': i.color }, onclick: () => { selected = i; notify(); } }, i.title)),
-      dueTasksOn(dk).map(t => h('div.ad-pill.task' + (t.done ? '.done' : ''), { style: { '--c': SOURCE_COLORS.todo } }, '☐ ' + t.title)))));
+      dueTasksOn(dk).map(taskPill))));
   const gutter = h('div.cg-gutter', hours.map(m => h('div.cg-hour', { style: { top: y(m) + 'px' } }, h('span', pad2(m / 60)))));
   const cols = days.map(dk => {
     const col = h('div.cg-col' + (dk === tk ? '.today' : ''), {
@@ -154,7 +162,11 @@ function weekAgenda(days) {
           h('span.wa-time.data', it.allDay ? 'all day' : it.time || '—'),
           h('span.wa-title', it.title),
           it.location ? h('span.wa-loc', it.location) : null)),
-        tasks.map(t => h('div.wa-item.task', { style: { '--c': SOURCE_COLORS.todo } }, h('span.wa-time.data', 'due'), h('span.wa-title', t.title)))) : null);
+        tasks.map(t => {
+          const row = h('button.wa-item.task', { type: 'button', title: 'Edit task', dataset: { detail: 'task:' + t.id }, style: { '--c': SOURCE_COLORS.todo },
+            onclick: () => { selected = null; openTask(t, row); } }, h('span.wa-time.data', 'due'), h('span.wa-title', t.title));
+          return row;
+        })) : null);
   }));
 }
 
