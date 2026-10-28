@@ -213,3 +213,91 @@ test('day plan: lessons with rooms, meetings and plan blocks in time order; done
   const g = (await api('GET', '/api/glance')).body;
   assert.ok(Array.isArray(g.day.today.items) && Array.isArray(g.day.tomorrow.items));
 });
+
+test('tasks glance: groups with open counts, most urgent first, a few per group; renamed groups follow the document', async () => {
+  db.run('DELETE FROM todos');
+  db.run("DELETE FROM docs WHERE key = 'taskGroups'");
+  const add = t => api('POST', '/api/todos', t);
+  await add({ title: 'Essay draft', group: 'school', priority: 'low' });
+  await add({ title: 'Read chapter 4', group: 'school', due: '2026-10-01' });
+  await add({ title: 'Exam prep', group: 'school', priority: 'high' });
+  await add({ title: 'Invoice ServiWeb', project: 'business' });   // an app build from before the group field
+  await add({ title: 'Old task' });
+  await add({ title: 'Done already', group: 'school', done: true });
+  let g = (await api('GET', '/api/glance')).body.tasks;
+  assert.deepEqual(g.groups.map(x => [x.id, x.name, x.open]), [['private', 'Private', 0], ['school', 'School', 3], ['business', 'Business', 1]]);
+  assert.equal(g.ungrouped, 1);
+  assert.deepEqual(g.items.filter(t => t.group === 'school').map(t => t.title), ['Exam prep', 'Read chapter 4', 'Essay draft']);
+  assert.equal(g.items.find(t => t.title === 'Read chapter 4').overdue, true);
+
+  const { taskGlance } = await import('../src/jobs/glance.js');
+  assert.deepEqual(taskGlance('2026-10-24', 2).items.filter(t => t.group === 'school').map(t => t.title), ['Exam prep', 'Read chapter 4']);
+
+  // the app renamed School and dropped Business: its tasks count as ungrouped until moved
+  db.run(`INSERT OR REPLACE INTO docs (user_id, key, value, updated_at, deleted, rev) VALUES (1, 'taskGroups', ?, ?, 0, 1)`,
+    j.str([{ id: 'school', name: 'Uni', color: 'africa' }, { id: 'private', name: 'Private', color: 'samerica' }]), Date.now());
+  g = (await api('GET', '/api/glance')).body.tasks;
+  assert.deepEqual(g.groups.map(x => [x.name, x.open]), [['Uni', 3], ['Private', 0]]);
+  assert.equal(g.ungrouped, 2);
+  db.run("DELETE FROM docs WHERE key = 'taskGroups'");
+});
+
+test('the tasks widget ticks a todo off with POST (no PATCH on Android), and Lina files todos by group name', async () => {
+  db.run('DELETE FROM todos');
+  const t = (await api('POST', '/api/todos', { title: 'Hand in essay', group: 'school' })).body;
+  const r = await api('POST', '/api/todos/' + t.id, { done: true });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.done, true);
+  assert.equal(r.body.group, 'school', 'a partial update keeps the rest');
+  assert.equal((await api('POST', '/api/todos/nope', { done: true })).status, 404);
+
+  const { TOOLS: tools } = await import('../src/agent/tools.js');
+  const made = await tools.create_todo.run({ title: 'Send invoice', group: 'business' }, { source: 'agent' });
+  assert.equal(made.group, 'business');
+  assert.equal(made.project, null);
+  assert.equal((await tools.update_todo.run({ id: made.id, group: 'Private' })).group, 'private');
+  assert.equal((await tools.update_todo.run({ id: made.id, group: null })).group, null);
+  assert.throws(() => tools.create_todo.run({ title: 'x', group: 'Sports' }, { source: 'agent' }), /Unknown group "Sports". Groups: Private, School, Business/);
+  assert.equal(tools.list_todos.run().find(x => x.id === t.id), undefined, 'done todos are not listed');
+});
+
+test('task group and Plan-board project are separate fields; old app builds keep working', async () => {
+  db.run('DELETE FROM todos');
+  db.run("DELETE FROM docs WHERE key = 'taskGroups'");
+  const t = (await api('POST', '/api/todos', { title: 'Ship the hub', group: 'business', project: 'life-os' })).body;
+  assert.equal(t.group, 'business');
+  assert.equal(t.project, 'life-os', 'a board project is not mistaken for a group');
+
+  // an old build syncs the todo without a group field: the stored group stays
+  const old = { ...t, updatedAt: t.updatedAt + 10 }; delete old.group;
+  await api('POST', '/api/sync', { since: 0, upserts: [old] });
+  assert.equal((await api('GET', '/api/todos/' + t.id)).body.group, 'business');
+
+  // a current build clears the group with null
+  await api('POST', '/api/sync', { since: 0, upserts: [{ ...t, group: null, updatedAt: t.updatedAt + 20 }] });
+  assert.equal((await api('GET', '/api/todos/' + t.id)).body.group, null);
+
+  // an old build that put the group id in project: it moves to group
+  const legacy = (await api('POST', '/api/todos', { title: 'Exam prep', project: 'school' })).body;
+  assert.deepEqual([legacy.group, legacy.project], ['school', null]);
+});
+
+test('migration 0013 moves group ids out of project, including custom groups, and leaves board projects', async () => {
+  const { readFileSync } = await import('node:fs');
+  db.run('DELETE FROM todos');
+  db.run(`INSERT OR REPLACE INTO docs (user_id, key, value, updated_at, deleted, rev) VALUES (1, 'taskGroups', ?, ?, 0, 1)`,
+    j.str([{ id: 'g_sport', name: 'Sport', color: 'asia' }]), Date.now());
+  const add = (title, project) => api('POST', '/api/todos', { title, project, group: null });
+  const ids = {};
+  for (const [title, project] of [['a', 'school'], ['b', 'g_sport'], ['c', 'life-os'], ['d', null]]) ids[title] = (await add(title, project)).body.id;
+  db.run("UPDATE todos SET task_group = NULL");
+  const rev = db.get("SELECT value FROM meta WHERE key = 'rev'").value;
+  const sql = readFileSync(new URL('../migrations/0013_task_group.sql', import.meta.url), 'utf8').replace(/^ALTER TABLE[^;]*;/m, '');
+  db.exec(sql);
+  const row = id => db.get('SELECT project, task_group, rev FROM todos WHERE id = ?', id);
+  assert.deepEqual([row(ids.a).project, row(ids.a).task_group], [null, 'school']);
+  assert.deepEqual([row(ids.b).project, row(ids.b).task_group], [null, 'g_sport']);
+  assert.deepEqual([row(ids.c).project, row(ids.c).task_group], ['life-os', null]);
+  assert.ok(row(ids.a).rev > rev, 'moved rows get a new rev so devices pull them');
+  db.run("DELETE FROM docs WHERE key = 'taskGroups'");
+});

@@ -93,6 +93,7 @@ public final class Pulse {
         Captures.flush(ctx);                                                  // widget captures that missed the network
         if (TaskWidget.count(ctx) > 0) Tasks.refresh(ctx);                    // sends ticked-off tasks too
         else Tasks.flush(ctx);
+        TasksWidget.flush(ctx);                                               // ticked off on the task-groups widget
         String error = null;
         JSONObject briefingNote = null;
         long now = System.currentTimeMillis();
@@ -136,6 +137,7 @@ public final class Pulse {
     static void refreshSurfaces(Context ctx) {
         GlanceWidget.updateAll(ctx);
         DayWidget.updateAll(ctx);
+        TasksWidget.updateAll(ctx);
         Alerts.pinned(ctx, Prefs.of(ctx).glance());
         try { TileService.requestListeningState(ctx, new ComponentName(ctx, BriefingTile.class)); } catch (Exception ignored) { }
     }

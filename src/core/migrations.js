@@ -71,6 +71,7 @@ export function migrate(s) {
   importBewerbungen(s);
   migrateTodos(s);
   if (!s.sync) s.sync = { cursor: 0, dirty: {}, lastSync: 0 };
+  taskGroupField(s);
   if (!s.gcal) s.gcal = { connected: false, pushed: {}, events: [], range: null, lastFetch: 0 };
   if (!Array.isArray(s.captures)) s.captures = [];
   if (!s.board || !Array.isArray(s.board.projects)) s.board = { projects: [] };
@@ -103,10 +104,27 @@ export function makeTask(f) {
   const now = Date.now();
   return {
     id: f.id || uid(), title: f.title, notes: f.notes || '', done: !!f.done,
-    priority: f.priority || 'med', status: f.status || null, due: f.due || null, project: f.project || null,
+    priority: f.priority || 'med', status: f.status || null, due: f.due || null, project: f.project || null, group: f.group || null,
     sort: f.sort || now, source: f.source || 'app', createdAt: now, updatedAt: now,
     completedAt: f.done ? now : null, deleted: false
   };
+}
+
+/* 2026-10-28: a task's group moves from `project` (now the Plan board's) to its own `group` field.
+   Ids of the default groups and of the synced taskGroups list count as groups; anything else stays a project.
+   Moved tasks are marked dirty so the server gets the new shape (it also moves them itself: migration 0013). */
+export function taskGroupField(s) {
+  if (s.meta.taskGroupField20261028 || !Array.isArray(s.tasks)) return;
+  s.meta.taskGroupField20261028 = true;
+  const ids = new Set(['private', 'school', 'business', ...(Array.isArray(s.taskGroups) ? s.taskGroups.map(g => g && g.id) : [])]);
+  const now = Date.now();
+  for (const t of s.tasks) {
+    if (t.group === undefined) t.group = null;
+    if (!t.group && t.project && ids.has(t.project)) {
+      t.group = t.project; t.project = null; t.updatedAt = Math.max(now, (t.updatedAt || 0) + 1);
+      if (s.sync && s.sync.dirty) s.sync.dirty[t.id] = true;
+    }
+  }
 }
 
 /* 2026-09-24: todos as one flat, syncable list. */
