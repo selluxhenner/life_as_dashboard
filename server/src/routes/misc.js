@@ -37,9 +37,10 @@ misc.patch('/settings', async c => {
 misc.post('/devices/pair', async c => {
   if (c.get('user').deviceId !== 'master') throw new HttpError(403, 'Pair new devices with the master token');
   const b = await body(c);
-  return c.json(pairDevice({ name: str(b.name, 80), platform: str(b.platform, 20) }), 201);
+  // scope 'ops': a token for the agent box that may only post ops reports.
+  return c.json(pairDevice({ name: str(b.name, 80), platform: str(b.platform, 20), scope: b.scope === undefined ? 'full' : b.scope }), 201);
 });
-misc.get('/devices', c => c.json({ devices: db.all('SELECT id, name, platform, created_at, last_seen_at, revoked FROM devices ORDER BY created_at DESC') }));
+misc.get('/devices', c => c.json({ devices: db.all('SELECT id, name, platform, scope, created_at, last_seen_at, revoked FROM devices ORDER BY created_at DESC') }));
 misc.delete('/devices/:id', c => { db.run('UPDATE devices SET revoked = 1 WHERE id = ?', c.req.param('id')); return c.json({ ok: true }); });
 
 /* ---------- content ---------- */

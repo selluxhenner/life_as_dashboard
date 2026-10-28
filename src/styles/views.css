@@ -170,7 +170,7 @@
 
 .home-grid { align-items: start; }
 /* Job hunt + AI: whole card is the link to its page */
-.home-launch { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: var(--s-4); }
+.home-launch { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); grid-auto-flow: column; margin-top: var(--s-4); }
 .launch { display: block; color: inherit; text-decoration: none; border-radius: var(--r-md); }
 .launch > .panel { height: 100%; transition: background var(--t-base); }
 .launch:hover > .panel { background: color-mix(in oklab, var(--hull-2) 88%, transparent); }
@@ -187,7 +187,15 @@
 .ai-mini-head b { font-weight: 500; font-size: var(--fs-sm); }
 .ai-mini-head .u-vendor { width: auto; text-transform: none; }
 .ai-mini p { font-size: var(--fs-xs); color: var(--ink-2); line-height: 1.45; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-@media (max-width: 1180px) { .home-launch { grid-template-columns: 1fr; } }
+@media (max-width: 1180px) { .home-launch { grid-template-columns: 1fr; grid-auto-flow: row; } }
+/* Server card (agent-box reports) */
+.ops-readout { display: inline-flex; align-items: center; gap: var(--s-2); }
+.ops-stale { color: var(--amber); margin-bottom: var(--s-2); }
+.ops-findings { display: grid; gap: var(--s-2); margin-top: var(--s-3); }
+.ops-findings li { padding-left: var(--s-3); box-shadow: inset 2px 0 0 var(--c); font-size: var(--fs-xs); color: var(--ink-2); line-height: 1.45; }
+.ops-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-3); margin-top: var(--s-3); }
+.ops-metric .k { font-size: var(--fs-xs); color: var(--ink-3); }
+.ops-metric .v { font-size: var(--fs-sm); margin-bottom: 4px; }
 .timeline { position: relative; display: grid; gap: 2px; }
 .timeline::before { content: ''; position: absolute; left: 58px; top: 6px; bottom: 6px; width: 1px; background: var(--seam); }
 .tl-item { display: grid; grid-template-columns: 46px 14px 1fr auto; gap: var(--s-2); align-items: start; padding: 6px 0; }
