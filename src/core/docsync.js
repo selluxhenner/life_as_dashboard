@@ -19,6 +19,7 @@ export function units(state) {
   for (const c of state.captures || []) put('capture:' + c.id, c);
   put('goals', state.ziele);
   put('board', state.board || { projects: [] });
+  if (state.taskGroups) put('taskGroups', state.taskGroups);   // absent until edited: then everyone has the defaults
   put('fitness', state.fitness);
   put('profile', { name: state.name });
   const s = {};
@@ -44,6 +45,7 @@ export function applyUnit(state, key, value) {
     // singletons are never deleted
   } else if (kind === 'goals') state.ziele = value;
   else if (kind === 'board') state.board = value;
+  else if (kind === 'taskGroups') state.taskGroups = value;
   else if (kind === 'fitness') state.fitness = value;
   else if (kind === 'profile') { if (value.name) state.name = value.name; }
   else if (kind === 'settings') Object.assign(state.settings, value);

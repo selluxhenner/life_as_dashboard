@@ -43,6 +43,8 @@ public final class Prefs {
     }
     public long glanceAt() { return sp.getLong("glanceAt", 0); }
     public void setGlance(JSONObject g) { sp.edit().putString("glance", g.toString()).putLong("glanceAt", System.currentTimeMillis()).apply(); }
+    /** A local edit of the cached glance (a task ticked off on the widget): it does not count as fetched. */
+    public void updateGlance(JSONObject g) { sp.edit().putString("glance", g.toString()).apply(); }
 
     public boolean pinned() { return sp.getBoolean("pinned", false); }
     public void setPinned(boolean on) { sp.edit().putBoolean("pinned", on).apply(); }
@@ -83,6 +85,15 @@ public final class Prefs {
     public void setTaskQueue(String json) { sp.edit().putString("taskQueue", json).apply(); }
     public String taskDraft() { return sp.getString("taskDraft", ""); }
     public void setTaskDraft(String text) { sp.edit().putString("taskDraft", text).apply(); }
+
+    /** The two task groups a Tasks widget shows, left and right (null = not picked: the first two groups). */
+    public String[] tasksColumns(int widgetId) { return new String[] { sp.getString("tasksL" + widgetId, null), sp.getString("tasksR" + widgetId, null) }; }
+    public void setTasksColumns(int widgetId, String left, String right) { sp.edit().putString("tasksL" + widgetId, left).putString("tasksR" + widgetId, right).apply(); }
+    public void forgetTasksColumns(int widgetId) { sp.edit().remove("tasksL" + widgetId).remove("tasksR" + widgetId).apply(); }
+
+    /** Todo ids ticked off on the Tasks widget that the server has not taken yet, as a JSON array. */
+    public String tasksDone() { return sp.getString("tasksDone", "[]"); }
+    public void setTasksDone(String json) { sp.edit().putString("tasksDone", json).apply(); }
 
     public boolean askedNotifications() { return sp.getBoolean("askedNotifications", false); }
     public void setAskedNotifications() { sp.edit().putBoolean("askedNotifications", true).apply(); }

@@ -2,7 +2,7 @@
 // instead of a lookup and then the change: the dates of the next two weeks, open todos, habits and the coming week's
 // calendar, each with the id the tools take. Plain lines, short enough to stay well under the cost of a lookup.
 import { db } from '../db.js';
-import { listOpenTodos } from '../routes/todos.js';
+import { listOpenTodos, taskGroups } from '../routes/todos.js';
 import { listHabits } from './tools.js';
 import { localDate, localTime, addDays } from '../lib/time.js';
 
@@ -28,8 +28,10 @@ export function quickContext(now = new Date()) {
   });
 
   const open = listOpenTodos();
+  const groups = taskGroups();
+  const groupOf = Object.fromEntries(groups.map(g => [g.id, g.name]));
   const todos = open.slice(0, MAX_TODOS).map(t =>
-    `${t.id} | ${t.title}${t.due ? ' | due ' + t.due : ''}${t.priority === 'high' ? ' | high priority' : ''}`);
+    `${t.id} | ${t.title}${t.due ? ' | due ' + t.due : ''}${t.priority === 'high' ? ' | high priority' : ''}${groupOf[t.group] ? ' | ' + groupOf[t.group] : ''}`);
 
   const habits = listHabits().map(hb => {
     const often = hb.mode === 'weekly' ? `weekly, ${hb.target || 3}x` : 'daily';
@@ -42,7 +44,8 @@ export function quickContext(now = new Date()) {
 
   return [
     'Dates: ' + dates.join(', ') + '.',
-    `Open todos (id | title | due)${open.length > MAX_TODOS ? `, first ${MAX_TODOS} of ${open.length}` : ''}:`, todos.length ? todos.join('\n') : 'none',
+    `Open todos (id | title | due | group)${open.length > MAX_TODOS ? `, first ${MAX_TODOS} of ${open.length}` : ''}:`, todos.length ? todos.join('\n') : 'none',
+    'Task groups: ' + (groups.map(g => g.name).join(', ') || 'none') + '.',
     'Habits (id | label | how often):', habits.length ? habits.join('\n') : 'none',
     `Calendar, today and the next ${EVENT_DAYS} days (id | when | title):`, events.length ? events.join('\n') : 'nothing'
   ].join('\n');

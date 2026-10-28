@@ -1,15 +1,16 @@
-// Full-page details for a habit or a task (opened from Today and Home, see components/detail.js).
+// Full-page details for a habit, a task or the task groups (opened from Today and Home, see components/detail.js).
 import { h } from '../core/dom.js';
 import { state, save } from '../core/store.js';
 import { todayKey, keyOffset, parseKey, mondayKeyOf, fmt } from '../core/dates.js';
 import { openDetail, closeDetail } from '../components/detail.js';
-import { check, seg, chip } from '../components/ui.js';
+import { check, seg, chip, removeBtn, addRow } from '../components/ui.js';
 import { dropdown, datePicker, friendlyDate, confirmDelete } from '../components/overlay.js';
 import { icon } from '../core/icons.js';
 import { tick, toast } from '../core/fx.js';
 import {
   currentStreak, bestStreak, weekCount, toggleHabit, deleteHabit,
-  updateTask, deleteTask, PRIORITIES
+  updateTask, deleteTask, PRIORITIES, liveTasks,
+  taskGroups, groupOf, groupColor, groupOptions, GROUP_COLORS, addGroup, updateGroup, moveGroup, deleteGroup
 } from '../core/model.js';
 
 const PRIO_COLOR = { high: 'var(--flare)', med: 'var(--amber)', low: 'var(--ink-3)' };
@@ -109,11 +110,42 @@ function taskBody(id) {
     h('div.detail-grid',
       fieldRow('Priority', dropdown({ options: PRIORITIES.map(p => ({ value: p.key, label: p.label, color: PRIO_COLOR[p.key] })), value: t.priority, onChange: v => updateTask(t, { priority: v }), label: 'Priority' })),
       fieldRow('Due', datePicker({ value: t.due, onChange: v => updateTask(t, { due: v }), label: 'Due date', placeholder: 'No due date' }),
-        t.due && t.due < todayKey() && !t.done ? h('span', { style: { color: 'var(--flare)' } }, 'Overdue') : null)),
+        t.due && t.due < todayKey() && !t.done ? h('span', { style: { color: 'var(--flare)' } }, 'Overdue') : null),
+      fieldRow('Group', dropdown({ options: groupOptions(), value: groupOf(t) ? t.group : '', onChange: v => updateTask(t, { group: v || null }), label: 'Group' }))),
     section('Notes', notes),
     h('footer.detail-foot',
       h('button.btn', { type: 'button', onclick: () => updateTask(t, { done: !t.done }) }, icon('check'), t.done ? 'Reopen' : 'Complete'),
       h('span.grow'),
       h('button.btn.danger', { type: 'button', onclick: () => confirmDelete(t.title, () => { closeDetail(); deleteTask(t); toast('Task deleted'); }, { kind: 'task' }) }, icon('trash'), 'Delete task'))
+  ];
+}
+
+/* ---------- task groups ---------- */
+
+const COLOR_NAME = { samerica: 'Green', africa: 'Orange', europe: 'Blue', asia: 'Red', oceania: 'Violet', namerica: 'Teal', mideast: 'Yellow' };
+
+export function openGroups(from) {
+  openDetail({ from, key: 'groups', label: 'Task groups', render: groupsBody });
+}
+
+function groupsBody() {
+  const groups = taskGroups();
+  const open = id => liveTasks().filter(t => !t.done && t.group === id).length;
+  const rows = groups.map((g, i) => h('div.row.group-edit', { style: { '--c': groupColor(g) } },
+    dropdown({ options: GROUP_COLORS.map(c => ({ value: c, label: COLOR_NAME[c], color: `var(--tone-${c})` })), value: g.color, onChange: v => updateGroup(g.id, { color: v }), label: 'Colour of ' + g.name, cls: 'sm group-color' }),
+    h('input.field.grow', { value: g.name, maxLength: 40, 'aria-label': 'Name of group ' + (i + 1),
+      onchange: e => { const v = e.target.value.trim(); if (v && v !== g.name) updateGroup(g.id, { name: v }); else e.target.value = g.name; } }),
+    h('span.data.muted.hide-m', open(g.id) + ' open'),
+    h('button.btn.icon.sm.ghost', { type: 'button', 'aria-label': 'Move ' + g.name + ' up', title: 'Move up', disabled: i === 0, onclick: () => moveGroup(g.id, -1) }, '↑'),
+    h('button.btn.icon.sm.ghost', { type: 'button', 'aria-label': 'Move ' + g.name + ' down', title: 'Move down', disabled: i === groups.length - 1, onclick: () => moveGroup(g.id, 1) }, '↓'),
+    removeBtn(() => { deleteGroup(g.id); toast('Group deleted'); }, 'Delete group', { what: g.name, kind: 'group', detail: open(g.id) ? 'Its tasks stay, without a group.' : undefined })));
+  return [
+    h('header.detail-head',
+      h('div.grow',
+        h('h2.detail-heading', 'Task groups'),
+        h('div.detail-meta', 'Sort tasks into groups like Private, School and Business. On the phone, the Tasks widget shows two of them side by side.'))),
+    section('Groups',
+      h('div.rows', rows.length ? rows : h('div.empty', h('b', 'No groups'), h('div', 'Tasks stay in one list until you add one.'))),
+      h('div', { style: { marginTop: '12px' } }, addRow({ placeholder: 'New group, e.g. Sport', label: 'New group', onSubmit: v => addGroup(v.slice(0, 40)) })))
   ];
 }

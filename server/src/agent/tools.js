@@ -1,7 +1,7 @@
 // Agent tools. risk: read (free), internal (runs immediately, logged), outward (always waits for Kevin's approval).
 import { z } from 'zod';
 import { db } from '../db.js';
-import { listOpenTodos, createTodo, patchTodo } from '../routes/todos.js';
+import { listOpenTodos, createTodo, patchTodo, groupId, groupName } from '../routes/todos.js';
 import { listJobs, saveJob } from '../routes/jobs.js';
 import { gatherContext, getBriefing } from '../jobs/briefing.js';
 import { latestDigest } from '../jobs/news.js';
@@ -74,7 +74,7 @@ export const TOOLS = {
     run: ({ date: d }) => gatherContext(d || localDate())
   },
   get_briefing: { risk: 'read', description: "This morning's generated briefing, if it exists.", schema: z.object({}), run: () => getBriefing() || { none: true } },
-  list_todos: { risk: 'read', description: 'Open todos with id, title, priority and due date.', schema: z.object({}), run: () => listOpenTodos().map(t => ({ id: t.id, title: t.title, priority: t.priority, due: t.due })) },
+  list_todos: { risk: 'read', description: 'Open todos with id, title, priority, due date and group.', schema: z.object({}), run: () => listOpenTodos().map(t => ({ id: t.id, title: t.title, priority: t.priority, due: t.due, group: groupName(t.group) })) },
   get_calendar: {
     risk: 'read', description: 'Calendar events (all Google accounts + school lessons) between two dates (inclusive from, exclusive to). id is for move_event / cancel_event; lessons are read-only.',
     schema: z.object({ from: date, to: date }),
@@ -105,9 +105,9 @@ export const TOOLS = {
   get_news: { risk: 'read', description: 'Latest world news digest by region plus breaking news.', schema: z.object({}), run: () => latestDigest() },
 
   create_todo: {
-    risk: 'internal', description: 'Create a todo for Kevin.',
-    schema: z.object({ title: z.string().min(1).max(300), priority: z.enum(['high', 'med', 'low']).optional(), due: date.optional(), notes: z.string().max(2000).optional() }),
-    run: (i, ctx) => createTodo(i, ctx.source),
+    risk: 'internal', description: 'Create a todo for Kevin. group: one of his task groups by name (e.g. School), when it clearly belongs to one.',
+    schema: z.object({ title: z.string().min(1).max(300), priority: z.enum(['high', 'med', 'low']).optional(), due: date.optional(), notes: z.string().max(2000).optional(), group: z.string().max(80).optional() }),
+    run: ({ group, ...i }, ctx) => createTodo({ ...i, ...(group ? { group: groupId(group) } : {}) }, ctx.source),
     summary: i => `Added task “${i.title}”`
   },
   complete_todo: {
@@ -115,9 +115,9 @@ export const TOOLS = {
     schema: z.object({ id: z.string() }), run: ({ id }) => patchTodo(id, { done: true }), summary: () => 'Completed a task'
   },
   update_todo: {
-    risk: 'internal', description: 'Change a todo: rename it, move its due date (null = no date), change priority or notes, or reopen it (done false).',
-    schema: z.object({ id: z.string(), title: z.string().min(1).max(300).optional(), due: date.nullable().optional(), priority: z.enum(['high', 'med', 'low']).optional(), notes: z.string().max(2000).optional(), done: z.boolean().optional() }),
-    run: ({ id, ...patch }) => patchTodo(id, patch),
+    risk: 'internal', description: 'Change a todo: rename it, move its due date (null = no date), change priority, notes or group (by name, null = no group), or reopen it (done false).',
+    schema: z.object({ id: z.string(), title: z.string().min(1).max(300).optional(), due: date.nullable().optional(), priority: z.enum(['high', 'med', 'low']).optional(), notes: z.string().max(2000).optional(), group: z.string().max(80).nullable().optional(), done: z.boolean().optional() }),
+    run: ({ id, group, ...patch }) => patchTodo(id, group === undefined ? patch : { ...patch, group: groupId(group) }),
     summary: i => `Updated task${i.title ? ' “' + i.title + '”' : ''}${i.due ? ' (due ' + i.due + ')' : ''}`
   },
   delete_todo: {

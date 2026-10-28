@@ -29,8 +29,8 @@ import java.util.Map;
 /** Home-screen (and, where the phone allows it, lock-screen) widget: briefing headline, world top stories, top AI news. */
 public class GlanceWidget extends AppWidgetProvider {
     static final String REFRESH = "com.kevinschmid.lifeos.pulse.REFRESH";
-    // Continent tones from src/styles/tokens.css (oklch → sRGB)
-    private static final Map<String, Integer> TONE = new HashMap<>();
+    // Continent tones from src/styles/tokens.css (oklch → sRGB); task groups use them too (TasksWidget)
+    static final Map<String, Integer> TONE = new HashMap<>();
     static {
         TONE.put("europe", 0xFF85ABF0); TONE.put("africa", 0xFFE79F5C); TONE.put("asia", 0xFFEA808F); TONE.put("mideast", 0xFFD5BC70);
         TONE.put("namerica", 0xFF63CCC0); TONE.put("samerica", 0xFF97D083); TONE.put("oceania", 0xFFB59BE6);

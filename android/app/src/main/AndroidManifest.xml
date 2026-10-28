@@ -71,6 +71,13 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_day_info" />
         </receiver>
 
+        <receiver android:name=".pulse.TasksWidget" android:exported="true" android:label="@string/tasks_widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_groups_info" />
+        </receiver>
+
         <receiver android:name=".pulse.CaptureWidget" android:exported="true" android:label="@string/capture_widget_name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

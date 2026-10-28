@@ -1,6 +1,6 @@
 // Upgrading real pre-v2 states must not lose data. Run: npm test
 import { describe, it, expect } from 'vitest';
-import { migrate, freshState } from '../src/core/migrations.js';
+import { migrate, freshState, taskGroupField } from '../src/core/migrations.js';
 
 const v3State = () => ({
   name: 'Kevin',
@@ -74,5 +74,28 @@ describe('migrate', () => {
     const s = migrate(freshState());
     expect(s.jobs).toEqual([]);
     expect(s.meta.english20261005).toBe(true);
+  });
+});
+
+describe('task group field (2026-10-28)', () => {
+  const task = (id, project, extra = {}) => ({ id, title: id, project, updatedAt: 1, ...extra });
+  it('moves group ids out of project, keeps board projects, marks moved tasks dirty, runs once', () => {
+    const s = { meta: {}, sync: { dirty: {} }, taskGroups: [{ id: 'g_sport', name: 'Sport' }],
+      tasks: [task('a', 'school'), task('b', 'g_sport'), task('c', 'life-os'), task('d', null), task('e', 'private', { group: 'business' })] };
+    taskGroupField(s);
+    const by = id => s.tasks.find(t => t.id === id);
+    expect([by('a').group, by('a').project]).toEqual(['school', null]);
+    expect([by('b').group, by('b').project]).toEqual(['g_sport', null]);
+    expect([by('c').group, by('c').project]).toEqual([null, 'life-os']);
+    expect(by('d').group).toBe(null);
+    expect([by('e').group, by('e').project]).toEqual(['business', 'private']);
+    expect(Object.keys(s.sync.dirty).sort()).toEqual(['a', 'b']);
+    expect(by('a').updatedAt).toBeGreaterThan(1);
+    by('c').project = 'school';
+    taskGroupField(s);
+    expect(by('c').group).toBe(null);
+  });
+  it('a fresh state gets the flag', () => {
+    expect(migrate(freshState()).meta.taskGroupField20261028).toBe(true);
   });
 });
