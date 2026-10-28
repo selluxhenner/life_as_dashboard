@@ -268,6 +268,7 @@ export function createChronosphere({ lat = 52.52, lon = 13.405, size = 420, comp
 
   return {
     el,
+    intro,
     update(opts = {}) {
       const nowMin = minOf(new Date());
       events = (opts.events || []).map(e => ({ ...e, past: e.end <= nowMin, now: e.start <= nowMin && e.end > nowMin }));

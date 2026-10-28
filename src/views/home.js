@@ -13,7 +13,7 @@ import {
   liveJobs, jobsAppliedThisWeek, QUOTES, toggleHabit, currentStreak
 } from '../core/model.js';
 import { go } from '../core/router.js';
-import { decode, tick, toast } from '../core/fx.js';
+import { decode, tick, toast, countUp } from '../core/fx.js';
 import { icon } from '../core/icons.js';
 import { typeOf, liveCaptures, unsorted, captureText, setType, updateCapture } from '../features/capture/captures.js';
 import { typeOptions } from './captures.js';
@@ -290,10 +290,12 @@ export default {
 
     const title = h('h1.hero-title');
     const s = dayScore();
+    const scoreEl = h('span.data', s.score + '%');
+    if (chrono.intro) countUp(scoreEl, s.score, { duration: 1500, delay: 400, suffix: '%' });   // plays with the clock's boot, incl. Ctrl+R
     root.append(h('div.view.home',
       h('section.hero',
         h('div.hero-clock', chrono.el,
-          h('div.score-readout', h('span.micro', 'Day'), h('span.data', s.score + '%'))),
+          h('div.score-readout', h('span.micro', 'Day'), scoreEl)),
         h('div.hero-side',
           h('div.hero-greet', title, h('div.hero-sub', fmt.long(new Date()) + ' · ' + state.settings.home.city)),
           captureBar(),
