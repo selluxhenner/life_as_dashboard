@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 /** Tiny JSON client for the Agentic OS server, with the device token. Short timeouts: it runs in alarms and pushes. */
 final class Server {
     static final class AuthException extends IOException { AuthException() { super("The server rejected this device's token. Pair it again in Settings."); } }
+    static final class HttpError extends IOException { final int code; HttpError(int code) { super("Server answered " + code); this.code = code; } }
 
     private Server() {}
 
@@ -35,7 +36,7 @@ final class Server {
             int code = c.getResponseCode();
             if (code == 401) throw new AuthException();
             String text = read(code >= 400 ? c.getErrorStream() : c.getInputStream());
-            if (code >= 400) throw new IOException("Server answered " + code);
+            if (code >= 400) throw new HttpError(code);
             return new JSONObject(text);
         } finally { c.disconnect(); }
     }

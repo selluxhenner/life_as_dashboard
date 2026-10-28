@@ -6,7 +6,9 @@ import { localDate, zonedInstant, addDays } from '../lib/time.js';
 import { getBriefing } from './briefing.js';
 import { latestDigest } from './news.js';
 import { aiToday } from './aimodels.js';
+import { listOpenTodos, taskGroups } from '../routes/todos.js';
 
+const PRIO = { high: 0, med: 1, low: 2 };
 const VENDOR_NAME = { openai: 'OpenAI', github: 'GitHub', xai: 'xAI', deepseek: 'DeepSeek', huggingface: 'Hugging Face' };
 const vendorName = v => VENDOR_NAME[v] || String(v || '').replace(/^./, c => c.toUpperCase());
 const HHMM = /^\d{2}:\d{2}$/;
@@ -75,6 +77,27 @@ export function dayPlan(date) {
   return items.sort((a, b) => (a.start ?? -1) - (b.start ?? -1));
 }
 
+/**
+ * The tasks widget: the groups with their open counts, and per group its most urgent open tasks (high priority first,
+ * then the soonest due). Each group's first few are enough for any column, also "All": the overall top N is always
+ * within the top N of its own group.
+ */
+export function taskGlance(date, perGroup = 8) {
+  const groups = taskGroups();
+  const known = new Set(groups.map(g => g.id));
+  const open = listOpenTodos().map(t => ({ ...t, group: known.has(t.group) ? t.group : '' }))
+    .sort((a, b) => PRIO[a.priority] - PRIO[b.priority] || (a.due || '~').localeCompare(b.due || '~') || a.sort - b.sort);
+  const count = {};
+  open.forEach(t => { count[t.group] = (count[t.group] || 0) + 1; });
+  const seen = {};
+  return {
+    groups: groups.map(g => ({ id: g.id, name: g.name, color: g.color || '', open: count[g.id] || 0 })),
+    ungrouped: count[''] || 0,
+    items: open.filter(t => (seen[t.group] = (seen[t.group] || 0) + 1) <= perGroup)
+      .map(t => ({ id: t.id, title: t.title.slice(0, 120), group: t.group, priority: t.priority, due: t.due, overdue: !!(t.due && t.due < date) }))
+  };
+}
+
 export function glance(now = new Date()) {
   const date = localDate(now);
   const b = getBriefing(date);
@@ -95,6 +118,7 @@ export function glance(now = new Date()) {
     },
     ai: { date: ai.date, top: (ai.highlights || []).slice(0, 3).map(h => ({ title: h.title, vendor: vendorName(h.vendor) })) },
     // the day-plan widget: today, and tomorrow for the evening
-    day: { today: { date, items: dayPlan(date) }, tomorrow: { date: addDays(date, 1), items: dayPlan(addDays(date, 1)) } }
+    day: { today: { date, items: dayPlan(date) }, tomorrow: { date: addDays(date, 1), items: dayPlan(addDays(date, 1)) } },
+    tasks: taskGlance(date)
   };
 }
