@@ -59,7 +59,7 @@ const ROUTES = [
   // AI and Jobs open from their cards on Home; still reachable with Ctrl K and G A / G J
   { id: 'ai', label: 'AI', icon: 'spark', view: ai, key: 'G A', nav: false },
   { id: 'jobs', label: 'Job hunt', icon: 'briefcase', view: jobs, key: 'G J', nav: false },
-  { id: 'goals', label: 'Goals', icon: 'target', view: goals },
+  { id: 'goals', label: 'Plan', icon: 'target', view: goals },
   { id: 'rank', label: 'Rank', icon: 'rank', view: rankView, hidden: () => !pointsOn() },
   { id: 'assistant', label: 'Lina', icon: 'agent', view: assistant, key: 'G .' },
   { id: 'hub', label: 'Hub', icon: 'server', view: hub, key: 'G U' },
