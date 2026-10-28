@@ -13,7 +13,7 @@ import { linaApprovals, agentActivity, pendingActions } from './assistant.js';
 
 // Workbench on the home PC, reachable inside the tailnet only (tailscale serve on port 3917)
 const WORKBENCH_URL = 'https://kev-pc.tailb66bb7.ts.net';
-const PLATFORM = { android: 'Phone', windows: 'Windows', macos: 'Mac', linux: 'Server', web: 'Browser' };
+const PLATFORM = { android: 'Phone', laptop: 'Laptop', desktop: 'Desktop', windows: 'Windows', macos: 'Mac', linux: 'Server', web: 'Browser' };
 
 /* Admin pages and tools. A link without url shows as "later" (Elaria's admin is not live yet). */
 const ADMIN = [
@@ -57,14 +57,17 @@ function approvals(items, connected) {
       : empty('All clear', 'Hermes asks here, and on Telegram, before it restarts or deploys anything.'));
 }
 
+/* Browsers are temporary (the server revokes them after two weeks idle): listed under the devices, not counted. */
 function devices(list) {
-  return panel({ title: 'Devices', readout: h('span', h('b', String(list.filter(d => d.online).length)), ' of ' + list.length + ' online') },
-    list.length ? h('div.rows', list.map(d => h('div.row',
-      h('span', { class: 'status-dot ' + (d.online ? 'done' : 'idle') }),
-      h('div.grow', h('div.title', d.name + (d.current ? ' · this device' : '')),
-        h('div.sub', [PLATFORM[d.platform] || d.platform || 'Device', d.scope === 'ops' ? 'agent' : null, d.lastSeenAt ? 'seen ' + fmt.ago(d.lastSeenAt) : 'never seen'].filter(Boolean).join(' · '))),
-      d.online ? chip('online', 'ok') : chip('offline', null, 'plain'))))
-      : empty('No devices', 'Paired devices show up here.'));
+  const kept = list.filter(d => !d.temporary), temp = list.filter(d => d.temporary);
+  const row = d => h('div.row',
+    h('span', { class: 'status-dot ' + (d.online ? 'done' : 'idle') }),
+    h('div.grow', h('div.title', d.name + (d.current ? ' · this device' : '')),
+      h('div.sub', [PLATFORM[d.platform] || d.platform || 'Device', d.scope === 'ops' ? 'agent' : null, d.lastSeenAt ? 'seen ' + fmt.ago(d.lastSeenAt) : 'never seen'].filter(Boolean).join(' · '))),
+    d.online ? chip('online', 'ok') : chip('offline', null, 'plain'));
+  return panel({ title: 'Devices', readout: h('span', h('b', String(kept.filter(d => d.online).length)), ' of ' + kept.length + ' online') },
+    kept.length ? h('div.rows', kept.map(row)) : empty('No devices', 'Paired devices show up here.'),
+    temp.length ? h('div', h('div.sub', { style: { margin: '12px 0 4px' } }, 'Temporary · browsers, removed after 2 weeks idle'), h('div.rows', temp.map(row))) : null);
 }
 
 const linkRows = list => h('div.rows', list.map(l => l.url
