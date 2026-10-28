@@ -73,6 +73,41 @@ const linkRows = list => h('div.rows', list.map(l => l.url
 
 const search = (a, q) => 'https://github.com/search?type=pullrequests&q=' + encodeURIComponent(q + ' ' + (a.kind === 'org' ? 'org:' : 'user:') + a.login);
 
+/* Services from the hub registry (selluxhenner/hub), each with its last health check from the server. */
+const SERVICE = { up: ['up', 'ok', 'done'], down: ['down', 'alert', 'error'], unreachable: ['no answer', 'warn', 'idle'], none: ['no check', null, 'idle'] };
+function services(reg) {
+  const list = (reg && reg.services) || [];
+  const checked = list.filter(x => x.status !== 'none');
+  const checkNow = async () => {
+    try { const r = await api.post('/api/hub/refresh'); toast(r.error ? 'Registry: ' + r.error : `${r.up} of ${checked.length || r.projects} up`, r.error ? 'amber' : 'pulse'); }
+    catch (e) { toast(errorText(e), 'flare'); }
+    refresh('hub', '/api/hub/state');
+  };
+  return panel({ title: 'Services', readout: checked.length ? h('span', h('b', String(checked.filter(x => x.status === 'up').length)), ' of ' + checked.length + ' up') : '' },
+    reg && reg.error ? h('div.hint', 'Registry: ' + reg.error) : null,
+    list.length ? h('div.rows', list.map(x => {
+      const [label, tone, dot] = SERVICE[x.status] || SERVICE.none;
+      return h('div.row',
+        h('span', { class: 'status-dot ' + dot }),
+        h('div.grow', h('div.title', x.name),
+          h('div.sub', [x.role, x.code ? 'HTTP ' + x.code : null, x.ms != null ? x.ms + ' ms' : null, x.checkedAt ? fmt.ago(x.checkedAt) : null].filter(Boolean).join(' · '))),
+        chip(label, tone, tone ? '' : 'plain'));
+    })) : empty('No registry yet', 'The server reads selluxhenner/hub every 15 minutes once its GitHub token is set.'),
+    h('div.input-row', { style: { marginTop: '10px' } }, h('button.btn.sm.ghost', { type: 'button', onclick: checkNow }, icon('sync'), 'Check now')));
+}
+
+/* Questions Lina passed to Hermes ("Hey Lina, ask Hermes why …") and his answers. */
+function hermesAsks() {
+  const { data } = remote('hermesAsks', '/api/hermes/asks?limit=5', 2 * 60000);
+  const list = (data && data.asks) || [];
+  if (!list.length) return null;
+  return panel({ title: 'Asked Hermes', readout: h('span', h('b', String(list.filter(a => a.status === 'open').length)), ' waiting') },
+    h('div.rows', list.map(a => h('div.row.hermes-ask',
+      h('div.grow', h('div.title', a.question),
+        h('div.sub', a.answer || (a.pickedAt ? 'Hermes is on it…' : 'Waiting for Hermes to pick it up'))),
+      h('span.data.muted', fmt.ago(a.answeredAt || a.createdAt))))));
+}
+
 function github() {
   const { data, error } = githubData();
   const list = (data && data.accounts) || [];
@@ -105,6 +140,6 @@ export default {
         h('div.stack', approvals(s.approvals, connected), lina, devices(s.devices),
           panel({ title: 'Admin pages' }, linkRows(ADMIN)),
           panel({ title: 'Tools' }, linkRows(TOOLS))),
-        h('div.stack', serverPulse(), github(), agentActivity()))));
+        h('div.stack', services(s.registry), hermesAsks(), serverPulse(), github(), agentActivity()))));
   }
 };

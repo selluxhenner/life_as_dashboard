@@ -134,6 +134,7 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
         <receiver android:name=".pulse.LinaReceiver" android:exported="false" />
+        <receiver android:name=".pulse.ApprovalReceiver" android:exported="false" />
 
         <service
             android:name=".pulse.BriefingTile"

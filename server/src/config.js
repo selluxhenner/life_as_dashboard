@@ -42,6 +42,8 @@ export const config = {
     token: e.GITHUB_TOKEN || '',
     elaria: { login: e.GITHUB_ELARIA_LOGIN || '', token: e.GITHUB_TOKEN_ELARIA || '' }
   },
+  // The hub registry (projects.yaml, devices.yaml), read with the GitHub token above
+  hub: { repo: e.HUB_REPO || 'selluxhenner/hub', ref: e.HUB_REF || 'main' },
   fcmCredentials: ''                     // set below, once dataDir is known
 };
 config.fcmCredentials = resolve(ROOT, e.FCM_CREDENTIALS || resolve(config.dataDir, 'fcm-service-account.json'));
