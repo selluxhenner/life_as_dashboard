@@ -13,7 +13,7 @@ import { voice } from './routes/voice.js';
 import { misc } from './routes/misc.js';
 import { ops, postReport } from './routes/ops.js';
 import { approvals } from './routes/approvals.js';
-import { hub } from './routes/hub.js';
+import { hubState } from './routes/hub.js';
 
 export const app = new Hono();
 
@@ -61,6 +61,8 @@ app.post('/api/ops/report', requireOps, postReport);
 app.use('/api/approvals/*', requireDevice);
 app.use('/api/approvals', requireDevice);
 app.route('/api', approvals);
+/* Hub state: the apps see everything, an ops token (Hermes's hub-status skill) a summary without ids. */
+app.get('/api/hub/state', requireDevice, hubState);
 
 /* ---------- everything else needs a device token ---------- */
 const api = new Hono();
@@ -72,7 +74,6 @@ api.route('/', connections);
 api.route('/', voice);
 api.route('/', misc);
 api.route('/', ops);
-api.route('/', hub);
 app.route('/api', api);
 
 app.notFound(c => c.json({ error: 'Not found' }, 404));
