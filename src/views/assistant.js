@@ -103,7 +103,8 @@ function message(m) {
     h('div.msg-text', m.text || (streaming && m.role === 'assistant' ? h('span.typing', h('i'), h('i'), h('i')) : '')));
 }
 
-function approvals() {
+/* Shown on the Hub tab next to Hermes's requests: everything waiting for a yes in one place. */
+export function linaApprovals() {
   const { data, connected } = pendingActions();
   const items = (data && data.actions) || [];
   const decide = async (a, ok) => {
@@ -114,7 +115,7 @@ function approvals() {
     } catch (e) { toast(errorText(e), 'flare'); }
     refresh('actions', '/api/agent/actions?status=pending');
   };
-  return panel({ title: 'Needs your approval', readout: items.length ? h('span', h('b', String(items.length)), ' pending') : '' },
+  return panel({ title: 'Lina asks', readout: items.length ? h('span', h('b', String(items.length)), ' pending') : '' },
     !connected ? empty('Nothing to approve', 'Approvals appear here when Lina wants to send something on your behalf, like a meeting invitation.')
       : items.length ? h('div.approvals', items.map(a => h('article.approval',
           h('div.ap-head', chip(a.tool.replace(/_/g, ' '), 'warn'), h('span.data.muted', fmt.ago(a.createdAt))),
@@ -124,7 +125,7 @@ function approvals() {
       : empty('All clear', 'Nothing waiting for you.'));
 }
 
-function activity() {
+export function agentActivity() {
   const { data } = remote('runs', '/api/agent/runs?limit=12', 2 * 60000);
   const runs = (data && data.runs) || [];
   return panel({ title: 'Background work', readout: 'automatic jobs' },
@@ -147,12 +148,10 @@ export default {
     const mic = h('button.btn.icon.mic', { type: 'button', 'aria-label': 'Hold to talk', title: 'Talk (click to start, click to send)', disabled: !canRecord(), onclick: () => toggleRecord(mic) }, icon('mic'));
     if (recording) mic.classList.add('rec');
     root.append(h('div.view.assistant',
-      viewHead('Lina', 'Your assistant reads your calendar, inbox and tasks, plans meetings and to-dos, and only touches the outside world (invites, emails) with your OK. Say “Hey Lina” on your phone.',
+      viewHead('Lina', 'Your assistant reads your calendar, inbox and tasks, plans meetings and to-dos, and only touches the outside world (invites, emails) with your OK, on the Hub tab. Say “Hey Lina” on your phone.',
         h('label.inline-toggle', h('input', { type: 'checkbox', checked: voiceReply, onchange: e => { voiceReply = e.target.checked; } }), 'Speak replies'),
         btn('New chat', () => { conv = { id: null, messages: [] }; persistConv(); notify(); }, 'ghost')),
-      h('div.grid.g-assist',
-        panel({ cls: 'chat' }, log, h('div.chat-bar', mic, input, h('button.btn.primary', { type: 'button', disabled: streaming, onclick: () => { const v = input.value; input.value = ''; send(v); } }, 'Send'))),
-        h('div.stack', approvals(), activity()))));
+      panel({ cls: 'chat' }, log, h('div.chat-bar', mic, input, h('button.btn.primary', { type: 'button', disabled: streaming, onclick: () => { const v = input.value; input.value = ''; send(v); } }, 'Send')))));
     requestAnimationFrame(() => { log.scrollTop = log.scrollHeight; });
     const ask = sessionStorage.getItem('agenticAsk');
     if (ask) { sessionStorage.removeItem('agenticAsk'); setTimeout(() => send(ask), 0); }

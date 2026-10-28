@@ -9,6 +9,7 @@ import { remote, refresh } from '../core/remote.js';
 import { icon } from '../core/icons.js';
 import { toast } from '../core/fx.js';
 import { serverPulse } from './ops.js';
+import { linaApprovals, agentActivity, pendingActions } from './assistant.js';
 
 // Workbench on the home PC, reachable inside the tailnet only (tailscale serve on port 3917)
 const WORKBENCH_URL = 'https://kev-pc.tailb66bb7.ts.net';
@@ -29,7 +30,8 @@ const TOOLS = [
 
 export const githubData = () => remote('github', '/api/hub/github', 10 * 60000);
 export const hubState = () => remote('hub', '/api/hub/state', 60000);
-export const pendingApprovalCount = () => (((hubState().data || {}).approvals) || []).length;
+/* The Hub badge: Hermes's server actions plus Lina's invites and emails, everything waiting for a yes. */
+export const pendingApprovalCount = () => (((hubState().data || {}).approvals) || []).length + (((pendingActions().data || {}).actions) || []).length;
 
 const expiresIn = at => {
   const min = Math.max(1, Math.round((at - Date.now()) / 60000));
@@ -95,13 +97,14 @@ export default {
   render(root) {
     const { data, connected } = hubState();
     const s = data || { devices: [], approvals: [] };
+    const lina = linaApprovals();
     root.append(h('div.view.hub',
-      viewHead('Hub', 'Your devices, the agent box and the server in one place. Hermes only changes the server after you approve it here or on Telegram.',
+      viewHead('Hub', 'Your devices, the agent box and the server in one place. Everything waiting for your yes is here: Hermes changes the server, Lina sends invites and emails only after you approve.',
         h('a.btn.ghost', { href: WORKBENCH_URL, target: '_blank', rel: 'noopener', title: 'Needs Tailscale on this device' }, icon('agent'), 'Open Workbench')),
       h('div.grid.g-2',
-        h('div.stack', approvals(s.approvals, connected), devices(s.devices),
+        h('div.stack', approvals(s.approvals, connected), lina, devices(s.devices),
           panel({ title: 'Admin pages' }, linkRows(ADMIN)),
           panel({ title: 'Tools' }, linkRows(TOOLS))),
-        h('div.stack', serverPulse(), github()))));
+        h('div.stack', serverPulse(), github(), agentActivity()))));
   }
 };

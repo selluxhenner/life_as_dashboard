@@ -595,7 +595,7 @@ button.mail:focus-visible { outline: 2px solid var(--signal); outline-offset: -2
 .row.done .goal-step { opacity: .7; }
 
 /* ---------- Assistant ---------- */
-.g-assist { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; }
+.view.assistant .chat { max-width: 960px; }
 .chat { display: flex; flex-direction: column; height: calc(100vh - 230px); min-height: 420px; }
 .chat-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: var(--s-3); padding-right: var(--s-2); }
 .chat-empty { margin: auto; text-align: center; color: var(--ink-3); max-width: 420px; }
@@ -622,7 +622,7 @@ button.mail:focus-visible { outline: 2px solid var(--signal); outline-offset: -2
 .status-dot.done { background: var(--pulse); } .status-dot.error { background: var(--flare); } .status-dot.running { background: var(--signal); animation: blink 1s infinite; }
 .inline-toggle { display: inline-flex; gap: 6px; align-items: center; font-size: var(--fs-xs); color: var(--ink-2); cursor: pointer; }
 .inline-toggle input { accent-color: var(--signal); }
-@media (max-width: 1000px) { .g-assist { grid-template-columns: 1fr; } .chat { height: 70vh; } }
+@media (max-width: 1000px) { .chat { height: 70vh; } }
 
 /* ---------- Settings ---------- */
 .set-row { display: flex; gap: var(--s-4); align-items: center; padding: var(--s-3) 0; }
