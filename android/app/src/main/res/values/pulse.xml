@@ -7,6 +7,8 @@
     <string name="widget_description">Your briefing, the world\'s top stories and the biggest AI news</string>
     <string name="day_widget_name">Agentic OS · Day plan</string>
     <string name="day_widget_description">The lesson that is on now or next and its room, then the rest of your day</string>
+    <string name="tasks_widget_name">Agentic OS · Task groups</string>
+    <string name="tasks_widget_description">Two task groups side by side, like School and Business. Tick a task off right here.</string>
     <string name="capture_widget_name">Agentic OS · Capture</string>
     <string name="capture_widget_description">Write a thought down from the home screen and see how many wait to be sorted</string>
     <string name="capture_widget_hint">Capture anything…</string>

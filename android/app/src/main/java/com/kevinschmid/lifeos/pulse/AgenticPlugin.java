@@ -150,14 +150,15 @@ public class AgenticPlugin extends Plugin {
             });
     }
 
-    /** The launcher asks where to put the widget. which: "day" (day plan with rooms), "capture" (capture bar), "tasks" (open todos) or "glance" (briefing + news). */
+    /** The launcher asks where to put the widget. which: "day" (day plan with rooms), "capture" (capture bar),
+        "tasks" (open todos in a list), "groups" (two task groups side by side) or "glance" (briefing + news). */
     @PluginMethod
     public void addWidget(PluginCall call) {
         AppWidgetManager m = AppWidgetManager.getInstance(ctx());
         JSObject r = new JSObject();
         String which = call.getString("which", "glance");
         Class<?> provider = "day".equals(which) ? DayWidget.class : "capture".equals(which) ? CaptureWidget.class
-            : "tasks".equals(which) ? TaskWidget.class : GlanceWidget.class;
+            : "tasks".equals(which) ? TaskWidget.class : "groups".equals(which) ? TasksWidget.class : GlanceWidget.class;
         boolean ok = Build.VERSION.SDK_INT >= 26 && m.isRequestPinAppWidgetSupported()
             && m.requestPinAppWidget(new ComponentName(ctx(), provider), null, null);
         r.put("result", ok ? "asked" : "unsupported");
@@ -295,6 +296,7 @@ public class AgenticPlugin extends Plugin {
         s.put("canAddWidget", Build.VERSION.SDK_INT >= 26 && AppWidgetManager.getInstance(c).isRequestPinAppWidgetSupported());
         s.put("widgets", GlanceWidget.count(c));
         s.put("dayWidgets", DayWidget.count(c));
+        s.put("groupWidgets", TasksWidget.count(c));
         s.put("captureWidgets", CaptureWidget.count(c));
         s.put("taskWidgets", TaskWidget.count(c));
         s.put("sdk", Build.VERSION.SDK_INT);

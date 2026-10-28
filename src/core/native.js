@@ -6,6 +6,8 @@ import { registerPlugin } from '@capacitor/core';
 import { platform } from './platform.js';
 import { apiConfig } from './api.js';
 import { onSyncStatus } from './sync.js';
+import { state } from './store.js';
+import { fingerprint } from './docsync.js';
 
 export const native = platform.isCapacitor ? registerPlugin('AgenticNative') : null;
 
@@ -84,6 +86,17 @@ export async function nativeTakeTasks() {
 /** Ask the native side to check the server now (the app does this every minute while it is open). */
 export function nativeCheck() { if (native && apiConfig()) native.checkNow().then(setStatus).catch(() => {}); }
 
+/** The Tasks widget shows the server's copy, so once a sync has taken a task or group change up (or brought one from
+    another device), the native side fetches the glance again instead of waiting for its next round. */
+let tasksSeen = null;
+function tasksChanged() {
+  const open = state.tasks.filter(t => !t.deleted && !t.done).map(t => [t.id, t.title, t.group, t.priority, t.due]);
+  const f = fingerprint([state.taskGroups || null, open]);
+  const changed = tasksSeen !== null && f !== tasksSeen;
+  tasksSeen = f;
+  return changed;
+}
+
 export function initNative() {
   if (!native) return;
   native.addListener('route', ({ route, action }) => {
@@ -91,5 +104,8 @@ export function initNative() {
     if (action && actions[action]) setTimeout(() => actions[action](), 350);    // after the page has rendered
   });
   syncNative();
-  onSyncStatus(() => syncNative());
+  onSyncStatus(st => {
+    syncNative();
+    if (st.state === 'ok' && tasksChanged()) nativeCall('checkNow', { glance: true }).catch(() => {});
+  });
 }

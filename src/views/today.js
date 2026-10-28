@@ -2,20 +2,24 @@ import { h } from '../core/dom.js';
 import { state, save, notify } from '../core/store.js';
 import { todayKey, fmt, hm } from '../core/dates.js';
 import { panel } from '../components/panel.js';
-import { viewHead, check, removeBtn, addRow, empty, meter, chip } from '../components/ui.js';
+import { viewHead, check, removeBtn, addRow, empty, meter, chip, seg } from '../components/ui.js';
 import { dropdown, timePicker } from '../components/overlay.js';
+import { draggable } from '../components/drag.js';
 import {
-  planFor, addPlanBlock, removePlanBlock, liveTasks, archivedTask, addTask, toggleTask, deleteTask, PRIORITIES,
+  planFor, addPlanBlock, removePlanBlock, liveTasks, archivedTask, addTask, toggleTask, deleteTask, updateTask, PRIORITIES,
+  taskGroups, groupOf, groupColor, groupOptions,
   lastDays, weekCount, currentStreak, toggleHabit, addHabit, routineFor, routineItems, trainingHabit
 } from '../core/model.js';
 import { agendaFor } from '../core/agenda.js';
 import { phoneQuery, isPhone } from '../core/platform.js';
 import { icon } from '../core/icons.js';
-import { openHabit, openTask } from './details.js';
+import { toast } from '../core/fx.js';
+import { openHabit, openTask, openGroups } from './details.js';
 
 phoneQuery.addEventListener('change', () => notify());
 
 let todoPrio = 'med';
+let todoGroup = null;      // the group new tasks go to: the last one picked ('' = none), at first the first group
 let blockTime = null;
 const PRIO_COLOR = { high: 'var(--flare)', med: 'var(--amber)', low: 'var(--ink-3)' };
 
@@ -117,36 +121,81 @@ function fitness() {
     h('div.hint', `${f.weight.toFixed(1)} → ${f.goal} kg · ${Math.max(0, f.goal - f.weight).toFixed(1)} kg to go`));
 }
 
-/* A task row; the title opens the full task. Shared with Home. */
-export function taskRow(t, { compact = false } = {}) {
+/* A task row; the title opens the full task. Shared with Home. group: name its group under the title (a dot when compact). */
+export function taskRow(t, { compact = false, group = true, grip = false } = {}) {
+  const g = group ? groupOf(t) : null;
   const row = h('div.row.task-row' + (t.done ? '.done' : ''), { class: 'prio-' + t.priority, dataset: { detail: 'task:' + t.id } },
     check(t.done, () => toggleTask(t), 'Complete task'),
     h('button.row-open', { type: 'button', title: 'Open task', onclick: () => openTask(t, row) },
-      h('span.title', t.title),
+      h('span.title', compact && g ? h('i.group-dot', { style: { '--c': groupColor(g) }, title: g.name }) : null, t.title),
+      !compact && g ? h('span.sub.group-tag', { style: { '--c': groupColor(g) } }, g.name) : null,
       !compact && t.due ? h('span.sub', 'due ' + fmt.short(t.due)) : null,
       !compact && t.notes ? h('span.sub.note-hint', t.notes.split('\n')[0].slice(0, 80)) : null),
     compact ? (t.priority === 'high' ? chip('high', 'alert') : t.due ? chip(fmt.short(t.due), 'plain') : null)
       : t.source && t.source !== 'app' ? chip(t.source, 'plain') : null,
+    grip ? icon('grip', 'grip') : null,
     compact ? null : removeBtn(() => deleteTask(t), 'Delete task', { what: t.title }));
   return row;
 }
 
-function tasks() {
-  const cols = h('div.todo-cols');
-  let open = 0;
-  for (const p of PRIORITIES) {
+const PRIO_RANK = { high: 0, med: 1, low: 2 };
+const byUrgency = (a, b) => a.done - b.done || PRIO_RANK[a.priority] - PRIO_RANK[b.priority] || (a.sort || 0) - (b.sort || 0);
+
+/* One column per group (and "No group" while some tasks have none). A task is dragged onto another column to move it. */
+function groupColumns() {
+  const groups = taskGroups();
+  const known = new Set(groups.map(g => g.id));
+  const cols = groups.map(g => ({ id: g.id, name: g.name, color: groupColor(g), list: liveTasks().filter(t => t.group === g.id && !archivedTask(t)) }));
+  const loose = liveTasks().filter(t => !known.has(t.group) && !archivedTask(t));
+  if (loose.length || !cols.length) cols.push({ id: '', name: 'No group', color: groupColor(null), list: loose });
+  return cols.map(c => {
+    const list = c.list.sort(byUrgency);
+    const rows = list.map(t => {
+      const row = taskRow(t, { group: false, grip: true });
+      draggable(row, {
+        label: t.title, color: c.color,
+        hint: z => z ? (z.dataset.group === c.id ? 'Stays in ' : '→ ') + z.dataset.name : 'Drop on a group',
+        drop: z => {
+          if (z.dataset.group === c.id) return;
+          updateTask(t, { group: z.dataset.group || null });
+          toast('Moved to ' + z.dataset.name, 'pulse');
+        }
+      });
+      return row;
+    });
+    return h('div.todo-col.group-col', { style: { '--c': c.color, '--drop-c': c.color }, dataset: { drop: 'group', group: c.id, name: c.name } },
+      h('div.todo-col-head', h('i'), c.name, h('span.data.muted', String(list.filter(t => !t.done).length))),
+      h('div.rows', rows.length ? rows : h('div.hint', 'Nothing here.')));
+  });
+}
+
+function priorityColumns() {
+  return PRIORITIES.map(p => {
     const list = liveTasks().filter(t => t.priority === p.key && !archivedTask(t)).sort((a, b) => a.done - b.done);
-    open += list.filter(t => !t.done).length;
-    cols.append(h('div.todo-col.prio-' + p.key,
+    return h('div.todo-col.prio-' + p.key,
       h('div.todo-col-head', h('i'), p.label, h('span.data.muted', String(list.filter(t => !t.done).length))),
-      h('div.rows', list.length ? list.map(t => taskRow(t)) : h('div.hint', 'Nothing here.'))));
-  }
-  return panel({ title: 'Tasks', readout: h('span', h('b', String(open)), ' open · synced') },
-    cols,
+      h('div.rows', list.length ? list.map(t => taskRow(t)) : h('div.hint', 'Nothing here.')));
+  });
+}
+
+function tasks() {
+  const by = state.settings.tasksBy === 'priority' ? 'priority' : 'group';   // per device
+  const open = liveTasks().filter(t => !t.done).length;
+  const groups = groupOptions();
+  if (!groups.some(o => o.value === todoGroup)) todoGroup = groups[0].value;
+  const edit = h('button.btn.icon.sm.ghost', { type: 'button', 'aria-label': 'Edit groups', title: 'Edit groups', dataset: { detail: 'groups' }, onclick: () => openGroups(edit) }, icon('settings'));
+  return panel({
+    title: 'Tasks', readout: h('span', h('b', String(open)), ' open · synced'),
+    actions: [seg([{ value: 'group', label: 'Groups' }, { value: 'priority', label: 'Priority' }], by, v => { state.settings.tasksBy = v; save(); }, 'Arrange tasks by'), edit]
+  },
+    h('div.todo-cols' + (by === 'group' ? '.by-group' : ''), by === 'group' ? groupColumns() : priorityColumns()),
     h('div', { style: { marginTop: '14px' } }, addRow({
       placeholder: 'New task, Enter to add',
-      before: [dropdown({ options: PRIORITIES.map(p => ({ value: p.key, label: p.label, color: PRIO_COLOR[p.key] })), value: todoPrio, onChange: v => { todoPrio = v; notify(); }, label: 'Priority', cls: 'narrow' })],
-      onSubmit: v => addTask(v, todoPrio)
+      before: [
+        dropdown({ options: groups, value: todoGroup, onChange: v => { todoGroup = v; notify(); }, label: 'Group', cls: 'narrow' }),
+        dropdown({ options: PRIORITIES.map(p => ({ value: p.key, label: p.label, color: PRIO_COLOR[p.key] })), value: todoPrio, onChange: v => { todoPrio = v; notify(); }, label: 'Priority', cls: 'narrow' })
+      ],
+      onSubmit: v => addTask(v, todoPrio, { group: todoGroup || null })
     })));
 }
 

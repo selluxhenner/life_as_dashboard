@@ -76,6 +76,42 @@ export function applyWidgetTasks(list) {
 }
 export function deleteHabit(h) { state.habits = state.habits.filter(x => x.id !== h.id); save(); }
 
+/* ---------- task groups ---------- */
+// Private, School, Business, … A task's group id is its `group` field (`project` is the Plan board's), so it syncs with the todo and the server
+// (Lina, the phone's tasks widget) knows it. The list itself is the synced "taskGroups" document; until it is edited
+// for the first time it does not exist and every device uses the same defaults (server/src/routes/todos.js has them too).
+export const GROUP_COLORS = ['samerica', 'africa', 'europe', 'asia', 'oceania', 'namerica', 'mideast'];
+export const DEFAULT_GROUPS = [
+  { id: 'private', name: 'Private', color: 'samerica' },
+  { id: 'school', name: 'School', color: 'africa' },
+  { id: 'business', name: 'Business', color: 'europe' }
+];
+export const taskGroups = () => state.taskGroups || DEFAULT_GROUPS;
+export const groupOf = t => (t && t.group && taskGroups().find(g => g.id === t.group)) || null;
+export const groupColor = g => g && g.color ? `var(--tone-${g.color})` : 'var(--ink-3)';
+/* For a dropdown: every group, then "No group" (value ''). */
+export const groupOptions = () => [...taskGroups().map(g => ({ value: g.id, label: g.name, color: groupColor(g) })), { value: '', label: 'No group', color: groupColor(null) }];
+function setGroups(list) { state.taskGroups = list; save(); }
+export function addGroup(name) {
+  const used = taskGroups().map(g => g.color);
+  const color = GROUP_COLORS.find(c => !used.includes(c)) || GROUP_COLORS[taskGroups().length % GROUP_COLORS.length];
+  const g = { id: uid(), name, color };
+  setGroups([...taskGroups(), g]);
+  return g;
+}
+export function updateGroup(id, patch) { setGroups(taskGroups().map(g => g.id === id ? { ...g, ...patch } : g)); }
+export function moveGroup(id, by) {
+  const list = taskGroups().slice(), i = list.findIndex(g => g.id === id), j = i + by;
+  if (i === -1 || j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  setGroups(list);
+}
+/* The group goes, its tasks stay (without a group). */
+export function deleteGroup(id) {
+  liveTasks().filter(t => t.group === id).forEach(t => { t.group = null; markDirty(t); });
+  setGroups(taskGroups().filter(g => g.id !== id));
+}
+
 /* ---------- habits ---------- */
 export function streakAsOf(history, dk) { let s = 0, d = dk; while (history[d]) { s++; d = keyOffset(d, -1); } return s; }
 export function bestStreak(history) {

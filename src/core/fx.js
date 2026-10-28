@@ -21,6 +21,19 @@ export function decode(node, text, duration = 320) {
   requestAnimationFrame(step);
 }
 
+/* Counts a number up from 0 into `node` (eased), ending on `to + suffix`. */
+export function countUp(node, to, { duration = 1400, delay = 0, suffix = '' } = {}) {
+  if (reducedMotion() || !to) { node.textContent = to + suffix; return; }
+  node.textContent = '0' + suffix;
+  const start = performance.now() + delay;
+  const step = now => {
+    const p = Math.max(0, Math.min(1, (now - start) / duration));
+    node.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))) + suffix;
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 /* ---------- UI sound (off by default). Synthesized, no assets. ---------- */
 let actx = null;
 export function tick(kind = 'tap') {

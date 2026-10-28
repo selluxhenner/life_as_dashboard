@@ -96,4 +96,18 @@ describe('document sync between two devices', () => {
     expect(b.state.settings.theme).toBe('ember');
     expect(b.state.settings.sound).toBe(false);
   });
+
+  it('task groups: the defaults are never uploaded, so a device updated later cannot overwrite edited groups', () => {
+    const srv = server();
+    const a = device(srv), b = device(srv);
+    a.run(1000); b.run(1000);
+    expect(srv.sync({ since: 0, upserts: [] }).docs.some(d => d.key === 'taskGroups')).toBe(false);
+    a.state.taskGroups = [{ id: 'school', name: 'Uni', color: 'africa' }, { id: 'g1', name: 'Sport', color: 'asia' }];
+    a.run(2000);
+    b.run(3000);                    // b never edited its groups: it takes a's
+    expect(b.state.taskGroups.map(g => g.name)).toEqual(['Uni', 'Sport']);
+    b.state.taskGroups = b.state.taskGroups.filter(g => g.id !== 'g1');
+    b.run(4000); a.run(4100);
+    expect(a.state.taskGroups.map(g => g.name)).toEqual(['Uni']);
+  });
 });
