@@ -36,6 +36,14 @@ export async function requireOps(c, next) {
   await next();
 }
 
+/* For routes both sides use (approvals): any valid token; the handler checks the scope. */
+export async function requireDevice(c, next) {
+  const user = bearer(c);
+  if (!user) throw new HttpError(401, 'Unauthorized');
+  c.set('user', user);
+  await next();
+}
+
 export function pairDevice({ name, platform, scope = 'full' }) {
   if (!SCOPES.includes(scope)) throw new HttpError(400, 'scope must be ' + SCOPES.join(' or '));
   const token = randomToken(32);

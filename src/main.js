@@ -41,6 +41,7 @@ import assistant from './views/assistant.js';
 import settings from './views/settings.js';
 import lab from './views/lab.js';
 import captures from './views/captures.js';
+import hub, { pendingApprovalCount } from './views/hub.js';
 import { unsorted, settleCaptures, takeCaptures } from './features/capture/captures.js';
 import { initNotifications } from './core/notifications.js';
 import { initNative, onNativeAction, nativeCaptures, nativeTakeCaptures, nativeTasks, nativeTakeTasks } from './core/native.js';
@@ -60,6 +61,7 @@ const ROUTES = [
   { id: 'goals', label: 'Goals', icon: 'target', view: goals },
   { id: 'rank', label: 'Rank', icon: 'rank', view: rankView, hidden: () => !pointsOn() },
   { id: 'assistant', label: 'Lina', icon: 'agent', view: assistant, key: 'G .' },
+  { id: 'hub', label: 'Hub', icon: 'server', view: hub, key: 'G U' },
   { id: 'settings', label: 'Settings', icon: 'settings', view: settings, bottom: true },
   { id: 'lab', label: 'Design lab', icon: 'spark', view: lab, hidden: () => location.hash !== '#/lab' }
 ];
@@ -114,7 +116,7 @@ function markCurrent() {
   const id = currentRoute() && currentRoute().id;
   document.querySelectorAll('[data-route]').forEach(a => { if (a.dataset.route === id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   crumb.textContent = currentRoute() ? currentRoute().label : '';
-  const badges = { assistant: ((pendingActions().data || {}).actions || []).length, captures: unsorted().length };
+  const badges = { assistant: ((pendingActions().data || {}).actions || []).length, captures: unsorted().length, hub: pendingApprovalCount() };
   for (const [id, n] of Object.entries(badges)) {
     document.querySelectorAll(`[data-route="${id}"] .badge`).forEach(b => b.remove());
     if (n) document.querySelectorAll(`[data-route="${id}"]`).forEach(a => a.append(h('span.badge' + (id === 'captures' ? '.soft' : ''), String(n))));
