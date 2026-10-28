@@ -44,11 +44,35 @@ export async function requireDevice(c, next) {
   await next();
 }
 
+/* Re-pairing on these platforms takes over the existing row instead of adding one: every reinstall of the Android
+   app pairs again as "Phone (Android)", and there is one phone. Desktops keep separate rows (two PCs share a name). */
+const REPAIR_REPLACES = ['android'];
+/* Browsers are temporary: not counted as devices on the Hub, and revoked after two weeks without a request. */
+export const TEMPORARY_PLATFORMS = ['web'];
+export const TEMPORARY_TTL_MS = 14 * 86400000;
+export const isTemporary = platform => TEMPORARY_PLATFORMS.includes(platform);
+
 export function pairDevice({ name, platform, scope = 'full' }) {
   if (!SCOPES.includes(scope)) throw new HttpError(400, 'scope must be ' + SCOPES.join(' or '));
+  name = String(name || 'Device').slice(0, 80); platform = String(platform || '').slice(0, 20);
   const token = randomToken(32);
+  const prev = REPAIR_REPLACES.includes(platform) && db.get(
+    'SELECT id FROM devices WHERE name = ? AND platform = ? AND scope = ? AND revoked = 0 ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 1',
+    name, platform, scope);
+  if (prev) {
+    // the old install's token and push token die with it; the new install registers its own push token
+    db.run('UPDATE devices SET token_hash = ?, push_token = NULL WHERE id = ?', sha256(token), prev.id);
+    return { id: prev.id, token, scope };
+  }
   const id = uid('dev_');
   db.run('INSERT INTO devices (id, name, platform, token_hash, scope, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-    id, String(name || 'Device').slice(0, 80), String(platform || '').slice(0, 20), sha256(token), scope, Date.now());
+    id, name, platform, sha256(token), scope, Date.now());
   return { id, token, scope };
+}
+
+/* Revokes browsers idle for longer than TEMPORARY_TTL_MS. Returns how many. */
+export function pruneTemporaryDevices(now = Date.now()) {
+  const marks = TEMPORARY_PLATFORMS.map(() => '?').join(', ');
+  return Number(db.run(`UPDATE devices SET revoked = 1 WHERE revoked = 0 AND platform IN (${marks}) AND COALESCE(last_seen_at, created_at) < ?`,
+    ...TEMPORARY_PLATFORMS, now - TEMPORARY_TTL_MS).changes);
 }

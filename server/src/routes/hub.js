@@ -7,6 +7,7 @@ import { db } from '../db.js';
 import { latestOps } from './ops.js';
 import { pendingApprovals } from './approvals.js';
 import { registryState } from '../hub/registry.js';
+import { isTemporary, pruneTemporaryDevices } from '../auth.js';
 
 export const ONLINE_MS = 15 * 60000;   // the Android app checks in every 15 minutes
 
@@ -14,9 +15,11 @@ export const ONLINE_MS = 15 * 60000;   // the Android app checks in every 15 min
 export function hubState(c) {
   const now = Date.now();
   const user = c.get('user');
+  pruneTemporaryDevices(now);
+  // temporary: a browser. The Hub lists those apart and leaves them out of the count.
   const devices = db.all('SELECT id, name, platform, scope, last_seen_at FROM devices WHERE revoked = 0 ORDER BY last_seen_at DESC')
     .map(d => ({ id: d.id, name: d.name, platform: d.platform, scope: d.scope, lastSeenAt: d.last_seen_at,
-      online: !!d.last_seen_at && now - d.last_seen_at < ONLINE_MS, current: d.id === user.deviceId }));
+      online: !!d.last_seen_at && now - d.last_seen_at < ONLINE_MS, current: d.id === user.deviceId, temporary: isTemporary(d.platform) }));
   // registry: the services from selluxhenner/hub with their last health check (no secrets, so Hermes sees it too)
   const state = { devices, ops: latestOps(), approvals: pendingApprovals(), registry: registryState(), at: now };
   if (user.scope === 'full') return c.json(state);
