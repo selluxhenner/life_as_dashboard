@@ -12,6 +12,7 @@ import { aiDaily, aiWatch } from './aimodels.js';
 import { briefingJob } from './briefing.js';
 import { triageInbox } from './triage.js';
 import { meetingPrep, jobNudge } from './assist.js';
+import { pullRegistry } from '../hub/registry.js';
 
 export const JOBS = {
   refresh: async () => ({ inbox: await refreshInbox(), triaged: await triageInbox() }),
@@ -24,6 +25,7 @@ export const JOBS = {
   triage: triageInbox,
   prep: meetingPrep,
   nudge: jobNudge,
+  hub: pullRegistry,
   maintenance: maintenance
 };
 
@@ -80,7 +82,7 @@ function briefingDue(now) {
 export function startScheduler() {
   const tz = { timezone: config.tz };
   const slot15 = () => localDate() + ' ' + localTime();   // one run per job per minute
-  cron.schedule('*/15 * * * *', () => { runJob('refresh', slot15()); runJob('prep', slot15()); }, tz);
+  cron.schedule('*/15 * * * *', () => { runJob('refresh', slot15()); runJob('prep', slot15()); runJob('hub', slot15()); }, tz);
   cron.schedule('*/30 6-23 * * *', () => runJob('news', slot15()), tz);
   cron.schedule('0 7,13,19 * * *', () => runJob('digest', localDate() + ' ' + localTime().slice(0, 2)), tz);
   cron.schedule('30 7 * * *', () => runJob('aimodels', localDate()), tz);

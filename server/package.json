@@ -11,7 +11,7 @@
     "start": "node --experimental-sqlite --disable-warning=ExperimentalWarning src/index.js",
     "dev": "node --experimental-sqlite --disable-warning=ExperimentalWarning --watch src/index.js",
     "migrate": "node --experimental-sqlite --disable-warning=ExperimentalWarning src/migrate.js",
-    "test": "node --experimental-sqlite --disable-warning=ExperimentalWarning --test test/api.test.js test/units.test.js test/alerts.test.js test/lina.test.js test/templates.test.js test/ops.test.js test/approvals.test.js test/github.test.js test/board.test.js"
+    "test": "node --experimental-sqlite --disable-warning=ExperimentalWarning --test test/api.test.js test/units.test.js test/alerts.test.js test/lina.test.js test/templates.test.js test/ops.test.js test/approvals.test.js test/github.test.js test/board.test.js test/registry.test.js test/hermes.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
@@ -21,6 +21,7 @@
     "ical.js": "^2.2.1",
     "node-cron": "^4.6.0",
     "ws": "^8.22.0",
+    "yaml": "^2.9.1",
     "zod": "^4.6.5"
   }
 }

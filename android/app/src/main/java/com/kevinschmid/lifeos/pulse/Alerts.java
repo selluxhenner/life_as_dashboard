@@ -111,6 +111,12 @@ public final class Alerts {
             .setCategory("calendar".equals(kind) ? NotificationCompat.CATEGORY_EVENT : NotificationCompat.CATEGORY_RECOMMENDATION)
             .setContentIntent(open(ctx, route, null, id));
         if ("breaking".equals(kind) || "ai".equals(kind)) b.setGroup("news:" + kind);
+        // an approval (Hermes's server action, Lina's queued send) can be decided without opening the app
+        String ref = n.optString("ref", "");
+        if (ApprovalReceiver.pathFor(ref) != null) {
+            b.addAction(0, "Approve", ApprovalReceiver.decide(ctx, ref, id, true))
+             .addAction(0, "Reject", ApprovalReceiver.decide(ctx, ref, id, false));
+        }
         show(ctx, id, b);
     }
 

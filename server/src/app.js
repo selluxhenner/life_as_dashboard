@@ -13,8 +13,10 @@ import { voice } from './routes/voice.js';
 import { misc } from './routes/misc.js';
 import { ops, postReport } from './routes/ops.js';
 import { approvals } from './routes/approvals.js';
+import { hermes } from './routes/hermes.js';
 import { hubState } from './routes/hub.js';
 import { githubStats } from './hub/github.js';
+import { pullRegistry } from './hub/registry.js';
 import { workbench } from './routes/workbench.js';
 
 export const app = new Hono();
@@ -63,6 +65,9 @@ app.post('/api/ops/report', requireOps, postReport);
 app.use('/api/approvals/*', requireDevice);
 app.use('/api/approvals', requireDevice);
 app.route('/api', approvals);
+/* Lina's questions for Hermes: Hermes fetches and answers with its ops token, the apps read them. */
+app.use('/api/hermes/*', requireDevice);
+app.route('/api', hermes);
 /* Hub state: the apps see everything, an ops token (Hermes's hub-status skill) a summary without ids. */
 app.get('/api/hub/state', requireDevice, hubState);
 
@@ -78,6 +83,8 @@ api.route('/', misc);
 api.route('/', ops);
 /* GitHub numbers for the Hub tab (apps only; the tokens never leave the server). ?fresh=1 skips the 10-minute cache. */
 api.get('/hub/github', async c => c.json(await githubStats({ fresh: c.req.query('fresh') === '1' })));
+/* "Check now" on the Hub tab: pull the registry and check every service without waiting for the 15-minute job. */
+api.post('/hub/refresh', async c => c.json(await pullRegistry()));
 api.route('/', workbench);
 app.route('/api', api);
 
