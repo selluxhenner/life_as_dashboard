@@ -14,6 +14,20 @@ import { serverPulse } from './ops.js';
 const WORKBENCH_URL = 'https://kev-pc.tailb66bb7.ts.net';
 const PLATFORM = { android: 'Phone', windows: 'Windows', macos: 'Mac', linux: 'Server', web: 'Browser' };
 
+/* Admin pages and tools. A link without url shows as "later" (Elaria's admin is not live yet). */
+const ADMIN = [
+  { label: 'SwissEduSolution', sub: 'Platform customers (signs in via auth.swissedusolution.cloud)', url: 'https://admin.swissedusolution.cloud/platform/customers' },
+  { label: 'nextup', sub: 'admin.sellux.ch', url: 'https://admin.sellux.ch/login' },
+  { label: 'School Companion', sub: 'admin.schoolcompanion.ch', url: 'https://admin.schoolcompanion.ch/dashboard' },
+  { label: 'Elaria', sub: 'Admin not set up yet', url: null }
+];
+const TOOLS = [
+  { label: 'Workbench', sub: 'Home PC · Tailscale only', url: WORKBENCH_URL },
+  { label: 'Hermes dashboard', sub: 'agent-box · Tailscale only', url: 'https://agent-box.tailb66bb7.ts.net' },
+  { label: 'Hub board', sub: 'GitHub project: what is next', url: 'https://github.com/users/selluxhenner/projects/2' }
+];
+
+export const githubData = () => remote('github', '/api/hub/github', 10 * 60000);
 export const hubState = () => remote('hub', '/api/hub/state', 60000);
 export const pendingApprovalCount = () => (((hubState().data || {}).approvals) || []).length;
 
@@ -51,6 +65,31 @@ function devices(list) {
       : empty('No devices', 'Paired devices show up here.'));
 }
 
+const linkRows = list => h('div.rows', list.map(l => l.url
+  ? h('a.row', { href: l.url, target: '_blank', rel: 'noopener' }, h('div.grow', h('div.title', l.label), h('div.sub', l.sub)), icon('ext'))
+  : h('div.row.later', h('div.grow', h('div.title', l.label), h('div.sub', l.sub)), chip('later', null, 'plain'))));
+
+const search = (a, q) => 'https://github.com/search?type=pullrequests&q=' + encodeURIComponent(q + ' ' + (a.kind === 'org' ? 'org:' : 'user:') + a.login);
+
+function github() {
+  const { data, error } = githubData();
+  const list = (data && data.accounts) || [];
+  return panel({ title: 'GitHub', readout: data ? 'updated ' + fmt.ago(data.at) : '' },
+    !list.length ? empty(error ? 'Could not load GitHub' : 'Loading', error ? errorText(error) : null)
+      : h('div.rows', list.map(a => {
+          const head = h('div.title', a.url ? h('a', { href: a.url, target: '_blank', rel: 'noopener' }, a.label) : a.label, a.login ? h('span.dim', ' · ' + a.login) : null);
+          if (!a.configured) return h('div.row.later', h('div.grow', head, h('div.sub', 'Needs a login and read-only token on the server')), chip('later', null, 'plain'));
+          if (a.error) return h('div.row', h('div.grow', head, h('div.sub', a.error)), chip('no access', 'alert'));
+          const newest = a.recent[0];
+          return h('div.row.gh-account',
+            h('div.grow', head,
+              h('div.sub', [a.repos + ' repos', a.contributions30d != null ? a.contributions30d + ' contributions in 30 days' : null,
+                newest ? 'last push ' + newest.name + ' ' + fmt.ago(newest.pushedAt) : null].filter(Boolean).join(' · '))),
+            h('a.chip' + (a.openPrs ? '.signal' : ''), { href: search(a, 'is:pr is:open'), target: '_blank', rel: 'noopener', title: 'Open pull requests' }, a.openPrs + ' PRs'),
+            h('a.chip.plain', { href: search(a, 'is:issue is:open').replace('pullrequests', 'issues'), target: '_blank', rel: 'noopener', title: 'Open issues' }, a.openIssues + ' issues'));
+        })));
+}
+
 export default {
   id: 'hub',
   render(root) {
@@ -60,7 +99,9 @@ export default {
       viewHead('Hub', 'Your devices, the agent box and the server in one place. Hermes only changes the server after you approve it here or on Telegram.',
         h('a.btn.ghost', { href: WORKBENCH_URL, target: '_blank', rel: 'noopener', title: 'Needs Tailscale on this device' }, icon('agent'), 'Open Workbench')),
       h('div.grid.g-2',
-        h('div.stack', approvals(s.approvals, connected), devices(s.devices)),
-        h('div.stack', serverPulse()))));
+        h('div.stack', approvals(s.approvals, connected), devices(s.devices),
+          panel({ title: 'Admin pages' }, linkRows(ADMIN)),
+          panel({ title: 'Tools' }, linkRows(TOOLS))),
+        h('div.stack', serverPulse(), github()))));
   }
 };

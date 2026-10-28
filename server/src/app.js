@@ -14,6 +14,7 @@ import { misc } from './routes/misc.js';
 import { ops, postReport } from './routes/ops.js';
 import { approvals } from './routes/approvals.js';
 import { hubState } from './routes/hub.js';
+import { githubStats } from './hub/github.js';
 
 export const app = new Hono();
 
@@ -74,6 +75,8 @@ api.route('/', connections);
 api.route('/', voice);
 api.route('/', misc);
 api.route('/', ops);
+/* GitHub numbers for the Hub tab (apps only; the tokens never leave the server). ?fresh=1 skips the 10-minute cache. */
+api.get('/hub/github', async c => c.json(await githubStats({ fresh: c.req.query('fresh') === '1' })));
 app.route('/api', api);
 
 app.notFound(c => c.json({ error: 'Not found' }, 404));
