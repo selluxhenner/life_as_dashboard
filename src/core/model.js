@@ -32,6 +32,12 @@ export const QUOTES = [
 
 /* ---------- tasks ---------- */
 export const liveTasks = () => state.tasks.filter(t => !t.deleted);
+/* Done before today: kept and synced (and counted in "done this week"), but Today and the Plan board no longer list it. */
+export function archivedTask(t, now = new Date()) {
+  if (!t.done) return false;
+  const midnight = new Date(now); midnight.setHours(0, 0, 0, 0);
+  return (t.completedAt || 0) < midnight.getTime();
+}
 export function markDirty(t) {
   t.updatedAt = Math.max(Date.now(), (t.updatedAt || 0) + 1);
   state.sync.dirty[t.id] = true;

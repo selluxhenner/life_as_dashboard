@@ -6,7 +6,7 @@ import { viewHead, check, removeBtn, addRow, empty, meter, chip, seg } from '../
 import { dropdown, timePicker } from '../components/overlay.js';
 import { draggable } from '../components/drag.js';
 import {
-  planFor, addPlanBlock, removePlanBlock, liveTasks, addTask, toggleTask, deleteTask, updateTask, PRIORITIES,
+  planFor, addPlanBlock, removePlanBlock, liveTasks, archivedTask, addTask, toggleTask, deleteTask, updateTask, PRIORITIES,
   taskGroups, groupOf, groupColor, groupOptions,
   lastDays, weekCount, currentStreak, toggleHabit, addHabit, routineFor, routineItems, trainingHabit
 } from '../core/model.js';
@@ -145,8 +145,8 @@ const byUrgency = (a, b) => a.done - b.done || PRIO_RANK[a.priority] - PRIO_RANK
 function groupColumns() {
   const groups = taskGroups();
   const known = new Set(groups.map(g => g.id));
-  const cols = groups.map(g => ({ id: g.id, name: g.name, color: groupColor(g), list: liveTasks().filter(t => t.group === g.id) }));
-  const loose = liveTasks().filter(t => !known.has(t.group));
+  const cols = groups.map(g => ({ id: g.id, name: g.name, color: groupColor(g), list: liveTasks().filter(t => t.group === g.id && !archivedTask(t)) }));
+  const loose = liveTasks().filter(t => !known.has(t.group) && !archivedTask(t));
   if (loose.length || !cols.length) cols.push({ id: '', name: 'No group', color: groupColor(null), list: loose });
   return cols.map(c => {
     const list = c.list.sort(byUrgency);
@@ -171,7 +171,7 @@ function groupColumns() {
 
 function priorityColumns() {
   return PRIORITIES.map(p => {
-    const list = liveTasks().filter(t => t.priority === p.key).sort((a, b) => a.done - b.done);
+    const list = liveTasks().filter(t => t.priority === p.key && !archivedTask(t)).sort((a, b) => a.done - b.done);
     return h('div.todo-col.prio-' + p.key,
       h('div.todo-col-head', h('i'), p.label, h('span.data.muted', String(list.filter(t => !t.done).length))),
       h('div.rows', list.length ? list.map(t => taskRow(t)) : h('div.hint', 'Nothing here.')));
