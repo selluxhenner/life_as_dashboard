@@ -1,0 +1,19 @@
+id: life-os
+run:
+  dev: npm run dev
+  test: npm test
+  build: npm run build
+deploy:
+  target: hetzner-main
+  command: ./scripts/deploy-server.sh
+health: https://agentic-os.serviweb.ch/api/health
+gate_level: standard
+platforms: [windows, macos, android, linux]
+provides:
+  - { type: http-api, name: hub-state, version: 1.0.0, spec: docs/hub-api.md }
+  - { type: http-api, name: ops-reports, version: 1.0.0 }
+  - { type: http-api, name: approvals, version: 1.0.0 }
+consumes:
+  - { tool: obsidian_vault, contract: notes-fs, version: ^1.0.0 }
+  - { tool: hub, contract: registry, version: ^1.0.0 }
+  - { tool: agentic-os-framework, contract: governance-rules, version: ^1.0.0 }

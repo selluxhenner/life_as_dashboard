@@ -1,0 +1,20 @@
+name: hub contract
+
+# This repo is public and selluxhenner/hub is private, so the reusable workflow can't be called from here.
+# Instead check out the hub with HUB_READ_TOKEN (fine-grained PAT, Contents: read on selluxhenner/hub) and run its action.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  hub-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: selluxhenner/hub
+          token: ${{ secrets.HUB_READ_TOKEN }}
+          path: .hub
+      - uses: ./.hub
