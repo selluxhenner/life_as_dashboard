@@ -3,7 +3,7 @@
 // A task's column is `status`; tasks from before the board (or edited by an old app) have none and read as
 // To do, or Done when they are done. Pure functions of the state — covered by tests/board.test.js.
 import { state, save } from './store.js';
-import { liveTasks, updateTask } from './model.js';
+import { liveTasks, updateTask, archivedTask } from './model.js';
 import { linked, updateCapture } from '../features/capture/captures.js';
 
 export const STATUSES = [
@@ -68,7 +68,7 @@ export function moveTask(t, status) {
 
 /* kind: all | private | next | project | unplaced; project: a project id or '' for every project of that kind */
 export function boardTasks({ kind = 'all', project = '' } = {}) {
-  return liveTasks().filter(t => {
+  return liveTasks().filter(t => !archivedTask(t)).filter(t => {
     if (project) return t.project === project;
     if (kind === 'all') return true;
     if (kind === 'unplaced') return !t.project;
