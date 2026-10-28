@@ -14,6 +14,7 @@ import { misc } from './routes/misc.js';
 import { ops, postReport } from './routes/ops.js';
 import { approvals } from './routes/approvals.js';
 import { hub } from './routes/hub.js';
+import { workbench } from './routes/workbench.js';
 
 export const app = new Hono();
 
@@ -73,6 +74,7 @@ api.route('/', voice);
 api.route('/', misc);
 api.route('/', ops);
 api.route('/', hub);
+api.route('/', workbench);
 app.route('/api', api);
 
 app.notFound(c => c.json({ error: 'Not found' }, 404));
