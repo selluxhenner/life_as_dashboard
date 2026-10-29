@@ -60,12 +60,16 @@ function approvals(items, connected) {
 /* Browsers are temporary (the server revokes them after two weeks idle): listed under the devices, not counted. */
 function devices(list) {
   const kept = list.filter(d => !d.temporary), temp = list.filter(d => d.temporary);
+  // an on-call token (agent-ops.sh on the main server) is quiet until it acts: not offline, and not counted as missing
+  const idleOnCall = d => d.onCall && !d.online;
   const row = d => h('div.row',
     h('span', { class: 'status-dot ' + (d.online ? 'done' : 'idle') }),
     h('div.grow', h('div.title', d.name + (d.current ? ' · this device' : '')),
-      h('div.sub', [PLATFORM[d.platform] || d.platform || 'Device', d.scope === 'ops' ? 'agent' : null, d.lastSeenAt ? 'seen ' + fmt.ago(d.lastSeenAt) : 'never seen'].filter(Boolean).join(' · '))),
-    d.online ? chip('online', 'ok') : chip('offline', null, 'plain'));
-  return panel({ title: 'Devices', readout: h('span', h('b', String(kept.filter(d => d.online).length)), ' of ' + kept.length + ' online') },
+      h('div.sub', [PLATFORM[d.platform] || d.platform || 'Device', d.scope === 'ops' ? 'agent' : null,
+        d.lastSeenAt ? (d.onCall ? 'used ' : 'seen ') + fmt.ago(d.lastSeenAt) : d.onCall ? 'not used yet' : 'never seen'].filter(Boolean).join(' · '))),
+    d.online ? chip('online', 'ok') : idleOnCall(d) ? chip('on call', null, 'plain') : chip('offline', null, 'plain'));
+  const counted = kept.filter(d => !idleOnCall(d));
+  return panel({ title: 'Devices', readout: h('span', h('b', String(counted.filter(d => d.online).length)), ' of ' + counted.length + ' online') },
     kept.length ? h('div.rows', kept.map(row)) : empty('No devices', 'Paired devices show up here.'),
     temp.length ? h('div', h('div.sub', { style: { margin: '12px 0 4px' } }, 'Temporary · browsers, removed after 2 weeks idle'), h('div.rows', temp.map(row))) : null);
 }

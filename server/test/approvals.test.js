@@ -120,4 +120,9 @@ test('hub state lists devices, open approvals and ops', async () => {
   assert.ok(s.body.devices.some(d => d.name === 'agent-box' && d.scope === 'ops'));
   assert.ok(s.body.approvals.length >= 1 && s.body.approvals.every(a => a.status === 'pending'));
   assert.equal(s.body.ops[0].job, 'site-check');
+  // the agent box reports, so it is expected online; the main server's script token only acts on demand
+  const by = Object.fromEntries(s.body.devices.map(d => [d.name, d]));
+  assert.equal(by['agent-box'].onCall, false);
+  assert.equal(by['main-server'].onCall, true);
+  assert.equal(by.Phone.onCall, false);
 });
