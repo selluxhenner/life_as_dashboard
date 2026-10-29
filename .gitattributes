@@ -1,0 +1,2 @@
+# Shell scripts run on Linux and in Git Bash: keep them LF even with core.autocrlf=true on Windows.
+*.sh text eol=lf
