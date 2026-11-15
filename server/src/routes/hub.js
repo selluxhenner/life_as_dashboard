@@ -7,6 +7,7 @@ import { db } from '../db.js';
 import { latestOps } from './ops.js';
 import { pendingApprovals } from './approvals.js';
 import { registryState } from '../hub/registry.js';
+import { listTasks } from './tasks.js';
 import { isTemporary, pruneTemporaryDevices } from '../auth.js';
 
 export const ONLINE_MS = 15 * 60000;   // the Android app checks in every 15 minutes
@@ -26,7 +27,8 @@ export function hubState(c) {
       onCall: d.scope === 'ops' && !reporters.has(d.id) }));
   // registry: the services from selluxhenner/hub with their last health check (no secrets, so Hermes sees it too)
   const state = { devices, ops: latestOps(), approvals: pendingApprovals(), registry: registryState(), at: now };
-  if (user.scope === 'full') return c.json(state);
+  // agent tasks still waiting or running, for the apps only (they carry approval ids)
+  if (user.scope === 'full') return c.json({ ...state, tasks: listTasks({ active: true }) });
   return c.json({
     ...state,
     devices: devices.map(({ id, ...d }) => d),
