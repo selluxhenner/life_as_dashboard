@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Without this WKWebView hides navigator.mediaDevices, so the mic button says it can't record. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Agentic OS listens when you talk to Lina.</string>
+</dict>
+</plist>
