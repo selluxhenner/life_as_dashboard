@@ -211,7 +211,7 @@ function statusBar() {
     h('span.sep.hide-m'), crumb,
     h('span.push'),
     weatherEl, pointsEl,
-    h('button.kbd.hide-m', { type: 'button', onclick: openPalette, title: 'Command palette' }, 'Ctrl K'),
+    h('button.kbd.hide-m', { type: 'button', onclick: openPalette, title: 'Command palette' }, platform.modKey + 'K'),
     talkBtn,
     syncBtn,
     clockEl,
@@ -331,6 +331,7 @@ async function start() {
   document.documentElement.dataset.motion = state.settings.motion;
   document.documentElement.classList.toggle('is-tauri', platform.isTauri);
   document.documentElement.classList.toggle('is-android', platform.isCapacitor);
+  document.documentElement.classList.toggle('is-mac-app', platform.isMacApp);
 
   state.meta.lastOpened = todayKey();
 
