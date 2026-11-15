@@ -381,3 +381,48 @@ test('notes from background jobs stay out of the Capture inbox; /voice/warm answ
   assert.equal(db.get("SELECT COUNT(*) n FROM docs WHERE key LIKE 'capture:%'").n, before);
   assert.equal((await api('POST', '/api/voice/warm')).status, 200);
 });
+
+test('agent tasks by voice: Lina asks, a spoken yes approves the task, and she sees the result later', async () => {
+  script.push(() => [
+    { type: 'text', text: 'Shall I have Hermes restart the shop container?' },
+    { type: 'tool_use', id: 'tu_t1', name: 'start_task', input: { kind: 'server-op', title: 'Restart the shop container', params: { verb: 'restart-container', args: ['shop'] } } }
+  ]);
+  const r = await turn('Hey Lina, the shop is down, restart it', '?wake=1');
+  assert.equal(modelCalls().length, 1, 'asked in the same call: settled');
+  assert.equal(r.awaiting.length, 1);
+  assert.match(r.awaiting[0].id, /^tsk_/);
+  assert.equal(r.awaiting[0].summary, 'Approve: Restart the shop container');
+  assert.equal(r.listen, true);
+  const task = db.get('SELECT * FROM agent_tasks WHERE id = ?', r.awaiting[0].id);
+  assert.equal(task.source, 'voice');
+
+  const yes = await turn('Ja, mach', '?awaiting=' + r.awaiting[0].id);
+  assert.equal(yes.reply, 'Freigegeben, es läuft. Ich sage dir, wenn es fertig ist.');
+  assert.equal(modelCalls().length, 1, 'a plain yes needs no model');
+  const a = db.get('SELECT status, decided_by FROM approvals WHERE id = ?', task.approval_id);
+  assert.deepEqual([a.status, a.decided_by], ['approved', 'lina-voice']);
+  // an approved task no longer waits: the next "yes" is an ordinary turn for the model
+  script.push(() => [{ type: 'text', text: 'It is already running.' }]);
+  const again = await turn('yes', '?awaiting=' + r.awaiting[0].id);
+  assert.equal(again.reply, 'It is already running.');
+  assert.equal(modelCalls().length, 2);
+
+  // Hermes finishes; on the next turn Lina has the result in her prompt
+  db.run("UPDATE agent_tasks SET status = 'done', result = 'shop is Up again', finished_at = ?, updated_at = ? WHERE id = ?", Date.now(), Date.now(), task.id);
+  calls.length = 0;
+  script.push(() => [{ type: 'text', text: 'The shop is back up.' }]);
+  await turn('Hey Lina, anything new?', '?wake=1');
+  const sys = systemText(modelCalls()[0]);
+  assert.match(sys, /Agent tasks/);
+  assert.match(sys, new RegExp(`${task.id} \\| Restart the shop container \\| done \\| result: shop is Up again`));
+
+  // a no rejects it
+  script.push(() => [
+    { type: 'text', text: 'Deploy nextup now?' },
+    { type: 'tool_use', id: 'tu_t2', name: 'start_task', input: { kind: 'server-op', title: 'Deploy nextup', params: { verb: 'deploy', args: ['nextup'] } } }
+  ]);
+  const d = await turn('Hey Lina, deploy nextup', '?wake=1');
+  const no = await turn('no', '?awaiting=' + d.awaiting[0].id);
+  assert.equal(no.reply, 'Okay, I’ll leave it.');
+  assert.equal(db.get('SELECT a.status FROM agent_tasks t JOIN approvals a ON a.id = t.approval_id WHERE t.id = ?', d.awaiting[0].id).status, 'rejected');
+});

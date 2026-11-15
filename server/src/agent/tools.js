@@ -169,7 +169,9 @@ The result arrives later as a push; task_status shows it. Say what you started a
     run: async (i, ctx) => {
       if (!KEVIN_TRIGGERS.includes(ctx.trigger)) throw new Error('Tasks are only started when Kevin asks in a conversation');
       const t = await createTask(i, ctx.trigger);
-      return { ...taskBrief(t), note: t.status === 'awaiting_approval' ? 'Waiting for Kevin’s OK (phone notification or the Hub).' : 'Started.' };
+      const waiting = t.status === 'awaiting_approval';
+      // waiting: like a queued action, so a spoken turn asks yes/no and a "yes" approves it (voice/lina.js)
+      return { ...taskBrief(t), waiting, note: waiting ? 'Waiting for Kevin’s OK: ask him yes/no (he can also approve on his phone or in the Hub).' : 'Started.' };
     },
     summary: i => `Started task: ${i.title}`
   },

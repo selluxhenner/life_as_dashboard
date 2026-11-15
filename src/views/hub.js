@@ -1,5 +1,6 @@
-// Hub: the other machines at a glance. Paired devices, the agent box's reports, and the server actions Hermes
-// wants to run and waits for a yes on (GET /api/hub/state, POST /api/approvals/:id/approve|reject).
+// Hub: the other machines at a glance. Paired devices, the agent box's reports, the server actions Hermes wants to
+// run and waits for a yes on (GET /api/hub/state, POST /api/approvals/:id/approve|reject), and the agent tasks Lina
+// handed out (GET /api/tasks, POST /api/tasks/:id/cancel).
 import { h } from '../core/dom.js';
 import { fmt } from '../core/dates.js';
 import { panel } from '../components/panel.js';
@@ -55,6 +56,47 @@ function approvals(items, connected) {
           h('div.input-row', h('button.btn.primary', { type: 'button', onclick: () => decide(a, true) }, 'Approve'),
             h('button.btn.ghost', { type: 'button', onclick: () => decide(a, false) }, 'Reject')))))
       : empty('All clear', 'Hermes asks here, and on Telegram, before it restarts or deploys anything.'));
+}
+
+/* Agent tasks: what Lina (or you) handed to Hermes, Workbench or the server, from the ask to the result. A task waiting
+   for your OK is decided right here; its approval is left out of "Hermes asks" so it doesn't show twice. */
+const TASK_STATUS = {
+  awaiting_approval: ['needs your OK', 'warn', '', ''], queued: ['queued', null, 'plain', ''], running: ['running', 'signal', 'live', 'running'],
+  done: ['done', 'ok', '', 'done'], failed: ['failed', 'alert', '', 'error'], cancelled: ['cancelled', null, 'plain', ''],
+  rejected: ['rejected', null, 'plain', ''], expired: ['expired', null, 'plain', '']
+};
+const WHO = { hermes: 'Hermes', workbench: 'Workbench', server: 'Server' };
+const OPEN = ['awaiting_approval', 'queued', 'running'];
+export const tasksData = () => remote('tasks', '/api/tasks?limit=8', 60000);
+
+function agentTasks(connected) {
+  const { data } = tasksData();
+  const list = (data && data.tasks) || [];
+  const reload = () => { refresh('tasks', '/api/tasks?limit=8'); refresh('hub', '/api/hub/state'); };
+  const act = async (path, done) => {
+    try { await api.post(path); toast(done, 'pulse'); } catch (e) { toast(errorText(e), 'flare'); }
+    reload();
+  };
+  const open = list.filter(t => OPEN.includes(t.status)).length;
+  const card = t => {
+    const [label, tone, cls, dot] = TASK_STATUS[t.status] || [t.status, null, 'plain', ''];
+    const last = t.result || (t.progress.length ? t.progress[t.progress.length - 1].note : null);
+    const link = t.links.pr || t.links.url;
+    const what = t.kind === 'server-op' ? [t.params.verb, ...(t.params.args || [])].join(' ') : t.kind === 'job' ? 'job ' + t.params.job : t.params.project;
+    return h('article.task' + (t.status === 'awaiting_approval' ? '.approval' : ''),
+      h('div.ap-head', h('span.row-lead', h('span', { class: 'status-dot ' + dot }), h('b', t.title)), chip(t.stale ? 'no news for 2 h' : label, t.stale ? 'warn' : tone, cls)),
+      h('div.task-sub', [WHO[t.target] || t.target, what, t.source, fmt.ago(t.finishedAt || t.updatedAt)].filter(Boolean).join(' · ')),
+      last ? h('div.task-result', last) : null,
+      link ? h('a.task-link', { href: link, target: '_blank', rel: 'noopener' }, t.links.pr ? 'Pull request' : 'Open', icon('ext')) : null,
+      t.status === 'awaiting_approval' && t.approvalId ? h('div.input-row',
+        h('button.btn.primary', { type: 'button', onclick: () => act(`/api/approvals/${t.approvalId}/approve`, 'Approved') }, 'Approve'),
+        h('button.btn.ghost', { type: 'button', onclick: () => act(`/api/tasks/${t.id}/cancel`, 'Cancelled') }, 'Reject'))
+        : OPEN.includes(t.status) ? h('div.input-row', h('button.btn.sm.ghost', { type: 'button', onclick: () => act(`/api/tasks/${t.id}/cancel`, 'Cancelled') }, 'Cancel')) : null);
+  };
+  return panel({ title: 'Agent tasks', readout: open ? h('span', h('b', String(open)), ' open') : '' },
+    !connected ? empty('Not connected', 'Pair this device in Settings to follow what Lina handed to the agents.')
+      : list.length ? h('div.approvals', list.map(card))
+      : empty('No tasks yet', 'Ask Lina to have something done: "restart the shop container", "fix the failing tests in nextup", "run the briefing now".'));
 }
 
 /* Browsers are temporary (the server revokes them after two weeks idle): listed under the devices, not counted. */
@@ -141,10 +183,10 @@ export default {
     const s = data || { devices: [], approvals: [] };
     const lina = linaApprovals();
     root.append(h('div.view.hub',
-      viewHead('Hub', 'Your devices, the agent box and the server in one place. Everything waiting for your yes is here: Hermes changes the server, Lina sends invites and emails only after you approve.',
+      viewHead('Hub', 'Your devices, the agent box and the server in one place. Everything waiting for your yes is here: tasks Lina handed to the agents, Hermes’s server changes, and invites and emails Lina sends only after you approve.',
         h('a.btn.ghost', { href: WORKBENCH_URL, target: '_blank', rel: 'noopener', title: 'Needs Tailscale on this device' }, icon('agent'), 'Open Workbench')),
       h('div.grid.g-2',
-        h('div.stack', approvals(s.approvals, connected), lina, devices(s.devices),
+        h('div.stack', agentTasks(connected), approvals(s.approvals.filter(a => a.source !== 'lina'), connected), lina, devices(s.devices),
           panel({ title: 'Admin pages' }, linkRows(ADMIN)),
           panel({ title: 'Tools' }, linkRows(TOOLS))),
         h('div.stack', services(s.registry), hermesAsks(), serverPulse(), github(), agentActivity()))));

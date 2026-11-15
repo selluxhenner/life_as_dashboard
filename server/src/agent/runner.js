@@ -5,7 +5,7 @@ import { db, j } from '../db.js';
 import { client, checkBudget, logUsage, MODELS, DATA_RULE } from '../ai/claude.js';
 import { vaultBrief } from '../connectors/obsidian.js';
 import { TOOLS, toolDefs, queueAction, people } from './tools.js';
-import { quickContext } from './context.js';
+import { quickContext, tasksContext } from './context.js';
 import { getSetting } from '../settings.js';
 import { uid } from '../lib/crypto.js';
 import { localDate, localTime, localWeekday } from '../lib/time.js';
@@ -166,7 +166,8 @@ export async function runAgent({ message, conversationId, trigger = 'chat', allo
     ? { ...quickRequest(allowed), max_tokens: 2000, cache_control: { type: 'ephemeral' } }   // top-level: later steps reuse this turn
     : { model: MODELS.main, max_tokens: 16000, tools: toolDefs(allowed), ...FALLBACK, output_config: { effort: trigger === 'chat' ? 'medium' : 'low' },
         system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }] };
-  const system = [...base.system, { type: 'text', text: nowLine + (spoken && !quick ? ' ' + SPOKEN : '') + (quick ? '\n' + quickContext(now) : '') + (vaultBrief() ? '\n' + vaultBrief() : '') + (extraSystem ? '\n' + extraSystem : '') }];
+  const tasksNow = tasksContext();
+  const system = [...base.system, { type: 'text', text: nowLine + (spoken && !quick ? ' ' + SPOKEN : '') + (quick ? '\n' + quickContext(now) : '') + (vaultBrief() ? '\n' + vaultBrief() : '') + (tasksNow ? '\n' + tasksNow : '') + (extraSystem ? '\n' + extraSystem : '') }];
   const history = loadHistory(cid);
   const messages = quick ? recentHistory(history) : history;
   const userMsg = { role: 'user', content: [{ type: 'text', text: message }] };
