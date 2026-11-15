@@ -167,3 +167,29 @@ test('hub state lists active tasks for the apps, not for ops tokens', async () =
   assert.ok(mine.tasks.every(x => ['awaiting_approval', 'queued', 'running'].includes(x.status)));
   assert.equal((await api('GET', '/api/hub/state', undefined, hermes)).body.tasks, undefined);
 });
+
+test('Lina: start_task only in Kevin’s conversations, task_status and cancel_task follow it', async () => {
+  const { TOOLS } = await import('../src/agent/tools.js');
+  assert.equal(TOOLS.start_task.risk, 'internal', 'the task’s own approval gates it, not a second queue');
+  const input = { kind: 'server-op', title: 'Renew the shop certificate', params: { verb: 'renew-cert', args: ['shop.example.ch'] } };
+
+  const r = await TOOLS.start_task.run(input, { trigger: 'voice' });
+  assert.deepEqual([r.status, r.target], ['awaiting_approval', 'hermes']);
+  assert.match(r.note, /OK/);
+  const full = (await api('GET', '/api/tasks/' + r.id, undefined, phone)).body;
+  assert.equal(full.source, 'voice');
+  assert.equal(r.approvalId, undefined, 'Lina never sees approval ids');
+
+  // a background run reads outside text (mail, Slack): it must not hand out work because of it
+  await assert.rejects(TOOLS.start_task.run(input, { trigger: 'prep' }), /only started when Kevin asks/);
+  await assert.rejects(TOOLS.start_task.run({ ...input, params: { verb: 'rm-rf' } }, { trigger: 'chat' }), /params\.verb/);
+
+  const s = TOOLS.task_status.run({ id: r.id });
+  assert.deepEqual([s.id, s.status], [r.id, 'awaiting_approval']);
+  assert.ok(TOOLS.task_status.run({ active: true }).some(t => t.id === r.id));
+
+  const c = TOOLS.cancel_task.run({ id: r.id });
+  assert.equal(c.status, 'cancelled');
+  assert.equal((await api('GET', '/api/approvals/' + full.approvalId, undefined, phone)).body.status, 'rejected');
+  assert.throws(() => TOOLS.cancel_task.run({ id: r.id }), /cancelled/);
+});
