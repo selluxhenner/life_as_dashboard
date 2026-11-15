@@ -143,7 +143,7 @@ export const TOOLS = {
     run: i => saveJob(i), summary: i => `${i.id ? 'Updated' : 'Saved'} job ${i.company || ''}`.trim()
   },
   ask_hermes: {
-    risk: 'internal', description: 'Pass a question to Hermes, the ops agent on Kevin’s servers (to have him DO something, use start_task) (server status, why a site or container is down, disk, backups, certificates, deploys). Hermes answers within a few minutes; Kevin gets a push and hermes_answers shows it. Hermes still asks Kevin before it changes anything on a server.',
+    risk: 'internal', description: 'Pass an open question to Hermes, the ops agent on Kevin’s servers (why a site or container is down, what changed, certificates, deploys). For the current state of containers, apps, disk, sites or backups use start_task with a read verb instead (faster, about a minute); to have him DO something, start_task. Hermes answers within a few minutes; Kevin gets a push and hermes_answers shows it. Hermes still asks Kevin before it changes anything on a server.',
     schema: z.object({ question: z.string().trim().min(3).max(1000) }),
     run: (i, ctx) => ({ id: askHermes(i.question, ctx.trigger), queued: true, note: 'Hermes answers within a few minutes; Kevin gets a push.' }),
     summary: i => `Asked Hermes: ${i.question.slice(0, 80)}`
