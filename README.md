@@ -95,7 +95,7 @@ the server runs as the Docker container `agentic-os` on `127.0.0.1:3160`, behind
 The database is the server's SQLite file (`~/agentic-os/data/`). Every device keeps a full offline copy and syncs with it.
 
 **Without any login screen (recommended):** put a token into your builds once, and every device you install them on connects by itself on first start.
-1. Make a device token just for your builds (revocable under Settings → Devices):
+1. Make a device token just for your builds (revocable, see *Revoke a device* below):
    ```bash
    curl -s -X POST https://agentic-os.serviweb.ch/api/devices/pair -H "Authorization: Bearer <API_TOKEN>" -H "Content-Type: application/json" -d '{"name":"Laptop","platform":"laptop"}'
    ```
@@ -103,6 +103,12 @@ The database is the server's SQLite file (`~/agentic-os/data/`). Every device ke
 3. Build as usual (`npm run desktop:build`, `npm run build:android`). Settings → Server then only shows **Disconnect** / **Connect**.
 
 Only install these builds on your own devices — the token is inside the app.
+
+**Revoke a device** (lost phone, leaked build): only the master token can do this. List the devices, then revoke one by its `id`:
+```bash
+curl -s https://agentic-os.serviweb.ch/api/devices -H "Authorization: Bearer <API_TOKEN>"
+curl -s -X DELETE https://agentic-os.serviweb.ch/api/devices/<id> -H "Authorization: Bearer <API_TOKEN>"
+```
 
 **By hand instead:** open **Settings → Server**. The URL is pre-filled. Paste the `API_TOKEN` and press **Pair this device**.
 - Each device gets its own revocable token. The master token is not stored on the device.

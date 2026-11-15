@@ -50,7 +50,10 @@ test('device pairing issues a revocable token', async () => {
   assert.equal((await api('GET', '/api/todos', undefined, p.body.token)).status, 200);
   // a device token cannot pair further devices
   assert.equal((await api('POST', '/api/devices/pair', { name: 'x' }, p.body.token)).status, 403);
-  await api('DELETE', '/api/devices/' + p.body.id);
+  // ... nor revoke devices: a stolen device token must not lock out the others
+  assert.equal((await api('DELETE', '/api/devices/' + p.body.id, undefined, p.body.token)).status, 403);
+  assert.equal((await api('GET', '/api/todos', undefined, p.body.token)).status, 200);
+  assert.equal((await api('DELETE', '/api/devices/' + p.body.id)).status, 200);
   assert.equal((await api('GET', '/api/todos', undefined, p.body.token)).status, 401);
 });
 
