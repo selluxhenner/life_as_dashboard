@@ -75,6 +75,10 @@ the server runs as the Docker container `agentic-os` on `127.0.0.1:3160`, behind
   sudo bash ~/agentic-os/nginx-setup.sh
   ```
 - Logs: `ssh hetzner docker logs -f agentic-os`
+- Nightly backup (keeps 14 days in `~/agentic-os/backups/`), in `crontab -e` as `kschmid`:
+  ```
+  15 3 * * * ~/agentic-os/server/deploy/backup.sh
+  ```
 
 **Fresh, dedicated server instead (Caddy + systemd):**
 1. DNS: create an `A` record `agentic-os.serviweb.ch` pointing to the server's IP.
