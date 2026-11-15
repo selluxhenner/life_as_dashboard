@@ -11,6 +11,8 @@ import { asData } from '../ai/claude.js';
 import { briefingSpeech } from '../jobs/briefing.js';
 import { worldSpeech } from '../jobs/news.js';
 import { synthesize, transcribe } from './speech.js';
+import { getTask } from '../routes/tasks.js';
+import { decideApproval } from '../routes/approvals.js';
 
 /* What Kevin was just listening to, so a spoken follow-up like "tell me more about the second one" makes sense. */
 export function voiceContext(kind) {
@@ -67,8 +69,19 @@ const DONE = {
   cancel_event: { en: 'Done, it’s cancelled.', de: 'Erledigt, der Termin ist abgesagt.' },
   update_event: { en: 'Done, it’s changed and the guests are told.', de: 'Erledigt, der Termin ist geändert und die Gäste wissen Bescheid.' },
   draft_email: { en: 'The email is ready: open it in the app to send it.', de: 'Die Mail ist vorbereitet: öffne sie in der App zum Senden.' },
-  schedule_call: { en: 'Okay, I’ll call you.', de: 'Okay, ich rufe dich an.' }
+  schedule_call: { en: 'Okay, I’ll call you.', de: 'Okay, ich rufe dich an.' },
+  start_task: { en: 'Approved, it’s on its way. I’ll tell you when it’s done.', de: 'Freigegeben, es läuft. Ich sage dir, wenn es fertig ist.' }
 };
+
+/* Agent tasks Lina started in this run that wait for Kevin's OK: they join the yes/no like her queued actions. The
+   task id goes to the app as the awaiting id; a spoken yes approves the task's approval. */
+function taskWaits(runId) {
+  return db.all("SELECT result FROM agent_actions WHERE run_id = ? AND tool = 'start_task' AND status = 'done'", runId)
+    .map(a => { try { return getTask(JSON.parse(a.result).id); } catch { return null; } })
+    .filter(t => t && t.status === 'awaiting_approval')
+    .map(t => ({ id: t.id, summary: 'Approve: ' + t.title }));
+}
+const waitingTasks = ids => ids.filter(id => /^tsk_/.test(id)).map(getTask).filter(t => t && t.status === 'awaiting_approval');
 
 const speak = (text, lang) => synthesize({ text, lang, fast: true }).then(r => r.audio.toString('base64'));
 
@@ -170,7 +183,8 @@ export async function linaTurn({ audio, type, prepared: prepId, conversationId, 
   let reply = '', lang = 'en', pending = [], cid = conversationId, early = null, plan = null;
   let tools = [];
   const waiting = awaiting.length ? db.all(`SELECT id, tool FROM agent_actions WHERE status = 'pending' AND id IN (${awaiting.map(() => '?').join(',')})`, ...awaiting) : [];
-  const yn = waiting.length ? yesNo(heard) : null;
+  const tasks = waitingTasks(awaiting);
+  const yn = waiting.length || tasks.length ? yesNo(heard) : null;
 
   if (!heard) {
     if (!viaWake || !raw.trim()) return { heard: '', reply: '', lang, conversationId: cid, awaiting: [], listen: false, audio: null };
@@ -183,10 +197,13 @@ export async function linaTurn({ audio, type, prepared: prepId, conversationId, 
       const r = await decideAction(a.id, yn.answer === 'yes');
       if (r.error) errors.push(r.error);
     }
-    const kinds = [...new Set(waiting.map(a => a.tool))];
+    for (const t of tasks) {
+      try { decideApproval(t.approvalId, yn.answer === 'yes', 'lina-voice'); } catch (e) { errors.push(e.message); }
+    }
+    const kinds = [...new Set([...waiting.map(a => a.tool), ...tasks.map(() => 'start_task')])];
     reply = errors.length ? SAY[lang].fail + errors[0] : yn.answer === 'no' ? SAY[lang].no
       : kinds.length === 1 && DONE[kinds[0]] ? DONE[kinds[0]][lang] : SAY[lang].done;
-  } else if (instantOn() && !(waiting.length && /^\W*(ja|jo|yes|yeah|nein|no|nö|nope)\b/i.test(heard)) &&
+  } else if (instantOn() && !((waiting.length || tasks.length) && /^\W*(ja|jo|yes|yeah|nein|no|nö|nope)\b/i.test(heard)) &&
              (plan = planCommand(heard, loadWorld()))) {
     const r = await instantTurn(plan, heard, cid);
     ({ reply, lang, pending, tools, early } = r);
@@ -197,7 +214,7 @@ export async function linaTurn({ audio, type, prepared: prepId, conversationId, 
     cid = r.conversationId;
     reply = r.answer;
     lang = guessLang(reply);
-    pending = db.all("SELECT id, summary FROM agent_actions WHERE run_id = ? AND status = 'pending' ORDER BY created_at", r.runId);
+    pending = [...db.all("SELECT id, summary FROM agent_actions WHERE run_id = ? AND status = 'pending' ORDER BY created_at", r.runId), ...taskWaits(r.runId)];
   }
 
   const t2 = Date.now();

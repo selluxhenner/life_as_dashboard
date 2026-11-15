@@ -74,16 +74,22 @@ approvals.get('/approvals', c => {
 
 approvals.get('/approvals/:id', c => c.json(row(load(c))));
 
-/* Kevin decides. Only an open approval can be decided; a second tap is a no-op error, not a flip. */
-for (const [action, status] of [['approve', 'approved'], ['reject', 'rejected']]) {
+/** Kevin decides (the apps, the relay, a spoken yes to Lina). Only an open approval can be decided; a second tap is
+    a no-op error, not a flip. by: the deciding device id, or 'lina-voice'. Throws 404 / 409. */
+export function decideApproval(id, ok, by) {
+  const r = db.get('SELECT * FROM approvals WHERE id = ?', id);
+  if (!r) throw new HttpError(404, 'No such approval');
+  const changed = db.run("UPDATE approvals SET status = ?, decided_by = ?, decided_at = ? WHERE id = ? AND status = 'pending' AND expires_at > ?",
+    ok ? 'approved' : 'rejected', by, Date.now(), r.id, Date.now()).changes;
+  if (!changed) throw new HttpError(409, `Approval is ${shown(r)}`);
+  return getApproval(r.id);
+}
+
+for (const [action, ok] of [['approve', true], ['reject', false]]) {
   approvals.post(`/approvals/:id/${action}`, c => {
     const user = c.get('user');
     if (!isApp(user)) throw new HttpError(403, 'Only your own apps decide approvals');
-    const r = load(c);
-    const changed = db.run("UPDATE approvals SET status = ?, decided_by = ?, decided_at = ? WHERE id = ? AND status = 'pending' AND expires_at > ?",
-      status, user.deviceId, Date.now(), r.id, Date.now()).changes;
-    if (!changed) throw new HttpError(409, `Approval is ${shown(r)}`);
-    return c.json(row(db.get('SELECT * FROM approvals WHERE id = ?', r.id)));
+    return c.json(decideApproval(c.req.param('id'), ok, user.deviceId));
   });
 }
 
