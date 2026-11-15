@@ -160,11 +160,12 @@ test('Lina: wake words are stripped, short yes/no answers are recognised in Engl
   assert.equal(guessLang('I put the meeting at 3 pm on your calendar. Shall I send the invite?'), 'en');
 });
 
-import { mkdirSync as mk, writeFileSync as wf, readFileSync as rf } from 'node:fs';
-import { config as cfg } from '../src/config.js';
-import { searchVault, readNote, writeNote } from '../src/connectors/obsidian.js';
-
-test('obsidian vault: search, read, safe writes', () => {
+test('obsidian vault: search, read, safe writes', async () => {
+  // Dynamic imports like the tests above: a static import is hoisted above the API_TOKEN line at the top, and config
+  // exits without a token (which only passed where a server/.env existed).
+  const { mkdirSync: mk, writeFileSync: wf, readFileSync: rf } = await import('node:fs');
+  const { config: cfg } = await import('../src/config.js');
+  const { searchVault, readNote, writeNote } = await import('../src/connectors/obsidian.js');
   const dir = mkdtempSync(join(tmpdir(), 'vault-'));
   mk(join(dir, '03 Projekte')); mk(join(dir, '.obsidian'));
   wf(join(dir, 'Home.md'), 'Welcome to [[Dashboard]]');

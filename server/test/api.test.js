@@ -30,7 +30,9 @@ async function api(method, path, body, token = 'test-master-token', headers = {}
 }
 
 test('health is public, everything else needs a token', async () => {
-  assert.equal((await api('GET', '/api/health', undefined, null)).status, 200);
+  const h = await api('GET', '/api/health', undefined, null);
+  assert.equal(h.status, 200);
+  assert.match(h.body.version, /^\d+\.\d+\.\d+$/, 'version from package.json');
   assert.equal((await api('GET', '/api/todos', undefined, null)).status, 401);
   assert.equal((await api('GET', '/api/todos', undefined, 'wrong')).status, 401);
 });
@@ -50,7 +52,10 @@ test('device pairing issues a revocable token', async () => {
   assert.equal((await api('GET', '/api/todos', undefined, p.body.token)).status, 200);
   // a device token cannot pair further devices
   assert.equal((await api('POST', '/api/devices/pair', { name: 'x' }, p.body.token)).status, 403);
-  await api('DELETE', '/api/devices/' + p.body.id);
+  // ... nor revoke devices: a stolen device token must not lock out the others
+  assert.equal((await api('DELETE', '/api/devices/' + p.body.id, undefined, p.body.token)).status, 403);
+  assert.equal((await api('GET', '/api/todos', undefined, p.body.token)).status, 200);
+  assert.equal((await api('DELETE', '/api/devices/' + p.body.id)).status, 200);
   assert.equal((await api('GET', '/api/todos', undefined, p.body.token)).status, 401);
 });
 

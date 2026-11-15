@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { readFileSync } from 'node:fs';
 import { config } from './config.js';
 import { HttpError, page } from './http.js';
 import { requireAuth, requireOps, requireDevice } from './auth.js';
@@ -43,7 +44,9 @@ app.onError((err, c) => {
 });
 
 /* ---------- public endpoints (own verification) ---------- */
-app.get('/api/health', c => c.json({ ok: true, version: '2.0.0' }));
+// The version comes from server/package.json, so a deploy shows which release is live.
+const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+app.get('/api/health', c => c.json({ ok: true, version: VERSION }));
 app.get('/api/oauth/google/callback', c => googleCallback(new URL(c.req.url)));
 // Home page + privacy policy URLs for the Google OAuth consent screen.
 app.get('/api/home', () => page('Agentic OS', 'A private personal dashboard for one person. It is not a public service and has no sign-up.'));

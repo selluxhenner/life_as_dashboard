@@ -55,4 +55,7 @@ for (const c of indexed) {
 
 writeFileSync(new URL('../src/assets/world-dots.json', import.meta.url), JSON.stringify({ step: STEP, dots }));
 writeFileSync(new URL('../src/assets/country-centroids.json', import.meta.url), JSON.stringify(centroids));
+// The server's news job maps model-picked country names to region + ISO numeric code.
+const byName = Object.fromEntries(Object.entries(centroids).map(([n3, [, , region, name]]) => [name, { n3, region }]).sort(([a], [b]) => a.localeCompare(b)));
+writeFileSync(new URL('../server/src/data/countries.json', import.meta.url), JSON.stringify(byName, null, 1) + '\n');
 console.log(`dots: ${dots.length / 3}, centroids: ${Object.keys(centroids).length}`);
