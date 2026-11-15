@@ -30,7 +30,9 @@ async function api(method, path, body, token = 'test-master-token', headers = {}
 }
 
 test('health is public, everything else needs a token', async () => {
-  assert.equal((await api('GET', '/api/health', undefined, null)).status, 200);
+  const h = await api('GET', '/api/health', undefined, null);
+  assert.equal(h.status, 200);
+  assert.match(h.body.version, /^\d+\.\d+\.\d+$/, 'version from package.json');
   assert.equal((await api('GET', '/api/todos', undefined, null)).status, 401);
   assert.equal((await api('GET', '/api/todos', undefined, 'wrong')).status, 401);
 });
