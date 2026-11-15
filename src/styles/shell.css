@@ -121,6 +121,11 @@
 .status .win svg { width: 10px; height: 10px; overflow: visible; }
 .status .win path { fill: none; stroke: currentColor; stroke-width: 1; }
 html.win-blurred .status .win button:not(:hover) { color: var(--ink-3); }
+/* Mac app: native title bar (Overlay). The traffic lights sit over the rail's top cell, so the rail starts one status
+   row lower and the Windows caption buttons go away. The status bar stays the drag area. */
+.is-mac-app .status .win { display: none; }
+.is-mac-app .status { padding-right: var(--s-6); }
+.is-mac-app .rail { padding-top: 52px; }
 
 /* Desktop: the window is the app. Only <main> scrolls, so the title bar reaches the window's
    right edge and the scrollbar starts below it, as in a native app. */

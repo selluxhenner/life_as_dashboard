@@ -1,12 +1,16 @@
 // Where are we running? Tauri desktop, Capacitor Android, or a plain browser.
 const isTauri = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__;
+// The Mac desktop app has the native title bar (traffic lights over the rail, see tauri.macos.conf.json).
+const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgentData?.platform || navigator.platform || '');
 const isCapacitor = typeof window !== 'undefined' && !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
 export const platform = {
   kind: isTauri ? 'desktop' : isCapacitor ? 'android' : 'web',
-  isTauri, isCapacitor,
+  isTauri, isCapacitor, isMacApp: isTauri && isMac,
+  /** The command palette shortcut as this platform writes it. */
+  modKey: isMac ? '⌘' : 'Ctrl ',
   deviceName() {
-    if (isTauri) return 'Desktop (Windows)';
+    if (isTauri) return isMac ? 'Desktop (Mac)' : 'Desktop (Windows)';
     if (isCapacitor) return 'Phone (Android)';
     return 'Browser · ' + (navigator.userAgentData?.platform || navigator.platform || 'web');
   }
