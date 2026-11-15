@@ -6,7 +6,7 @@ export const platform = {
   kind: isTauri ? 'desktop' : isCapacitor ? 'android' : 'web',
   isTauri, isCapacitor,
   deviceName() {
-    if (isTauri) return 'Desktop (Windows)';
+    if (isTauri) return /Mac/i.test(navigator.userAgentData?.platform || navigator.platform || '') ? 'Desktop (Mac)' : 'Desktop (Windows)';
     if (isCapacitor) return 'Phone (Android)';
     return 'Browser · ' + (navigator.userAgentData?.platform || navigator.platform || 'web');
   }
