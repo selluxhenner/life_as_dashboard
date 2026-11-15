@@ -15,6 +15,7 @@ import { misc } from './routes/misc.js';
 import { ops, postReport } from './routes/ops.js';
 import { approvals } from './routes/approvals.js';
 import { hermes } from './routes/hermes.js';
+import { tasks } from './routes/tasks.js';
 import { hubState } from './routes/hub.js';
 import { githubStats } from './hub/github.js';
 import { pullRegistry } from './hub/registry.js';
@@ -71,6 +72,10 @@ app.route('/api', approvals);
 /* Lina's questions for Hermes: Hermes fetches and answers with its ops token, the apps read them. */
 app.use('/api/hermes/*', requireDevice);
 app.route('/api', hermes);
+/* Agent tasks: the apps (and Lina) create and cancel, Hermes reads his queue and reports with his ops token. */
+app.use('/api/tasks/*', requireDevice);
+app.use('/api/tasks', requireDevice);
+app.route('/api', tasks);
 /* Hub state: the apps see everything, an ops token (Hermes's hub-status skill) a summary without ids. */
 app.get('/api/hub/state', requireDevice, hubState);
 

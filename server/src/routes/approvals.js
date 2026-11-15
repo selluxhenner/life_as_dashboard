@@ -38,19 +38,32 @@ function load(c) {
 
 export const approvals = new Hono();
 
-approvals.post('/approvals', async c => {
-  const user = c.get('user');
-  if (!isOps(user)) throw new HttpError(403, 'Only the agent box asks for approvals');
-  const parsed = CreateSchema.safeParse(await c.req.json().catch(() => null));
+/** Creates an approval and pushes it to Kevin. Used by the route (Hermes asks) and by agent tasks (Lina asks).
+    source is the asking device id, or 'lina'. Throws HttpError(400) on bad input. */
+export async function createApproval(source, input) {
+  const parsed = CreateSchema.safeParse(input);
   if (!parsed.success) throw new HttpError(400, parsed.error.issues.map(i => `${i.path.join('.') || 'body'}: ${i.message}`).join('; ').slice(0, 300));
   const a = parsed.data;
   const id = 'apr_' + randomToken(16);   // the id is what lets a script read it, so it must not be guessable
   const now = Date.now();
   db.run('INSERT INTO approvals (id, source, verb, args, reason, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    id, user.deviceId, a.verb, j.str(a.args), a.reason, now + a.ttlMinutes * MIN, now);
+    id, source, a.verb, j.str(a.args), a.reason, now + a.ttlMinutes * MIN, now);
   await notify({ title: `Approve: ${a.verb} ${a.args.join(' ')}`.trim().slice(0, 120), body: a.reason, url: '#/hub', priority: 4,
     tags: ['server'], kind: 'agent', ref: 'approval:' + id }).catch(e => console.error('approvals: notify', e.message));
-  return c.json(row(db.get('SELECT * FROM approvals WHERE id = ?', id)), 201);
+  return getApproval(id);
+}
+
+/** One approval as the outside sees it (status 'expired' computed), or null. */
+export const getApproval = id => row(db.get('SELECT * FROM approvals WHERE id = ?', id)) || null;
+
+/** Marks an approved approval used (one approval, one run). False if it isn't approved or has expired. */
+export const consumeApproval = id => !!db.run("UPDATE approvals SET status = 'used', used_at = ? WHERE id = ? AND status = 'approved' AND expires_at > ?",
+  Date.now(), id, Date.now()).changes;
+
+approvals.post('/approvals', async c => {
+  const user = c.get('user');
+  if (!isOps(user)) throw new HttpError(403, 'Only the agent box asks for approvals');
+  return c.json(await createApproval(user.deviceId, await c.req.json().catch(() => null)), 201);
 });
 
 approvals.get('/approvals', c => {
@@ -78,8 +91,6 @@ for (const [action, status] of [['approve', 'approved'], ['reject', 'rejected']]
 approvals.post('/approvals/:id/consume', c => {
   if (!isOps(c.get('user'))) throw new HttpError(403, 'Use an ops token');
   const r = load(c);
-  const changed = db.run("UPDATE approvals SET status = 'used', used_at = ? WHERE id = ? AND status = 'approved' AND expires_at > ?",
-    Date.now(), r.id, Date.now()).changes;
-  if (!changed) throw new HttpError(409, `Approval is ${shown(r)}`);
+  if (!consumeApproval(r.id)) throw new HttpError(409, `Approval is ${shown(r)}`);
   return c.json(row(db.get('SELECT * FROM approvals WHERE id = ?', r.id)));
 });
