@@ -3,7 +3,8 @@
 set -euo pipefail
 HOST="${1:?usage: deploy.sh user@host [--web]}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-rsync -az --delete --exclude node_modules --exclude data --exclude .env "$ROOT/server/" "$HOST:/srv/agentic-os/server/"
+# Leading slash: only the top-level folders. A bare "data" also matched src/data/ (and --delete removed it there).
+rsync -az --delete --exclude /node_modules --exclude /data --exclude /.env "$ROOT/server/" "$HOST:/srv/agentic-os/server/"
 if [[ "${2:-}" == "--web" ]]; then
   (cd "$ROOT" && npm run build)
   rsync -az --delete "$ROOT/www/" "$HOST:/srv/agentic-os/www/"

@@ -4,8 +4,12 @@
 set -euo pipefail
 HOST="${1:-hetzner}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-cd "$ROOT/server"
-tar czf - --exclude=./node_modules --exclude=./data --exclude=./.env --exclude=./test . \
+cd "$ROOT"
+# Ship the committed server/ from git, not the working copy: same on Windows and macOS (bsdtar's --exclude=./data also
+# dropped src/data/, and it adds Apple metadata), never secrets or local data, never half-done edits.
+if [ -n "$(git status --porcelain -- server)" ]; then echo "note: uncommitted changes in server/ are NOT deployed"; fi
+echo "deploying server/ at $(git rev-parse --short HEAD) to $HOST"
+git archive --format=tar.gz HEAD:server -- . ':(exclude)test' \
   | ssh "$HOST" 'set -e; mkdir -p ~/agentic-os/server ~/agentic-os/data ~/agentic-os/backups
       rm -rf ~/agentic-os/server.new && mkdir ~/agentic-os/server.new
       tar xzf - -C ~/agentic-os/server.new
