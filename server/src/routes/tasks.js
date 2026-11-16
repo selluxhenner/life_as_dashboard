@@ -1,6 +1,7 @@
 // Agent tasks: Lina (or Kevin in the app) hands work to an agent and follows it to the end.
 //   hermes    · server-op  a verb of agent-ops.sh on the main server (read verbs run straight away, the rest need OK)
-//   workbench · coding     a Claude/Codex coding session on the PC (always needs OK; waits until the PC link exists)
+//   workbench · coding     a Claude or Codex session in Workbench on the PC or the Mac (always needs OK, once: the box's
+//                          workbench-relay starts it with an orch token, so Workbench doesn't ask a second time)
 //   server    · job        one of this server's jobs (briefing, inbox refresh …), run here, no OK needed
 // A task that needs Kevin's OK creates an ordinary approval, so the phone buttons, the Hub and the Telegram relay
 // decide it. For server-op the approval's verb and args are exactly what agent-ops.sh checks, so Hermes runs the verb
@@ -12,7 +13,7 @@ import { db, j } from '../db.js';
 import { HttpError } from '../http.js';
 import { uid } from '../lib/crypto.js';
 import { notify } from '../notify/index.js';
-import { createApproval, getApproval, consumeApproval } from './approvals.js';
+import { createApproval, getApproval, consumeApproval, decideApproval } from './approvals.js';
 
 const HOUR = 3600000;
 const STALE_MS = 2 * HOUR;           // a running task without news for this long is shown as stale
@@ -37,10 +38,13 @@ export const KINDS = {
     target: 'workbench',
     schema: z.object({
       project: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,59}$/, 'project: a hub project id'),
-      prompt: z.string().trim().min(10).max(4000)
+      prompt: z.string().trim().min(10).max(4000),
+      agent: z.enum(['claude', 'codex']).default('claude'),
+      // a Workbench session profile of that agent (plan, review, cheap …); Workbench checks it exists
+      profile: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,39}$/, 'profile: a Workbench profile id').optional()
     }),
     needsApproval: () => true,
-    approval: p => ({ verb: 'coding-session', args: [p.project] }),
+    approval: p => ({ verb: 'coding-session', args: [p.project, p.agent] }),
     consumeOnStart: true
   },
   job: {
@@ -50,6 +54,9 @@ export const KINDS = {
   }
 };
 export const TARGETS = [...new Set(Object.values(KINDS).map(k => k.target))];
+/* Targets an ops token works: Hermes's server verbs, and the coding sessions the box's workbench-relay hands to
+   Workbench. Server jobs run here. */
+export const WORKER_TARGETS = ['hermes', 'workbench'];
 const WHO = { hermes: 'Hermes', workbench: 'Workbench', server: 'Server' };
 const ACTIVE = ['awaiting_approval', 'queued', 'running'];
 const FINAL = ['done', 'failed', 'cancelled', 'rejected', 'expired'];
@@ -176,7 +183,7 @@ function forWorker(c, { started = true } = {}) {
   const user = c.get('user');
   if (!isOps(user)) throw new HttpError(403, 'Use an ops token');
   const r = load(c.req.param('id'));
-  if (!r || r.target !== 'hermes') throw new HttpError(404, 'No such task');
+  if (!r || !WORKER_TARGETS.includes(r.target)) throw new HttpError(404, 'No such task');
   // progress and finish only from the token that started it
   if (started && r.worker && r.worker !== user.deviceId && user.deviceId !== 'master') throw new HttpError(403, 'Started by another worker');
   return { user, r };
@@ -196,19 +203,38 @@ tasks.get('/tasks', c => {
   return c.json({ tasks: listTasks({ active: c.req.query('active') === '1', limit }) });
 });
 
-/* Hermes polls this (no side effects, so a cheap monitor can diff it): his tasks that are ready to start. */
+/* The box polls this (no side effects, so a cheap monitor can diff it): tasks for one target that are ready to start.
+   ?target=hermes (default: Hermes's agent-tasks job) or workbench (the workbench-relay). */
 tasks.get('/tasks/queue', c => {
   if (!isOps(c.get('user'))) throw new HttpError(403, 'Use an ops token');
-  const rows = db.all("SELECT * FROM agent_tasks WHERE target = 'hermes' AND status IN ('queued', 'awaiting_approval') ORDER BY created_at LIMIT 50");
+  const target = c.req.query('target') || 'hermes';
+  if (!WORKER_TARGETS.includes(target)) throw new HttpError(400, 'target: ' + WORKER_TARGETS.join(' or '));
+  const rows = db.all("SELECT * FROM agent_tasks WHERE target = ? AND status IN ('queued', 'awaiting_approval') ORDER BY created_at LIMIT 50", target);
   return c.json({ tasks: rows.map(r => view(r)).filter(t => t.status === 'queued').slice(0, 10) });
 });
 
 tasks.get('/tasks/:id', c => {
   const user = c.get('user');
   const r = load(c.req.param('id'));
-  if (!r || (!isApp(user) && r.target !== 'hermes')) throw new HttpError(404, 'No such task');
+  if (!r || (!isApp(user) && !WORKER_TARGETS.includes(r.target))) throw new HttpError(404, 'No such task');
   return c.json(view(r));
 });
+
+/** Kevin decides through Lina (decide_approval): a task waiting for its OK (tsk_…) or one of Hermes's own approvals
+    (apr_…). Same rules as the phone and the Hub: only an open approval, once. by: 'lina-chat' | 'lina-voice' | … */
+export function decideTaskApproval(id, ok, by) {
+  if (/^tsk_/.test(id)) {
+    const r = load(id);
+    if (!r) throw new HttpError(404, 'No such task');
+    const shown = shownStatus(r);
+    if (shown !== 'awaiting_approval') throw new HttpError(409, `Task is ${shown}`);
+    decideApproval(r.approval_id, ok, by);
+    const t = getTask(id);
+    return { id: t.id, title: t.title, status: t.status };
+  }
+  const a = decideApproval(id, ok, by);
+  return { id: a.id, verb: a.verb, args: a.args, status: a.status };
+}
 
 /** Kevin stops a task (the route and Lina's cancel_task). A pending or unused approval is withdrawn, so the phone card
     goes away and its id no longer runs the verb; a running worker sees 409 on its next call. */
@@ -250,7 +276,8 @@ const url = z.string().url().max(500).refine(u => /^https?:/.test(u), 'http(s) o
 const FinishSchema = z.object({
   status: z.enum(['done', 'failed']),
   result: z.string().trim().min(1).max(4000),
-  links: z.object({ pr: url.optional(), url: url.optional(), report: z.number().int().positive().optional() }).strict().default({})
+  links: z.object({ pr: url.optional(), url: url.optional(), report: z.number().int().positive().optional(),
+    device: z.string().regex(/^[A-Za-z0-9 ._()-]{1,60}$/).optional() }).strict().default({})   // device: where a coding session ran
 });
 tasks.post('/tasks/:id/finish', async c => {
   const { r } = forWorker(c);

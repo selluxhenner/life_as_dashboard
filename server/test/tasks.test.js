@@ -121,17 +121,51 @@ test('scopes: apps create and cancel, Hermes works only his own tasks', async ()
   assert.equal((await api('POST', `/api/tasks/${t.id}/finish`, { status: 'done', result: 'x' }, runner)).status, 403, 'only the worker that started it');
 
   const code = (await api('POST', '/api/tasks', { kind: 'coding', title: 'Fix the failing sync test', params: { project: 'life-os', prompt: 'Make server/test/api.test.js pass again' } }, phone)).body;
-  assert.equal((await api('GET', '/api/tasks/' + code.id, undefined, hermes)).status, 404, 'workbench tasks are not his');
+  // the box relays coding tasks to Workbench, so its token may read them; Hermes's own queue never lists them
+  assert.equal((await api('GET', '/api/tasks/' + code.id, undefined, hermes)).status, 200);
+  const job = (await api('POST', '/api/tasks', { kind: 'job', title: 'Refresh the calendar', params: { job: 'calendar' } }, phone)).body;
+  assert.equal((await api('GET', '/api/tasks/' + job.id, undefined, hermes)).status, 404, 'server jobs are nobody else’s');
+  assert.equal((await api('GET', '/api/tasks/queue?target=server', undefined, hermes)).status, 400);
 });
 
-test('coding tasks always need approval and never land in the Hermes queue', async () => {
-  const t = (await api('POST', '/api/tasks', { kind: 'coding', title: 'Add CSV export', params: { project: 'nextup', prompt: 'Add a CSV export to the stats page' } }, phone)).body;
-  assert.deepEqual([t.target, t.status], ['workbench', 'awaiting_approval']);
+test('coding tasks: one approval, then the Workbench queue, never the Hermes queue', async () => {
+  const t = (await api('POST', '/api/tasks', { kind: 'coding', title: 'Add CSV export', params: { project: 'nextup', prompt: 'Add a CSV export to the stats page', agent: 'codex', profile: 'cheap' } }, phone)).body;
+  assert.deepEqual([t.target, t.status, t.params.agent, t.params.profile], ['workbench', 'awaiting_approval', 'codex', 'cheap']);
   const a = (await api('GET', '/api/approvals/' + t.approvalId, undefined, phone)).body;
-  assert.deepEqual([a.verb, a.args], ['coding-session', ['nextup']]);
+  assert.deepEqual([a.verb, a.args], ['coding-session', ['nextup', 'codex']]);
+  const wbQueue = async () => (await api('GET', '/api/tasks/queue?target=workbench', undefined, hermes)).body.tasks.map(x => x.id);
+  assert.ok(!(await wbQueue()).includes(t.id), 'not before the OK');
   await api('POST', `/api/approvals/${t.approvalId}/approve`, undefined, phone);
   assert.equal((await api('GET', '/api/tasks/' + t.id, undefined, phone)).body.status, 'queued');
   assert.ok(!(await queue()).includes(t.id));
+  assert.ok((await wbQueue()).includes(t.id));
+
+  // the relay starts it (that burns the approval: one OK, one session), reports the device and the PR
+  assert.equal((await api('POST', `/api/tasks/${t.id}/start`, undefined, hermes)).body.status, 'running');
+  assert.equal((await api('GET', '/api/approvals/' + t.approvalId, undefined, phone)).body.status, 'used');
+  await api('POST', `/api/tasks/${t.id}/progress`, { note: 'Started on PC (desktop-oe7cumo) · branch ws/add-csv-export' }, hermes);
+  const f = await api('POST', `/api/tasks/${t.id}/finish`, { status: 'done', result: 'done · 2 commits ahead of main', links: { pr: 'https://github.com/selluxhenner/nextup/pull/7', device: 'PC (desktop-oe7cumo)' } }, hermes);
+  assert.deepEqual([f.status, f.body.links.device], [200, 'PC (desktop-oe7cumo)']);
+
+  const bad = { kind: 'coding', title: 'Bad agent', params: { project: 'nextup', prompt: 'Something long enough', agent: 'gpt' } };
+  assert.equal((await api('POST', '/api/tasks', bad, phone)).status, 400);
+});
+
+test('Lina decides approvals only in Kevin’s conversations: her tasks and Hermes’s own', async () => {
+  const { TOOLS } = await import('../src/agent/tools.js');
+  const t = (await api('POST', '/api/tasks', { kind: 'coding', title: 'Fix the sync test', params: { project: 'life-os', prompt: 'Make the sync test pass again' } }, phone)).body;
+  await assert.rejects(async () => TOOLS.decide_approval.run({ id: t.id, decision: 'approve' }, { trigger: 'watch' }), /Only Kevin decides/);
+  await assert.rejects(async () => TOOLS.decide_approval.run({ id: t.id, decision: 'approve' }, { trigger: 'meeting-prep' }), /Only Kevin decides/);
+  const ok = TOOLS.decide_approval.run({ id: t.id, decision: 'approve' }, { trigger: 'chat' });
+  assert.deepEqual([ok.id, ok.status], [t.id, 'queued']);
+  assert.equal(db.get('SELECT decided_by FROM approvals WHERE id = ?', t.approvalId).decided_by, 'lina-chat');
+  assert.throws(() => TOOLS.decide_approval.run({ id: t.id, decision: 'approve' }, { trigger: 'chat' }), /Task is queued/);
+
+  const asked = (await api('POST', '/api/approvals', { verb: 'prune-docker', args: [], reason: 'disk at 91 %' }, hermes)).body;
+  const { tasksContext } = await import('../src/agent/context.js');
+  assert.match(tasksContext(), new RegExp(`${asked.id} \\| prune-docker \\| disk at 91 %`), 'Lina sees what Hermes waits for');
+  const no = TOOLS.decide_approval.run({ id: asked.id, decision: 'reject' }, { trigger: 'voice' });
+  assert.deepEqual([no.verb, no.status], ['prune-docker', 'rejected']);
 });
 
 test('validation: only real verbs, safe args, allowed jobs', async () => {
