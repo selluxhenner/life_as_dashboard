@@ -93,6 +93,9 @@ export async function askLina(text, { context = null, listenAfter = true } = {})
   else closeMic();
 }
 
+/** Start listening now, as a follow-up (no "didn't catch that" if he says nothing). Her greeting ends with it. */
+export function listenNow() { if (talk.state === 'idle' && canTalk()) converse(null, { followUp: true }); }
+
 /** Drop whatever is happening: close the microphone, stop the voice, ignore a late answer. */
 export async function cancelTalk() {
   run++;

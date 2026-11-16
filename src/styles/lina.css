@@ -60,12 +60,13 @@
 /* satellites: no frames, just light text in the corners */
 .sat { position: absolute; width: clamp(200px, 19vw, 290px); display: grid; gap: 7px; transition: filter var(--t-base), opacity var(--t-base); }
 .sat[hidden] { display: none; }
-.sat.next { left: 16px; top: 3%; }
-.sat.hermes { left: 16px; top: 50%; transform: translateY(-50%); }
-.sat.workbench { left: 16px; bottom: 3%; }
-.sat.vault { right: 16px; top: 3%; }
-.sat.server { right: 16px; top: 50%; transform: translateY(-50%); }
-.sat.live { right: 16px; bottom: 3%; }
+.sat[data-slot='1'] { left: 16px; top: 3%; }
+.sat[data-slot='2'] { right: 16px; top: 3%; }
+.sat[data-slot='3'] { left: 16px; top: 50%; transform: translateY(-50%); }
+.sat[data-slot='4'] { right: 16px; top: 50%; transform: translateY(-50%); }
+.sat[data-slot='5'] { left: 16px; bottom: 3%; }
+.sat[data-slot='6'] { right: 16px; bottom: 3%; }
+.sat[data-rank='top'] .sat-name { color: var(--ink); }
 @keyframes sat-in { from { opacity: 0; transform: translateY(8px); filter: blur(4px); } }
 .sat-head { display: flex; align-items: baseline; gap: var(--s-2); background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; text-align: left; }
 .sat-name { font-family: var(--font-data); font-size: var(--fs-micro); letter-spacing: .16em; text-transform: uppercase; color: var(--signal); }
@@ -159,10 +160,9 @@ html[data-route='lina'] body > canvas { opacity: .38; transition: opacity var(--
 
 /* The entrance plays on the first open and on Ctrl+R only (views/lina.js playIntro): updates never replay it. */
 .view.lina.intro .sat { animation: sat-in .9s var(--ease-spring, ease) both; }
-.view.lina.intro .sat.next, .view.lina.intro .sat.vault { animation-delay: .35s; }
-.view.lina.intro .sat.hermes, .view.lina.intro .sat.server { animation-delay: .5s; }
-.view.lina.intro .sat.workbench, .view.lina.intro .sat.live { animation-delay: .65s; }
-.view.lina.intro .sat.hermes, .view.lina.intro .sat.server { animation-name: sat-in-mid; }
+.view.lina.intro .sat[data-slot='1'], .view.lina.intro .sat[data-slot='2'] { animation-delay: .35s; }
+.view.lina.intro .sat[data-slot='3'], .view.lina.intro .sat[data-slot='4'] { animation-delay: .5s; animation-name: sat-in-mid; }
+.view.lina.intro .sat[data-slot='5'], .view.lina.intro .sat[data-slot='6'] { animation-delay: .65s; }
 @keyframes sat-in-mid { from { opacity: 0; transform: translateY(calc(-50% + 8px)); filter: blur(4px); } }
 .view.lina.intro .lina-links { animation: links-in 1.4s ease .5s both; }
 @keyframes links-in { from { opacity: 0; } }
@@ -190,3 +190,24 @@ html[data-route='lina'] body > canvas { opacity: .38; transition: opacity var(--
 .lina-top .live-voice[aria-pressed='true'] { color: var(--signal); border-color: color-mix(in oklab, var(--signal) 40%, transparent); }
 .view.lina[data-offline='server'] .lina-hello::after { content: '· server not reachable'; font-family: var(--font-data); font-size: var(--fs-xs); color: var(--flare); }
 .view.lina[data-offline='pair'] .lina-hello::after { content: '· pair this device in Settings'; font-family: var(--font-data); font-size: var(--fs-xs); color: var(--amber); }
+
+/* One page: a page opened from a box or by voice shows right here. Lina gets small at the top and keeps listening;
+   the overview comes back with Esc or "Overview". */
+.lina-focus { display: none; }
+.lina-center { transition: top .6s var(--ease-spring, ease), transform .6s var(--ease-spring, ease); }
+.lina-dial { transition: width .6s var(--ease-spring, ease); }
+.view.lina[data-focus]:not([data-focus='']) .sat,
+.view.lina[data-focus]:not([data-focus='']) .lina-links,
+.view.lina[data-focus]:not([data-focus='']) .lina-under,
+.view.lina[data-focus]:not([data-focus='']) .lina-transcript { display: none; }
+.view.lina[data-focus]:not([data-focus='']) .lina-center { top: 0; transform: translate(-50%, 0); }
+.view.lina[data-focus]:not([data-focus='']) .lina-dial { width: 132px; }
+.view.lina[data-focus]:not([data-focus='']) .lina-dial .chronosphere { opacity: 0; transition: opacity .3s; }
+.view.lina[data-focus]:not([data-focus='']) .lina-space { min-height: 0; }
+.view.lina[data-focus]:not([data-focus='']) .lina-focus { display: block; padding-top: 140px; animation: sat-in .6s var(--ease-spring, ease) both; }
+.lina-focus-bar { display: flex; align-items: center; gap: var(--s-4); margin-bottom: var(--s-4); }
+.focus-back { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 1px solid var(--seam); border-radius: var(--r-pill); background: none; color: var(--ink-2); font-family: var(--font-data); font-size: var(--fs-xs); letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
+.focus-back svg { width: 12px; height: 12px; }
+.focus-back:hover { color: var(--ink); border-color: var(--signal); }
+.focus-title { font-family: var(--font-data); font-size: var(--fs-micro); letter-spacing: .16em; text-transform: uppercase; color: var(--signal); }
+.lina-focus-view > .view { padding-top: 0; }

@@ -14,9 +14,11 @@ import { remote, refresh } from '../core/remote.js';
 import { api } from '../core/api.js';
 import { speak, isSpeaking } from '../voice/tts.js';
 import { icon } from '../core/icons.js';
-import { go } from '../core/router.js';
+import { go, routeList, render as routerRender, currentRoute } from '../core/router.js';
 import { isPhone } from '../core/platform.js';
-import { talk, toggleTalk, cancelTalk, askLina } from '../voice/talk.js';
+import { talk, toggleTalk, cancelTalk, askLina, setTalk, listenNow, canTalk } from '../voice/talk.js';
+import { apiConfig } from '../core/api.js';
+import { greetingFor } from '../voice/greeting.js';
 
 const FEED = '/api/lina/feed?limit=30';
 const POLL_MS = 15000;
@@ -43,7 +45,10 @@ const REACH = {
   server: ['status_report']
 };
 /* Left of her: what's next, Hermes, Workbench. Right: Obsidian, the server, what just came in. */
-const LEFT = ['next', 'hermes', 'workbench'];
+/* Places around her, most prominent first: top left, top right, middle left, middle right, bottom left, bottom right.
+   The most important box takes the first free place; what matters least drops out when there is no room. */
+const SLOTS = 6;
+const isLeft = slot => slot % 2 === 1;
 const SOURCE = { hermes: 'Hermes', workbench: 'Workbench', agents: 'Agents', server: 'Server', news: 'News', briefing: 'Briefing', calendar: 'Calendar', jobs: 'Jobs' };
 const sourceName = s => SOURCE[s] || s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -83,13 +88,17 @@ function build() {
   const transcript = h('div.lina-transcript', { 'aria-live': 'polite' });
   const cmds = h('nav.lina-cmds', { 'aria-label': 'Ask Lina' }, COMMANDS.map(c => h('button.cmd', { type: 'button', onclick: () => askLina(c.ask) }, c.label)));
   const liveVoice = h('button.live-voice', { type: 'button', title: 'Lina says new updates out loud while this screen is open', onclick: () => setVoice({ announce: !announceOn() }) });
+  const focusTitle = h('span.focus-title');
+  const focusRoot = h('div.lina-focus-view');
+  const focusBar = h('div.lina-focus-bar', h('button.focus-back', { type: 'button', onclick: () => closeFocus(), title: 'Back to the overview (Esc)' }, icon('left'), 'Overview'), focusTitle);
   const space = h('div.lina-space', links, ...Object.values(sats),
-    h('div.lina-center', dial, h('div.lina-under', time, textBtn), transcript));
+    h('div.lina-center', dial, h('div.lina-under', time, textBtn), transcript),
+    h('div.lina-focus', focusBar, focusRoot));
   const el = h('div.view.lina.intro',
     h('header.lina-top', h('div.lina-hello', h('span.lina-name', 'LINA'), h('span.dim', fmt.long(new Date()))), liveVoice),
     space,
     h('footer.lina-bottom', cmds));
-  return { el, chrono, dial, time, liveVoice, sats, links, space, core, textBtn, transcript };
+  return { el, chrono, dial, time, liveVoice, sats, links, space, core, textBtn, transcript, focusRoot, focusTitle };
 }
 
 /* The entrance: on the first open and on Ctrl+R only. Updates never replay it. */
@@ -125,10 +134,10 @@ function nextSat(s) {
   const focus = s && s.todos ? s.todos.focus.slice(0, rows) : [];
   if (!upcoming.length && !focus.length && !(s && s.next)) return null;
   return [
-    satHead('Up next', s && s.todos ? s.todos.open + ' open tasks' : null, () => go('today')),
-    ...upcoming.map(a => h('button.sat-line', { type: 'button', onclick: () => go('calendar') }, h('span.sat-time.data', a.time || ''), h('span', a.title))),
+    satHead('Up next', s && s.todos ? s.todos.open + ' open tasks' : null, () => openInDeck('today')),
+    ...upcoming.map(a => h('button.sat-line', { type: 'button', onclick: () => openInDeck('calendar') }, h('span.sat-time.data', a.time || ''), h('span', a.title))),
     !upcoming.length && s && s.next ? h('div.sat-line', h('span.sat-time.data', new Date(s.next.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })), h('span', s.next.title)) : null,
-    ...focus.map(t => h('button.sat-line.todo', { type: 'button', onclick: () => go('today') }, h('span', { class: 'status-dot ' + (t.due && t.due < tk ? 'error' : t.high ? 'running' : 'idle') }), h('span', t.title)))
+    ...focus.map(t => h('button.sat-line.todo', { type: 'button', onclick: () => openInDeck('today') }, h('span', { class: 'status-dot ' + (t.due && t.due < tk ? 'error' : t.high ? 'running' : 'idle') }), h('span', t.title)))
   ];
 }
 
@@ -162,7 +171,7 @@ function liveSat(data) {
   if (seenTop && top > seenTop) list.filter(e => e.id > seenTop).forEach(e => freshUntil.set(e.id, Date.now() + 12000));
   seenTop = Math.max(seenTop, top);
   return [
-    satHead('Just in', data.unread ? data.unread + ' new' : null, () => go('hub')),
+    satHead('Just in', data.unread ? data.unread + ' new' : null, () => openInDeck('hub')),
     ...list.map(e => h('div.sat-event' + ((freshUntil.get(e.id) || 0) > Date.now() ? '.fresh' : ''), { dataset: { level: e.level } },
       h('div.sat-dim', sourceName(e.source) + ' · ' + fmt.ago(e.at)), h('div', e.title)))
   ];
@@ -175,10 +184,10 @@ function hermesSat(s) {
   const recent = hm.lastAnswer && hm.lastAnswer.at && Date.now() - hm.lastAnswer.at < 86400000;
   if (hm.online && !hm.openAsks && !recent && !waiting) return null;   // nothing to say: Hermes stays out of the way
   return [
-    satHead('Hermes', hm.online ? 'online' : hm.lastSeenAt ? 'seen ' + fmt.ago(hm.lastSeenAt) : 'offline', () => go('hub')),
+    satHead('Hermes', hm.online ? 'online' : hm.lastSeenAt ? 'seen ' + fmt.ago(hm.lastSeenAt) : 'offline', () => openInDeck('hub')),
     !hm.online ? h('div.sat-line', h('span.status-dot.error'), h('span', 'The agent box is not checking in')) : null,
     hm.openAsks ? h('div.sat-line', h('span.status-dot.running'), h('span', hm.openAsks + (hm.openAsks === 1 ? ' question' : ' questions') + ' with Hermes')) : null,
-    waiting ? h('button.sat-line', { type: 'button', onclick: () => go('hub') }, h('span', [s.tasks.open ? s.tasks.open + (s.tasks.open === 1 ? ' task' : ' tasks') + ' running or waiting' : null, s.approvals ? s.approvals + ' waiting for your OK' : null].filter(Boolean).join(' · '))) : null,
+    waiting ? h('button.sat-line', { type: 'button', onclick: () => openInDeck('hub') }, h('span', [s.tasks.open ? s.tasks.open + (s.tasks.open === 1 ? ' task' : ' tasks') + ' running or waiting' : null, s.approvals ? s.approvals + ' waiting for your OK' : null].filter(Boolean).join(' · '))) : null,
     recent ? h('div.sat-event', h('div.sat-dim', 'Answered ' + fmt.ago(hm.lastAnswer.at)), h('div', hm.lastAnswer.answer.slice(0, 140))) : null
   ];
 }
@@ -186,7 +195,7 @@ function hermesSat(s) {
 function serverSat(s) {
   if (!s || !s.server || s.server.status === 'ok') return null;
   return [
-    satHead('Server', s.server.status === 'fail' ? 'needs attention' : 'warning', () => go('hub')),
+    satHead('Server', s.server.status === 'fail' ? 'needs attention' : 'warning', () => openInDeck('hub')),
     h('div.sat-event', { dataset: { level: s.server.status === 'fail' ? 'alert' : 'warn' } }, h('div.sat-dim', fmt.ago(s.server.at)), h('div', s.server.summary))
   ];
 }
@@ -197,11 +206,11 @@ function systems(s, connected, error) {
   const item = (label, ok, sub, onclick) => h(onclick ? 'button.sys' : 'span.sys', onclick ? { type: 'button', onclick } : {},
     h('span', { class: 'status-dot ' + (ok === true ? 'done' : ok === false ? 'error' : 'idle') }), label, sub ? h('span.dim', sub) : null);
   return [
-    item('Hermes', s.hermes.online, s.hermes.online ? 'online' : 'offline', () => go('hub')),
+    item('Hermes', s.hermes.online, s.hermes.online ? 'online' : 'offline', () => openInDeck('hub')),
     s.workbench.configured ? item('Workbench', s.workbench.reachable, s.workbench.reachable ? s.workbench.active + ' active' : 'unreachable') : null,
     s.vault.connected ? item('Obsidian', true, null) : null,
     s.server ? item('Server', s.server.status === 'ok', s.server.status === 'ok' ? null : s.server.status) : null,
-    s.tasks.open || s.approvals ? item('Waiting', null, [s.tasks.open ? s.tasks.open + ' tasks' : null, s.approvals ? s.approvals + ' OKs' : null].filter(Boolean).join(' · '), () => go('hub')) : null
+    s.tasks.open || s.approvals ? item('Waiting', null, [s.tasks.open ? s.tasks.open + ' tasks' : null, s.approvals ? s.approvals + ' OKs' : null].filter(Boolean).join(' · '), () => openInDeck('hub')) : null
   ].filter(Boolean);
 }
 
@@ -209,8 +218,8 @@ function systems(s, connected, error) {
    A different window size (another screen, maximised, a resize) can change how many lines fit and where the boxes
    sit. When that happens they move there instead of jumping, and the lines follow. */
 let layoutSig = '', followUntil = 0, resizeTimer = 0, lastRects = new Map();
-const layoutNow = () => (innerWidth <= 860 ? 'one' : innerWidth <= 1100 ? 'two' : 'space') + ':' + rowsFor() + ':' +
-  Object.entries(deck.sats).map(([k, el]) => (el.hidden ? '' : k)).join(',');
+const layoutNow = () => (innerWidth <= 860 ? 'one' : innerWidth <= 1100 ? 'two' : 'space') + ':' + rowsFor() + ':' + (focus || '') + ':' +
+  Object.entries(deck.sats).map(([k, el]) => (el.hidden ? '' : k + el.dataset.slot)).join(',');
 /* Where every box was after the last paint: a resize has already moved them by the time it is reported. */
 const remember = () => { if (deck) lastRects = new Map([...Object.values(deck.sats), deck.dial].filter(el => !el.hidden).map(el => [el, el.getBoundingClientRect()])); };
 function glide(change, before = null) {
@@ -236,6 +245,84 @@ function onResize() {
   resizeTimer = setTimeout(() => { if (deck && deck.el.isConnected) glide(paint, lastRects); }, 140);
 }
 
+/* ---------- what matters now: the most important boxes take the best places ---------- */
+function importance(key, s, data) {
+  const now = Date.now();
+  if (key === 'next') {
+    const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+    const soon = agendaFor(todayKey()).filter(i => !i.allDay && i.start != null && i.start >= nowMin).map(i => i.start - nowMin)[0];
+    const overdue = s && s.todos ? s.todos.overdue : 0;
+    return soon != null && soon <= 15 ? 98 : soon != null && soon <= 60 ? 80 : overdue ? 62 : soon != null && soon <= 180 ? 55 : 35;
+  }
+  if (key === 'server') return s && s.server ? (s.server.status === 'fail' ? 95 : 42) : 0;
+  if (key === 'hermes') {
+    if (!s) return 0;
+    return s.approvals ? 88 : !s.hermes.online ? 72 : s.tasks.open ? 58 : s.hermes.openAsks ? 50 : 38;
+  }
+  if (key === 'workbench') {
+    const w = s && s.workbench;
+    if (!w) return 0;
+    return w.attention && w.attention.length ? 76 : w.active ? 60 : 30;
+  }
+  if (key === 'live') {
+    const fresh = ((data && data.events) || []).filter(e => now - e.at < 3600000);
+    return fresh.some(e => e.level === 'alert') ? 90 : fresh.length ? 64 : data && data.unread ? 45 : 33;
+  }
+  if (key === 'vault') {
+    const v = s && s.vault;
+    return v && v.recent && v.recent[0] && now - v.recent[0].at < 3600000 ? 40 : 22;
+  }
+  return 0;
+}
+
+/* ---------- one page: a box (or Lina, by voice) opens a page right here; Lina gets small at the top ---------- */
+let focus = null, focusView = null, focusShown = null;
+const titleOf = id => (routeList().find(r => r.id === id) || {}).label || id;
+
+/** Open a page inside the deck (Kalender, Inbox, Hub …). From another page, the deck comes back first. */
+export function openInDeck(id) {
+  if (!id || id === 'lina') return closeFocus();
+  focus = id;
+  if (!currentRoute() || currentRoute().id !== 'lina') go('lina'); else routerRender();
+}
+/** Back to the overview: Lina big in the middle. */
+export function closeFocus(quiet = false) {
+  if (!focus) return;
+  focus = null;
+  if (!quiet && deck && deck.el.isConnected) routerRender();
+}
+function paintFocus() {
+  deck.el.dataset.focus = focus || '';
+  if (focusView && focusView.unmount) focusView.unmount();
+  if (!focus) { if (focusShown) { deck.focusRoot.replaceChildren(); focusShown = null; focusView = null; } return; }
+  const route = routeList().find(r => r.id === focus);
+  if (!route || route.id === 'lina') { focus = null; return paintFocus(); }
+  focusView = route.view;
+  deck.focusTitle.textContent = route.label;
+  deck.focusRoot.replaceChildren();
+  focusView.render(deck.focusRoot);
+  focusShown = focus;
+}
+
+/* ---------- hello: when the app opens (or Ctrl+R) she greets Kevin, says what matters, and listens ---------- */
+let greetTimer = 0;
+function greetSoon() {
+  clearTimeout(greetTimer);
+  if (!apiConfig() || (state.settings.voice || {}).greet === false) return;
+  // after the entrance, once the status is in (or after 4 s without it)
+  const t0 = Date.now();
+  const go = () => {
+    const s = (linaFeed().data || {}).snapshot;
+    if (!s && Date.now() - t0 < 4000) { greetTimer = setTimeout(go, 300); return; }
+    if (!deck || !deck.el.isConnected || talk.state !== 'idle' || isSpeaking() || document.visibilityState !== 'visible') return;
+    const line = greetingFor(s, agendaFor(todayKey()));
+    setTalk({ state: 'speaking', heard: '', reply: line, tools: [] });
+    speak(line, () => { if (talk.state === 'speaking' && talk.reply === line) { setTalk({ state: 'idle' }); if (canTalk()) listenNow(); } },
+      { what: 'talk', lang: 'de', onBlocked: () => setTalk({ state: 'idle' }) });
+  };
+  greetTimer = setTimeout(go, 1700);
+}
+
 /* ---------- light lines from Lina to each satellite ---------- */
 
 function drawLinks() {
@@ -253,7 +340,7 @@ function drawLinks() {
   for (const [key, el] of Object.entries(deck.sats)) {
     if (el.hidden) continue;
     const r = el.getBoundingClientRect();
-    const tx = (LEFT.includes(key) ? r.right : r.left) - box.left;
+    const tx = (isLeft(Number(el.dataset.slot)) ? r.right : r.left) - box.left;
     const ty = r.top + Math.min(r.height / 2, 28) - box.top;
     const dx = tx - cx, dy = ty - cy, len = Math.hypot(dx, dy) || 1;
     const sx = cx + (dx / len) * r0, sy = cy + (dy / len) * r0;
@@ -285,12 +372,16 @@ function paint() {
   deck.liveVoice.title = problem.length && !s ? problem[0].textContent : 'Lina says new updates out loud while this screen is open';
   deck.liveVoice.setAttribute('aria-pressed', String(announceOn()));
   if (data && data.events) announce(data.events);
-  fill(deck.sats.next, nextSat(s));
-  fill(deck.sats.vault, vaultSat(s && s.vault));
-  fill(deck.sats.workbench, workbenchSat(s && s.workbench));
-  fill(deck.sats.live, liveSat(data));
-  fill(deck.sats.hermes, hermesSat(s));
-  fill(deck.sats.server, serverSat(s));
+  const content = { next: nextSat(s), vault: vaultSat(s && s.vault), workbench: workbenchSat(s && s.workbench), live: liveSat(data), hermes: hermesSat(s), server: serverSat(s) };
+  const ranked = Object.keys(content).filter(k => content[k]).sort((a, b) => importance(b, s, data) - importance(a, s, data));
+  const room = innerHeight >= 760 ? SLOTS : 4;
+  const shown = new Map(ranked.slice(0, room).map((k, i) => [k, i + 1]));
+  for (const [k, el] of Object.entries(deck.sats)) {
+    fill(el, shown.has(k) ? content[k] : null);
+    el.dataset.slot = shown.get(k) || '';
+    el.dataset.rank = shown.has(k) && shown.get(k) <= 2 ? 'top' : '';
+  }
+  paintFocus();
   deck.el.dataset.offline = !s && (!connected || error) ? (connected ? 'server' : 'pair') : '';
 
   const st = talk.state;
@@ -315,11 +406,12 @@ function paint() {
 /* Space or Enter anywhere on the deck (outside a field) talks; Escape stops her. */
 function onKey(e) {
   if (!deck || !deck.el.isConnected) return;
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'r') { playIntro(false); return; }
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'r') { closeFocus(true); playIntro(false); greetSoon(); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
   if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (!e.repeat) toggleTalk(); }
   else if (e.key === 'Escape' && talk.state !== 'idle') { e.preventDefault(); cancelTalk(); }
+  else if (e.key === 'Escape' && focus) { e.preventDefault(); closeFocus(); }
 }
 
 export default {
@@ -337,8 +429,14 @@ export default {
     deck.el.classList.toggle('phone', isPhone());
     // a box that appears or goes, or more lines: glide into the new layout (not on the first paint)
     const shownBefore = layoutSig;
+  // (also when the ranking moves a box to another place)
     if (!fresh && shownBefore) { glide(paint); } else paint();
-    if (fresh) playIntro(true);
+    if (fresh) {
+      playIntro(true);
+      greetSoon();
+      // the status may arrive while the entrance holds renders back: paint once it is over
+      setTimeout(() => { if (deck && deck.el.isConnected) routerRender(); }, 2600);
+    }
     if (!poll) poll = setInterval(() => { if (deck && deck.el.isConnected && document.visibilityState === 'visible') refresh('linaFeed', FEED); }, POLL_MS);
   },
   unmount() {
@@ -349,6 +447,8 @@ export default {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('resize', onResize);
       deck.chrono.destroy();
+      if (focusView && focusView.unmount) focusView.unmount();
+      focusView = null; focusShown = null;
       deck = null;
     }, 0);
   }
