@@ -143,6 +143,7 @@ function workbenchSat(w) {
     satHead('Workbench', w.reachable ? w.active + ' active' : 'not reachable', () => askLina(COMMANDS[5].ask)),
     ...(w.plans || []).slice(0, 3).map(p => h('div.sat-plan', h('div.sat-line', h('span', p.title), h('span.sat-dim.data', p.total ? `${p.done}/${p.total}` : '')),
       h('div.plan-bar', h('i', { style: { width: (p.total ? Math.round((p.done / p.total) * 100) : 0) + '%' } })))),
+    ...(w.attention || []).slice(0, 2).map(a => h('div.sat-line', h('span.status-dot.running'), h('span', a.title))),
     ...w.sessions.slice(0, 3).map(x => h('div.sat-line', h('span', { class: 'status-dot ' + (WB_DOT[x.status] || 'idle') }), h('span', x.title || x.project))),
     h('a.sat-link', { href: WORKBENCH_URL, target: '_blank', rel: 'noopener', title: 'Needs Tailscale' }, 'Open', icon('ext'))
   ];

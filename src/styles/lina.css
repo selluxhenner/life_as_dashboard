@@ -72,7 +72,9 @@
 .sat-sub { font-family: var(--font-data); font-size: var(--fs-micro); color: var(--ink-3); }
 .sat-head:hover .sat-name { text-shadow: var(--glow); }
 .sat-line { display: flex; align-items: center; gap: var(--s-2); font-size: var(--fs-sm); color: var(--ink-2); line-height: 1.35; }
-.sat-line > span:last-child:not(.sat-dim) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sat-line > span:last-child:not(.sat-dim) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sat-line { min-width: 0; max-width: 100%; }
+.sat-event > div:last-child { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
 button.sat-line { background: none; border: 0; padding: 0; font: inherit; color: var(--ink-2); cursor: pointer; text-align: left; justify-content: space-between; }
 button.sat-line:hover { color: var(--ink); }
 .sat-time { color: var(--signal); width: 42px; flex: none; font-size: var(--fs-xs); }
