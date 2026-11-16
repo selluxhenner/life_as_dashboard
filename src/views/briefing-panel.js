@@ -174,22 +174,14 @@ export function briefingPanel() {
   const text = spokenTextOf(b);
   const playingThis = speakingWhat() === 'briefing';
   if (!b.local && b.spoken && !playingThis) prefetchAudio(text, '/api/voice/briefing');   // Listen then starts at once
-  const listenBtn = h('button.btn.sm' + (playingThis ? '' : '.primary'), {
-    type: 'button', title: 'The short spoken version: the few things that matter most',
-    onclick: () => (playingThis ? stopSpeaking() : playBriefing())
-  }, icon(playingThis ? 'pause' : 'volume'), h('span', playingThis ? 'Stop' : 'Listen'), playingThis ? null : h('span.data.muted', `${secondsFor(text)} s`));
-  const asking = talk.state === 'listening' && talk.context === 'briefing';
-  const askBtn = canTalk() ? h('button.btn.sm' + (asking ? '.rec' : ''), {
-    type: 'button', 'aria-pressed': String(asking), title: 'Ask a follow-up by voice',
-    onclick: () => toggleTalk('briefing')
-  }, icon('mic'), asking ? 'Send' : 'Ask') : null;
   const readout = b.local
     ? (apiConfig() ? 'local · server briefing at ' + state.settings.briefingTime : 'local summary')
     : 'generated ' + fmt.time(new Date(b.createdAt || Date.now()));
   const topics = b.spoken && b.spoken.topics ? b.spoken.topics.filter(t => t.label) : [];
   return panel({
     title: 'Morning briefing', readout, cls: 'briefing',
-    actions: [listenBtn, askBtn, apiConfig() ? h('button.btn.sm.ghost', { type: 'button', title: 'Generate again', 'aria-label': 'Generate the briefing again', onclick: () => refresh(true) }, icon('reset')) : null]
+    // no Listen / Ask: Lina reads and answers by voice ("Morning briefing" on her deck)
+    actions: [apiConfig() ? h('button.btn.sm.ghost', { type: 'button', title: 'Generate again', 'aria-label': 'Generate the briefing again', onclick: () => refresh(true) }, icon('reset')) : null]
   },
     h('p.brief-head', b.headline),
     topics.length ? h('div.brief-air', { title: 'What the spoken briefing covers' }, h('span.micro', 'You’ll hear'),
