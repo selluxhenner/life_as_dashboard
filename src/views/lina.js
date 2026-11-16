@@ -7,8 +7,8 @@
 import { h } from '../core/dom.js';
 import { state, save } from '../core/store.js';
 import { fmt, todayKey } from '../core/dates.js';
-import { createChronosphere } from '../components/chronosphere.js';
-import { linaOrb, wakeOrb } from '../components/lina-orb.js';
+import { createChronosphere, replayIntro } from '../components/chronosphere.js';
+import { linaOrb, wakeOrb, introOrb } from '../components/lina-orb.js';
 import { agendaFor } from '../core/agenda.js';
 import { remote, refresh } from '../core/remote.js';
 import { api } from '../core/api.js';
@@ -38,11 +38,14 @@ const REACH = {
   vault: ['search_vault', 'read_note', 'write_vault_note', 'vault_recent', 'add_note'],
   workbench: ['workbench_status', 'start_task', 'task_status', 'cancel_task'],
   next: ['get_today', 'get_calendar', 'list_todos', 'create_todo', 'update_todo', 'complete_todo', 'delete_todo', 'add_calendar_block', 'move_event', 'get_briefing', 'list_habits', 'check_habit', 'schedule_meeting'],
-  live: ['get_updates', 'status_report', 'hermes_answers', 'ask_hermes', 'get_news']
+  live: ['get_updates', 'get_news'],
+  hermes: ['ask_hermes', 'hermes_answers', 'task_status'],
+  server: ['status_report']
 };
+/* Left of her: what's next, Hermes, Workbench. Right: Obsidian, the server, what just came in. */
+const LEFT = ['next', 'hermes', 'workbench'];
 const SOURCE = { hermes: 'Hermes', workbench: 'Workbench', agents: 'Agents', server: 'Server', news: 'News', briefing: 'Briefing', calendar: 'Calendar', jobs: 'Jobs' };
 const sourceName = s => SOURCE[s] || s.charAt(0).toUpperCase() + s.slice(1);
-const STATE_LABEL = { idle: 'Tap or press Space', listening: 'Listening', thinking: 'Thinking', speaking: 'Speaking' };
 
 export const linaFeed = () => remote('linaFeed', FEED, POLL_MS);
 const showText = () => (state.settings.voice || {}).showText === true;
@@ -71,28 +74,38 @@ function announce(events) {
 function build() {
   const chrono = createChronosphere({ lat: state.settings.home.lat, lon: state.settings.home.lon, size: 760 });
   const orb = linaOrb();
-  const label = h('div.lina-state');
   const time = h('div.lina-clock-time.data');
   const core = h('button.lina-core', { type: 'button', 'aria-label': 'Talk to Lina', onclick: () => toggleTalk() }, orb);
   const dial = h('div.lina-dial', chrono.el, core);
   const links = h('svg.lina-links', { 'aria-hidden': 'true' });
-  const sats = { next: h('section.sat.next'), vault: h('section.sat.vault'), workbench: h('section.sat.workbench'), live: h('section.sat.live') };
+  const sats = Object.fromEntries(['next', 'hermes', 'workbench', 'vault', 'server', 'live'].map(k => [k, h('section.sat.' + k)]));
   const textBtn = h('button.lina-textbtn', { type: 'button', onclick: () => setVoice({ showText: !showText() }) });
   const transcript = h('div.lina-transcript', { 'aria-live': 'polite' });
-  const input = h('input.field.lina-ask', {
-    placeholder: 'Ask Lina…', 'aria-label': 'Ask Lina',
-    onkeydown: e => { if (e.key === 'Enter' && input.value.trim()) { const v = input.value; input.value = ''; input.blur(); askLina(v); } }
-  });
-  const chips = h('div.lina-chips', COMMANDS.map(c => h('button.chip-btn', { type: 'button', onclick: () => askLina(c.ask) }, c.label)));
-  const systems = h('div.lina-systems');
-  const liveVoice = h('button.sys.live-voice', { type: 'button', title: 'Lina says new updates out loud while this screen is open', onclick: () => setVoice({ announce: !announceOn() }) });
-  const space = h('div.lina-space', links, sats.next, sats.vault, sats.workbench, sats.live,
-    h('div.lina-center', dial, h('div.lina-under', label, time, textBtn), transcript));
-  const el = h('div.view.lina',
-    h('header.lina-top', h('div.lina-hello', h('span.lina-name', 'LINA'), h('span.dim', fmt.long(new Date()))), systems, liveVoice),
+  const cmds = h('nav.lina-cmds', { 'aria-label': 'Ask Lina' }, COMMANDS.map(c => h('button.cmd', { type: 'button', onclick: () => askLina(c.ask) }, c.label)));
+  const liveVoice = h('button.live-voice', { type: 'button', title: 'Lina says new updates out loud while this screen is open', onclick: () => setVoice({ announce: !announceOn() }) });
+  const space = h('div.lina-space', links, ...Object.values(sats),
+    h('div.lina-center', dial, h('div.lina-under', time, textBtn), transcript));
+  const el = h('div.view.lina.intro',
+    h('header.lina-top', h('div.lina-hello', h('span.lina-name', 'LINA'), h('span.dim', fmt.long(new Date()))), liveVoice),
     space,
-    h('footer.lina-bottom', chips, h('div.lina-command', input)));
-  return { el, chrono, label, time, systems, liveVoice, sats, links, space, core, textBtn, transcript, input };
+    h('footer.lina-bottom', cmds));
+  return { el, chrono, dial, time, liveVoice, sats, links, space, core, textBtn, transcript };
+}
+
+/* The entrance: on the first open and on Ctrl+R only. Updates never replay it. */
+function playIntro(fresh) {
+  if (!fresh) {
+    replayIntro();
+    deck.chrono.destroy();
+    deck.chrono = createChronosphere({ lat: state.settings.home.lat, lon: state.settings.home.lon, size: 760 });
+    deck.dial.replaceChildren(deck.chrono.el, deck.core);
+  }
+  deck.el.classList.remove('intro');
+  void deck.el.offsetWidth;                         // restart the CSS entrance
+  deck.el.classList.add('intro');
+  introOrb();
+  clearTimeout(deck.introTimer);
+  deck.introTimer = setTimeout(() => deck && deck.el.classList.remove('intro'), 2400);
 }
 
 /* ---------- the satellites: plain text around her, shown only when there is something to show ---------- */
@@ -114,7 +127,8 @@ function nextSat(s) {
 }
 
 function vaultSat(v) {
-  if (!v || !v.connected || !v.recent.length) return null;
+  if (!v) return null;
+  if (!v.connected || !v.recent.length) return [satHead('Obsidian', null, () => askLina(COMMANDS[4].ask)), h('div.sat-line.sat-dim', 'Not linked to the server yet')];
   return [
     satHead('Obsidian', v.notes + ' notes', () => askLina(COMMANDS[4].ask)),
     ...v.recent.slice(0, 4).map(n => h('button.sat-line.note', { type: 'button', onclick: () => askLina(`Open my note "${n.path}" and tell me briefly what's in it and where I left off.`) },
@@ -144,6 +158,29 @@ function liveSat(data) {
     satHead('Just in', data.unread ? data.unread + ' new' : null, () => askLina(COMMANDS[3].ask)),
     ...list.map(e => h('div.sat-event' + ((freshUntil.get(e.id) || 0) > Date.now() ? '.fresh' : ''), { dataset: { level: e.level } },
       h('div.sat-dim', sourceName(e.source) + ' · ' + fmt.ago(e.at)), h('div', e.title)))
+  ];
+}
+
+function hermesSat(s) {
+  if (!s) return null;
+  const hm = s.hermes;
+  const waiting = s.tasks.open + s.approvals;
+  const recent = hm.lastAnswer && hm.lastAnswer.at && Date.now() - hm.lastAnswer.at < 86400000;
+  if (hm.online && !hm.openAsks && !recent && !waiting) return null;   // nothing to say: Hermes stays out of the way
+  return [
+    satHead('Hermes', hm.online ? 'online' : hm.lastSeenAt ? 'seen ' + fmt.ago(hm.lastSeenAt) : 'offline', () => askLina(COMMANDS[6].ask)),
+    !hm.online ? h('div.sat-line', h('span.status-dot.error'), h('span', 'The agent box is not checking in')) : null,
+    hm.openAsks ? h('div.sat-line', h('span.status-dot.running'), h('span', hm.openAsks + (hm.openAsks === 1 ? ' question' : ' questions') + ' with Hermes')) : null,
+    waiting ? h('button.sat-line', { type: 'button', onclick: () => go('hub') }, h('span', [s.tasks.open ? s.tasks.open + (s.tasks.open === 1 ? ' task' : ' tasks') + ' running or waiting' : null, s.approvals ? s.approvals + ' waiting for your OK' : null].filter(Boolean).join(' · '))) : null,
+    recent ? h('div.sat-event', h('div.sat-dim', 'Answered ' + fmt.ago(hm.lastAnswer.at)), h('div', hm.lastAnswer.answer.slice(0, 140))) : null
+  ];
+}
+
+function serverSat(s) {
+  if (!s || !s.server || s.server.status === 'ok') return null;
+  return [
+    satHead('Server', s.server.status === 'fail' ? 'needs attention' : 'warning', () => askLina('What is wrong with the server? Give me the short version.')),
+    h('div.sat-event', { dataset: { level: s.server.status === 'fail' ? 'alert' : 'warn' } }, h('div.sat-dim', fmt.ago(s.server.at)), h('div', s.server.summary))
   ];
 }
 
@@ -178,7 +215,7 @@ function drawLinks() {
   for (const [key, el] of Object.entries(deck.sats)) {
     if (el.hidden) continue;
     const r = el.getBoundingClientRect();
-    const tx = (key === 'vault' || key === 'live' ? r.left : r.right) - box.left;
+    const tx = (LEFT.includes(key) ? r.right : r.left) - box.left;
     const ty = r.top + Math.min(r.height / 2, 28) - box.top;
     const dx = tx - cx, dy = ty - cy, len = Math.hypot(dx, dy) || 1;
     const sx = cx + (dx / len) * r0, sy = cy + (dy / len) * r0;
@@ -204,18 +241,21 @@ function fill(el, content) {
 function paint() {
   const { data, connected, error } = linaFeed();
   const s = data && data.snapshot;
-  deck.systems.replaceChildren(...systems(s, connected, error));
   deck.liveVoice.replaceChildren(icon('volume'), announceOn() ? 'Live voice' : 'Live voice off');
+  const problem = systems(s, connected, error);    // only says something when Lina can't reach the server
+  deck.liveVoice.title = problem.length && !s ? problem[0].textContent : 'Lina says new updates out loud while this screen is open';
   deck.liveVoice.setAttribute('aria-pressed', String(announceOn()));
   if (data && data.events) announce(data.events);
   fill(deck.sats.next, nextSat(s));
   fill(deck.sats.vault, vaultSat(s && s.vault));
   fill(deck.sats.workbench, workbenchSat(s && s.workbench));
   fill(deck.sats.live, liveSat(data));
+  fill(deck.sats.hermes, hermesSat(s));
+  fill(deck.sats.server, serverSat(s));
+  deck.el.dataset.offline = !s && (!connected || error) ? (connected ? 'server' : 'pair') : '';
 
   const st = talk.state;
   deck.el.dataset.state = st;
-  deck.label.textContent = STATE_LABEL[st] || '';
   deck.time.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   // no subtitles: her last words only when Kevin opens them, and never while she listens or thinks
   const open = showText();
@@ -233,7 +273,9 @@ function paint() {
 
 /* Space or Enter anywhere on the deck (outside a field) talks; Escape stops her. */
 function onKey(e) {
-  if (!deck || !deck.el.isConnected || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (!deck || !deck.el.isConnected) return;
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'r') { playIntro(false); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
   if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (!e.repeat) toggleTalk(); }
   else if (e.key === 'Escape' && talk.state !== 'idle') { e.preventDefault(); cancelTalk(); }
@@ -242,14 +284,17 @@ function onKey(e) {
 export default {
   id: 'lina',
   render(root) {
+    let fresh = false;
     if (!deck) {
       deck = build();
+      fresh = true;
       window.addEventListener('keydown', onKey);
       window.addEventListener('resize', scheduleLinks);
     }
     root.append(deck.el);
     deck.el.classList.toggle('phone', isPhone());
     paint();
+    if (fresh) playIntro(true);
     if (!poll) poll = setInterval(() => { if (deck && deck.el.isConnected && document.visibilityState === 'visible') refresh('linaFeed', FEED); }, POLL_MS);
   },
   unmount() {

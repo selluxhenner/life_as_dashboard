@@ -36,7 +36,8 @@
 .lina-dial { position: relative; width: min(66vh, 44vw, 720px); aspect-ratio: 1; }
 .lina-dial .chronosphere { width: 100%; --size: 100%; }
 /* the dial is her ring: its own digits, seconds and hand make room for her */
-.lina-dial .chrono-time, .lina-dial .chrono-comet, .lina-dial .chrono-radar, .lina-dial g.center, .lina-dial g.secs, .lina-dial g.hand { display: none; }
+/* the dial is her ring: its digits and seconds make room for her; the hand stays and points at now */
+.lina-dial .chrono-time, .lina-dial .chrono-comet, .lina-dial .chrono-radar, .lina-dial g.center, .lina-dial g.secs { display: none; }
 .lina-core { position: absolute; inset: 0; border: 0; padding: 0; background: none; border-radius: 50%; cursor: pointer; -webkit-app-region: no-drag; }
 .lina-core:focus-visible { outline: 2px solid var(--signal); outline-offset: -12%; }
 .lina-orb { width: 100%; height: 100%; display: grid; place-items: center; transition: transform var(--t-slow) var(--ease-spring, ease); }
@@ -57,11 +58,13 @@
 .lt-reply { font-size: var(--fs-md); font-weight: 300; line-height: 1.45; color: var(--ink); max-height: 7.5em; overflow: auto; }
 
 /* satellites: no frames, just light text in the corners */
-.sat { position: absolute; width: clamp(200px, 19vw, 290px); display: grid; gap: 7px; animation: sat-in .7s var(--ease-spring, ease) both; transition: filter var(--t-base); }
+.sat { position: absolute; width: clamp(200px, 19vw, 290px); display: grid; gap: 7px; transition: filter var(--t-base), opacity var(--t-base); }
 .sat[hidden] { display: none; }
 .sat.next { left: 16px; top: 3%; }
-.sat.vault { right: 16px; top: 3%; }
+.sat.hermes { left: 16px; top: 50%; transform: translateY(-50%); }
 .sat.workbench { left: 16px; bottom: 3%; }
+.sat.vault { right: 16px; top: 3%; }
+.sat.server { right: 16px; top: 50%; transform: translateY(-50%); }
 .sat.live { right: 16px; bottom: 3%; }
 @keyframes sat-in { from { opacity: 0; transform: translateY(8px); filter: blur(4px); } }
 .sat-head { display: flex; align-items: baseline; gap: var(--s-2); background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; text-align: left; }
@@ -81,7 +84,7 @@ button.sat-line:hover { color: var(--ink); }
 .sat-event[data-level='good'] { border-left-color: var(--pulse); }
 .sat-event[data-level='warn'] { border-left-color: var(--amber); }
 .sat-event[data-level='alert'] { border-left-color: var(--flare); }
-.sat-event.fresh { color: var(--ink); animation: feed-in var(--t-slow) var(--ease-spring, ease) both; text-shadow: 0 0 12px color-mix(in oklab, var(--signal) 50%, transparent); }
+.sat-event.fresh { color: var(--ink); text-shadow: 0 0 12px color-mix(in oklab, var(--signal) 50%, transparent); }
 .sat.reached { filter: drop-shadow(0 0 10px color-mix(in oklab, var(--signal) 45%, transparent)); }
 .sat.reached .sat-name { color: var(--ink); text-shadow: var(--glow); }
 .sat.reached .sat-line { color: var(--ink); }
@@ -104,7 +107,7 @@ button.sat-line:hover { color: var(--ink); }
   .lina-space { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-5); align-content: start; min-height: 0; }
   .lina-center { position: static; transform: none; grid-column: 1 / -1; order: -1; }
   .lina-dial { width: min(70vw, 520px); }
-  .sat { position: static; width: auto; }
+  .sat { position: static; width: auto; transform: none !important; }
   .lina-links { display: none; }
 }
 @media (max-width: 860px) {
@@ -148,3 +151,37 @@ html[data-route='lina'] body > canvas { opacity: .38; transition: opacity var(--
 .sat.vault, .sat.live { text-align: left; }
 
 .lina-transcript[hidden] { display: none; }
+
+/* The entrance plays on the first open and on Ctrl+R only (views/lina.js playIntro): updates never replay it. */
+.view.lina.intro .sat { animation: sat-in .9s var(--ease-spring, ease) both; }
+.view.lina.intro .sat.next, .view.lina.intro .sat.vault { animation-delay: .35s; }
+.view.lina.intro .sat.hermes, .view.lina.intro .sat.server { animation-delay: .5s; }
+.view.lina.intro .sat.workbench, .view.lina.intro .sat.live { animation-delay: .65s; }
+.view.lina.intro .sat.hermes, .view.lina.intro .sat.server { animation-name: sat-in-mid; }
+@keyframes sat-in-mid { from { opacity: 0; transform: translateY(calc(-50% + 8px)); filter: blur(4px); } }
+.view.lina.intro .lina-links { animation: links-in 1.4s ease .5s both; }
+@keyframes links-in { from { opacity: 0; } }
+.view.lina.intro .lina-cmds { animation: sat-in .9s ease .8s both; }
+
+/* the commands: a quiet line of words, no buttons until you point at one */
+.lina-cmds { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 0; }
+.lina-cmds .cmd {
+  position: relative; height: 30px; padding: 0 16px; border: 0; background: none; cursor: pointer;
+  font-family: var(--font-data); font-size: var(--fs-micro); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-3);
+  transition: color var(--t-fast), text-shadow var(--t-fast);
+}
+.lina-cmds .cmd + .cmd::before { content: ''; position: absolute; left: -2px; top: 50%; width: 3px; height: 3px; border-radius: 50%; background: var(--seam-strong); transform: translateY(-50%); }
+.lina-cmds .cmd::after { content: ''; position: absolute; left: 16px; right: 16px; bottom: 5px; height: 1px; background: var(--signal); transform: scaleX(0); transition: transform var(--t-base) var(--ease-spring, ease); box-shadow: var(--glow); }
+.lina-cmds .cmd:hover, .lina-cmds .cmd:focus-visible { color: var(--ink); text-shadow: 0 0 14px color-mix(in oklab, var(--signal) 70%, transparent); outline: none; }
+.lina-cmds .cmd:hover::after, .lina-cmds .cmd:focus-visible::after { transform: scaleX(1); }
+.lina-cmds .cmd:active { color: var(--signal); }
+
+.lina-top .live-voice {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; cursor: pointer;
+  border: 1px solid var(--seam); border-radius: var(--r-pill); background: none; color: var(--ink-3);
+  font-family: var(--font-data); font-size: var(--fs-xs);
+}
+.lina-top .live-voice svg { width: 13px; height: 13px; }
+.lina-top .live-voice[aria-pressed='true'] { color: var(--signal); border-color: color-mix(in oklab, var(--signal) 40%, transparent); }
+.view.lina[data-offline='server'] .lina-hello::after { content: '· server not reachable'; font-family: var(--font-data); font-size: var(--fs-xs); color: var(--flare); }
+.view.lina[data-offline='pair'] .lina-hello::after { content: '· pair this device in Settings'; font-family: var(--font-data); font-size: var(--fs-xs); color: var(--amber); }

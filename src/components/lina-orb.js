@@ -39,7 +39,7 @@ export function linaOrb() {
   const el = h('div.lina-orb', canvas);
   const ctx = canvas.getContext('2d');
   let raf = 0, t0 = performance.now(), spin = 0, energy = 0, voice = 0, think = 0, listen = 0, tone = null;
-  let colors = null, colorsAt = 0, lastState = '', size = 0;
+  let colors = null, colorsAt = 0, lastState = '', size = 0, introAt = -1;
   const ripples = [];                             // [born, strength] while listening
   let lastRipple = 0;
 
@@ -81,7 +81,11 @@ export function linaOrb() {
     const [r, g, b] = tone;
     const col = a => `rgba(${r},${g},${b},${a})`;
 
-    const s = size, c = s / 2, R = s * 0.2 * (1 + energy * 0.1);
+    // the entrance (first open, Ctrl+R): the sphere gathers from a spark, a ring flashes out
+    const ip = introAt < 0 ? 1 : Math.min(1, (now - introAt) / 1600);
+    if (ip >= 1) introAt = -1;
+    const grow = ip >= 1 ? 1 : 1 - Math.pow(1 - ip, 3) * Math.cos(ip * 5);   // eases out with a small overshoot
+    const s = size, c = s / 2, R = s * 0.2 * (1 + energy * 0.1) * Math.max(0.02, grow);
     ctx.clearRect(0, 0, s, s);
 
     // glow
@@ -91,6 +95,13 @@ export function linaOrb() {
     glow.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, s, s);
+
+    if (ip < 1) {
+      const fr = ip * 1.4;
+      ctx.strokeStyle = col(Math.max(0, 0.8 * (1 - fr)));
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(c, c, s * 0.06 + fr * s * 0.42, 0, TAU); ctx.stroke();
+    }
 
     // thinking: particles pulled in from the edge
     if (think > 0.02) {
@@ -184,10 +195,13 @@ export function linaOrb() {
   }
   const schedule = () => { if (!raf) raf = requestAnimationFrame(frame); };
 
-  orb = { el, start: schedule };
+  orb = { el, start: schedule, intro: () => { introAt = performance.now(); schedule(); } };
   schedule();
   return el;
 }
 
 /** Make sure the orb is drawing (after the deck re-attached it). */
 export const wakeOrb = () => orb && orb.start();
+
+/** Play the entrance (first open, Ctrl+R). */
+export const introOrb = () => orb && orb.intro();
