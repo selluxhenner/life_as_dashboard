@@ -68,6 +68,8 @@ const TASK_STATUS = {
 };
 const WHO = { hermes: 'Hermes', workbench: 'Workbench', server: 'Server' };
 const OPEN = ['awaiting_approval', 'queued', 'running'];
+// where a task came from; lina-watch: Lina proposed it herself after an ops report or a service going down
+const SOURCE = { 'lina-watch': 'proposed by Lina', voice: 'by voice', chat: 'from chat', phone: 'by phone', app: 'from the app' };
 export const tasksData = () => remote('tasks', '/api/tasks?limit=8', 60000);
 
 function agentTasks(connected) {
@@ -83,10 +85,11 @@ function agentTasks(connected) {
     const [label, tone, cls, dot] = TASK_STATUS[t.status] || [t.status, null, 'plain', ''];
     const last = t.result || (t.progress.length ? t.progress[t.progress.length - 1].note : null);
     const link = t.links.pr || t.links.url;
-    const what = t.kind === 'server-op' ? [t.params.verb, ...(t.params.args || [])].join(' ') : t.kind === 'job' ? 'job ' + t.params.job : t.params.project;
+    const what = t.kind === 'server-op' ? [t.params.verb, ...(t.params.args || [])].join(' ') : t.kind === 'job' ? 'job ' + t.params.job
+      : `${t.params.agent === 'codex' ? 'Codex' : 'Claude'} in ${t.params.project}${t.links.device ? ' on ' + t.links.device : ''}`;
     return h('article.task' + (t.status === 'awaiting_approval' ? '.approval' : ''),
       h('div.ap-head', h('span.row-lead', h('span', { class: 'status-dot ' + dot }), h('b', t.title)), chip(t.stale ? 'no news for 2 h' : label, t.stale ? 'warn' : tone, cls)),
-      h('div.task-sub', [WHO[t.target] || t.target, what, t.source, fmt.ago(t.finishedAt || t.updatedAt)].filter(Boolean).join(' · ')),
+      h('div.task-sub', [WHO[t.target] || t.target, what, SOURCE[t.source] || t.source, fmt.ago(t.finishedAt || t.updatedAt)].filter(Boolean).join(' · ')),
       last ? h('div.task-result', last) : null,
       link ? h('a.task-link', { href: link, target: '_blank', rel: 'noopener' }, t.links.pr ? 'Pull request' : 'Open', icon('ext')) : null,
       t.status === 'awaiting_approval' && t.approvalId ? h('div.input-row',
