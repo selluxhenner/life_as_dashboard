@@ -70,6 +70,28 @@ export function isClosing(text) {
   return w.every(x => CLOSE_LEAD.has(x) || CLOSE_CORE.has(x) || CLOSE_TAIL.has(x));
 }
 
+/* "Hey Lina, öffne mir den Kalender", "show me the inbox", "zurück": opening a page needs no model. Returns the page
+   or null. Only short requests that are about a page and nothing else. */
+const PAGE_WORDS = [
+  ['calendar', /\b(kalender|calendar|termine?|agenda)\b/], ['captures', /\b(captures?|notizen|notes|capture)\b/],
+  ['inbox', /\b(inbox|posteingang|mails?|e-?mails?|postfach)\b/], ['world', /\b(world ?view|world|welt(karte|ansicht)?|news|nachrichten|karte|map)\b/],
+  ['settings', /\b(settings|einstellungen|optionen)\b/], ['today', /\b(today|heute|tagesansicht)\b/],
+  ['plan', /\b(plan|planung|ziele|goals|board)\b/], ['hub', /\b(hub|geräte|devices|agents?)\b/],
+  ['home', /\b(home|übersicht|overview|startseite)\b/], ['jobs', /\b(jobs?|job hunt|bewerbungen)\b/],
+  ['ai', /\b(ai|ki)( models?| modelle)?\b/], ['chat', /\b(chat)\b/], ['lina', /\b(lina|dich)\b/]
+];
+const OPEN_VERB = /^(?:(?:hey|hi|ok(?:ay)?|bitte|please|kannst du|can you|lina)[\s,!.]+)*(?:öffne|öffnen|öffnest|mach|zeig|zeige|zeigst|geh|gehe|wechsel|wechsle|bring|open|show|go|switch|take)\b/;
+export function pageFor(text) {
+  const t = String(text || '').toLowerCase().normalize('NFC').replace(/[^\p{L}\p{N}\s-]/gu, ' ').replace(/\s+/g, ' ').trim();
+  if (!t || t.split(' ').length > 9) return null;
+  if (/^(zurück|back|go back|zurück zu lina|back to lina)$/.test(t)) return 'lina';
+  if (!OPEN_VERB.test(t)) return null;
+  if (/\b(und|and|dann|then|sortier|sort|füg|add|lösch|delete|schreib|write)\b/.test(t)) return null;   // more than opening: the model
+  const rest = t.replace(OPEN_VERB, '');
+  for (const [page, re] of PAGE_WORDS) if (re.test(rest)) return page;
+  return null;
+}
+
 /** en | de for the voice, from the reply itself (Lina answers in English or Standard German). */
 const DE_WORDS = /\b(ich|du|dein|deine|der|die|das|und|ist|nicht|um|uhr|für|mit|habe|hab|eine?n?|heute|morgen|soll|schicke?|termin|einladung|erledigt|wann|wer|wie|gerne?)\b/gi;
 const EN_WORDS = /\b(i|you|your|the|and|is|not|at|for|with|have|a|an|today|tomorrow|shall|send|meeting|invite|done|when|who|how)\b/gi;
@@ -106,17 +128,18 @@ const speak = (text, lang) => synthesize({ text, lang, fast: true }).then(r => r
 async function instantTurn(plan, heard, cid) {
   let early = null;
   if (plan.calls.length && plan.expect) { early = speak(plan.expect, plan.lang); early.catch(() => {}); }
-  let reply = plan.reply || '', pending = [], tools = [];
+  let reply = plan.reply || '', pending = [], tools = [], ui = [];
   if (plan.calls.length) {
     const r = await runDirect(plan.calls);
     tools = r.tools;
+    ui = r.ui || [];
     const failed = r.results.find(x => x.isError);
     const waits = r.results.some(x => x.queued || x.result?.waiting);
     if (failed) reply = SAY[plan.lang].fail + failed.content.replace(/^Tool failed: /, '');
     else reply = waits ? plan.ask || plan.done : plan.done;
     if (waits) pending = db.all("SELECT id, summary FROM agent_actions WHERE run_id = ? AND status = 'pending' ORDER BY created_at", r.runId);
   }
-  return { reply, lang: plan.lang, pending, tools, cid: recordExchange(cid, heard, reply), early: reply === plan.expect ? early : null };
+  return { reply, lang: plan.lang, pending, tools, ui, cid: recordExchange(cid, heard, reply), early: reply === plan.expect ? early : null };
 }
 
 const instantOn = () => quickFor('voice') && getSetting('lina').instant !== false;
@@ -197,7 +220,7 @@ export async function linaTurn({ audio, type, prepared: prepId, conversationId, 
   if (viaWake && !saidLina(raw)) return { heard: '', reply: '', lang: 'en', conversationId, awaiting: [], listen: false, audio: null, falseWake: true };
   const heard = stripWake(raw);
   let reply = '', lang = 'en', pending = [], cid = conversationId, early = null, plan = null;
-  let tools = [];
+  let tools = [], ui = [];
   const waiting = awaiting.length ? db.all(`SELECT id, tool FROM agent_actions WHERE status = 'pending' AND id IN (${awaiting.map(() => '?').join(',')})`, ...awaiting) : [];
   const tasks = waitingTasks(awaiting);
   const yn = waiting.length || tasks.length ? yesNo(heard) : null;
@@ -206,6 +229,11 @@ export async function linaTurn({ audio, type, prepared: prepId, conversationId, 
     if (!viaWake || !raw.trim()) return { heard: '', reply: '', lang, conversationId: cid, awaiting: [], listen: false, audio: null };
     lang = /^\W*(hallo|hoi)\b/i.test(raw) ? 'de' : 'en';
     reply = SAY[lang].empty;                                       // only "Hey Lina" so far: ask what he wants
+  } else if (!yn && !(waiting.length || tasks.length) && (ui = pageFor(heard) ? [{ action: 'open_page', data: { page: pageFor(heard) } }] : []).length) {
+    // "öffne den Kalender": the app opens it, she just says okay
+    lang = guessLang(heard) === 'de' || /\b(öffne|zeig|geh|wechsel|zurück|mir)\b/i.test(heard) ? 'de' : 'en';
+    reply = 'Okay.';
+    cid = recordExchange(cid, heard, reply);
   } else if (!yn && isClosing(heard)) {
     // "danke" / "thanks, that's all": nothing more to say; the app goes back to rest
     return { heard, reply: '', lang, conversationId: cid, awaiting: [], tools: [], listen: false, audio: null, end: true, ms: { stt: t1 - t0, think: 0, voice: 0 } };
@@ -226,9 +254,10 @@ export async function linaTurn({ audio, type, prepared: prepId, conversationId, 
              (plan = planCommand(heard, loadWorld()))) {
     const r = await instantTurn(plan, heard, cid);
     ({ reply, lang, pending, tools, early } = r);
+    ui = r.ui || [];
     cid = r.cid;
   } else {
-    const onEvent = ev => { if (ev.type === 'tool') tools.push({ name: ev.name, status: ev.status, summary: ev.summary }); };
+    const onEvent = ev => { if (ev.type === 'tool') tools.push({ name: ev.name, status: ev.status, summary: ev.summary }); else if (ev.type === 'ui') ui.push({ action: ev.action, data: ev.data }); };
     const r = await runAgent({ message: heard, conversationId: cid, trigger: 'voice', onEvent, extraSystem: voiceContext(context) + (acked ? ACKED : '') });
     cid = r.conversationId;
     reply = r.answer;
@@ -243,7 +272,7 @@ export async function linaTurn({ audio, type, prepared: prepId, conversationId, 
     catch (e) { voiceError = e.message; }                          // the device speaks it with its own voice then
   }
   return {
-    heard, reply, lang, conversationId: cid, awaiting: pending, tools,
+    heard, reply, lang, conversationId: cid, awaiting: pending, tools, ui,
     listen: pending.length > 0 || /\?\s*$/.test(reply), audio: mp3, voiceError,
     instant: !!plan, ahead: !!prep, ms: { stt: t1 - t0, think: t2 - t1, voice: Date.now() - t2 }
   };

@@ -20,6 +20,8 @@ import { isPhone } from '../core/platform.js';
 let filter = 'all';
 let sort = 'new';
 let query = '';
+/** Lina sorted the captures: show them grouped by area, all of them. */
+export function showByArea() { sort = 'type'; filter = 'all'; query = ''; }
 let editingId = null;
 const skipped = new Set();
 let keyHandler = null;

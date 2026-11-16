@@ -20,9 +20,11 @@
   position: relative;
   z-index: var(--z-app);
   display: grid;
-  grid-template-columns: 76px 1fr;
+  /* One page: no rail. Lina's deck is home; she opens everything else by voice ("open the calendar"), Esc or the wordmark
+     goes back. The rail is still built (keyboard shortcuts, the palette) but not shown. */
+  grid-template-columns: 1fr;
   grid-template-rows: 52px 1fr;
-  grid-template-areas: 'rail status' 'rail main';
+  grid-template-areas: 'status' 'main';
   min-height: 100vh;
   /* Nothing in a view may widen the page. On Android a too-wide view makes the WebView zoom out
      and grow the layout viewport, so the fixed dock stretches past the screen and drifts when panned.
@@ -31,7 +33,8 @@
 }
 
 /* ---------- rail ---------- */
-.rail {
+.rail { display: none !important; }
+.rail-unused {
   grid-area: rail;
   position: sticky; top: 0;
   height: 100vh;
@@ -92,7 +95,9 @@
 .status button, .status a, .status input { -webkit-app-region: no-drag; }
 .status .wordmark { font-family: var(--font-ui); font-size: var(--fs-sm); font-weight: 600; letter-spacing: .02em; color: var(--ink); }
 .status .wordmark span { color: var(--signal); }
-.status .crumb { color: var(--ink-2); }
+.status .crumb, .status .wordmark { background: none; border: 0; padding: 0; cursor: pointer; -webkit-app-region: no-drag; }
+.status .crumb { color: var(--ink-2); font: inherit; }
+.status .crumb:hover, .status .wordmark:hover { color: var(--signal); }
 .status .sep { width: 1px; height: 16px; background: var(--seam); }
 .status .push { margin-left: auto; }
 .status .clock { color: var(--ink); font-size: var(--fs-sm); }
@@ -126,7 +131,7 @@ html.win-blurred .status .win button:not(:hover) { color: var(--ink-3); }
    The status bar stays the drag area. */
 .is-mac-app .status .win { display: none; }
 .is-mac-app .status { padding-right: var(--s-6); }
-.is-mac-app .rail { padding-top: 52px; }
+.is-mac-app .status { padding-left: 88px; }   /* the traffic lights sit at the bar's start now */
 
 /* Desktop: the window is the app. Only <main> scrolls, so the title bar reaches the window's
    right edge and the scrollbar starts below it, as in a native app. */

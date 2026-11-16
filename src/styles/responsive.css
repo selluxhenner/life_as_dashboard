@@ -21,7 +21,7 @@
 /* ---------- laptop ---------- */
 @media (min-width: 861px) and (max-height: 900px), (min-width: 861px) and (max-width: 1440px) {
   :root { --fs-hero: clamp(32px, min(4vw, 7vh), 58px); --fs-3xl: 30px; }
-  .app { grid-template-columns: 64px 1fr; grid-template-rows: 44px 1fr; }
+  .app { grid-template-rows: 44px 1fr; }   /* one column: the rail is gone */
   .rail { padding: var(--s-2) 0; }
   .rail .mark { width: 34px; height: 34px; margin-bottom: var(--s-2); }
   .rail .mark svg { width: 26px; height: 26px; }
