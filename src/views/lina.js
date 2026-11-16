@@ -91,14 +91,16 @@ function build() {
   const focusTitle = h('span.focus-title');
   const focusRoot = h('div.lina-focus-view');
   const focusBar = h('div.lina-focus-bar', h('button.focus-back', { type: 'button', onclick: () => closeFocus(), title: 'Back to the overview (Esc)' }, icon('left'), 'Overview'), focusTitle);
-  const space = h('div.lina-space', links, ...Object.values(sats),
+  // two columns beside her; the boxes stack in them by rank (left: 1st, 3rd, 5th; right: 2nd, 4th, 6th)
+  const colL = h('div.sat-col.left'), colR = h('div.sat-col.right');
+  const space = h('div.lina-space', links, colL, colR,
     h('div.lina-center', dial, h('div.lina-under', time, textBtn), transcript),
     h('div.lina-focus', focusBar, focusRoot));
   const el = h('div.view.lina.intro',
     h('header.lina-top', h('div.lina-hello', h('span.lina-name', 'LINA'), h('span.dim', fmt.long(new Date()))), liveVoice),
     space,
     h('footer.lina-bottom', cmds));
-  return { el, chrono, dial, time, liveVoice, sats, links, space, core, textBtn, transcript, focusRoot, focusTitle };
+  return { el, chrono, dial, time, liveVoice, sats, links, space, core, textBtn, transcript, focusRoot, focusTitle, colL, colR };
 }
 
 /* The entrance: on the first open and on Ctrl+R only. Updates never replay it. */
@@ -381,6 +383,12 @@ function paint() {
     el.dataset.slot = shown.get(k) || '';
     el.dataset.rank = shown.has(k) && shown.get(k) <= 2 ? 'top' : '';
   }
+  // into the columns in rank order (only moved when the order changed, so nothing restarts)
+  const order = [...shown.entries()].sort((a, b) => a[1] - b[1]).map(([k]) => k);
+  const place = (col, keys) => { const want = keys.map(k => deck.sats[k]); if (want.some((el, i) => col.children[i] !== el) || col.children.length !== want.length) col.replaceChildren(...want); };
+  place(deck.colL, order.filter((k, i) => i % 2 === 0));
+  place(deck.colR, order.filter((k, i) => i % 2 === 1));
+  for (const [k, el] of Object.entries(deck.sats)) if (!shown.has(k) && el.parentNode) el.remove();
   paintFocus();
   deck.el.dataset.offline = !s && (!connected || error) ? (connected ? 'server' : 'pair') : '';
 
