@@ -201,7 +201,7 @@ async function converse(context, { followUp = false } = {}) {
         if (r.reply === ahead.text || barged) continue;           // it went as she said, or he cut in: listen again
         set({ state: 'thinking' });                               // it didn't (a calendar error …): say what happened
       }
-      if (r.end) break;                                         // "danke", "das wär's": back to rest, nothing said
+      if (r.end) break;                                         // a closing "thanks" (the server decides): back to rest, nothing said
       if (!r.heard) { if (!turn && !followUp) toast('Didn’t catch that. Tap and try again.', 'amber'); break; }
       if (!r.reply) { set({ heard: r.heard }); continue; }
       last = { heard: r.heard, reply: r.reply };
