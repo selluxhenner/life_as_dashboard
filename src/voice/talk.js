@@ -20,7 +20,8 @@ import { state } from '../core/store.js';
 const MAX_TURNS = 8;
 const FIRST_WAIT = 8000, NEXT_WAIT = 6000;      // how long she waits for you to start talking
 // source 'wake': the desktop's "Hey Lina" (voice/wake.js) records and ends by itself in its own helper.
-export const talk = { state: 'idle', context: null, heard: '', reply: '', source: null, at: 0 };
+// tools: what she used for the current answer (Lina's deck lights up the line to Obsidian, Workbench, Up next …)
+export const talk = { state: 'idle', context: null, heard: '', reply: '', source: null, at: 0, tools: [] };
 let run = 0, mic = null, endSpeech = null;
 let barged = null;
 let cuts = 0;                          // taps that stopped her mid-answer                     // what he said over her (watchBarge): the next turn starts with it
@@ -53,7 +54,7 @@ export async function askLina(text, { context = null, listenAfter = true } = {})
   if (!apiConfig()) { toast('Pair this device in Settings to talk to Lina.', 'amber'); return; }
   if (talk.state !== 'idle') await cancelTalk();
   const my = ++run;
-  set({ state: 'thinking', heard: text, reply: '', source: 'text', context });
+  set({ state: 'thinking', heard: text, reply: '', source: 'text', context, tools: [] });
   barged = null;
   const c0 = cuts;
   // the microphone opens now, so he can talk over her answer (barge-in) and simply go on
@@ -62,6 +63,7 @@ export async function askLina(text, { context = null, listenAfter = true } = {})
   // starts as fast as a short one. The rest follows when the first part ends, unless he talked over her.
   let shown = 0, first = null, firstSaid = null;
   const reply = await sendToAgent(text, { viaVoice: true, context, speakReply: false,
+    onTool: name => { if (my === run) set({ tools: [...talk.tools, name] }); },
     onText: t => {
       if (my !== run) return;
       if (!first) {
@@ -174,7 +176,7 @@ async function converse(context, { followUp = false } = {}) {
       });
       if (my !== run) return;
       if (!wav) { if (!turn && !followUp) toast('Didn’t catch that. Tap and try again.', 'amber'); break; }
-      set({ state: 'thinking' });
+      set({ state: 'thinking', tools: [] });
       const opts = { type: 'audio/wav', conversationId: chatConversationId(), context, awaiting: Date.now() - awaiting.at < 10 * 60000 ? awaiting.ids : '' };
       const id = prep ? await prep : null;
       // "Zack, zack": the expected answer is already voiced, so she says it now while the turn saves the change
@@ -192,12 +194,14 @@ async function converse(context, { followUp = false } = {}) {
       catch (e) { if (my === run) toast(e.message, 'flare'); break; }
       if (my !== run) return;
       logVoiceExchange(r);
+      if (r.tools && r.tools.length) set({ tools: r.tools.map(t => t.name) });
       if (r.tools && r.tools.length) runSync();                    // what she changed shows up right away
       awaiting = { ids: (r.awaiting || []).map(a => a.id).join(','), at: Date.now() };
       if (said) {
         if (r.reply === ahead.text || barged) continue;           // it went as she said, or he cut in: listen again
         set({ state: 'thinking' });                               // it didn't (a calendar error …): say what happened
       }
+      if (r.end) break;                                         // "danke", "das wär's": back to rest, nothing said
       if (!r.heard) { if (!turn && !followUp) toast('Didn’t catch that. Tap and try again.', 'amber'); break; }
       if (!r.reply) { set({ heard: r.heard }); continue; }
       last = { heard: r.heard, reply: r.reply };

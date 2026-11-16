@@ -23,7 +23,7 @@ export const pendingActions = () => remote('actions', '/api/agent/actions?status
  * Sends a message to the agent and streams the reply into the shared chat. Returns the reply text (null if not sent).
  * context = what Kevin just listened to ('briefing' | 'world'); speakReply defaults to "came in by voice or Speak replies on".
  */
-export async function sendToAgent(text, { viaVoice = false, context = null, speakReply, onText } = {}) {
+export async function sendToAgent(text, { viaVoice = false, context = null, speakReply, onText, onTool } = {}) {
   if (!text.trim() || streaming) return null;
   const cfg = apiConfig();
   if (!cfg) { toast('Pair this device in Settings to talk to Lina.', 'amber'); return null; }
@@ -53,7 +53,7 @@ export async function sendToAgent(text, { viaVoice = false, context = null, spea
         let ev; try { ev = JSON.parse(line); } catch { continue; }
         if (ev.type === 'start') conv.id = ev.conversationId;
         else if (ev.type === 'text') { reply.text += ev.text; onText?.(reply.text); }
-        else if (ev.type === 'tool') reply.tools.push({ name: ev.name, status: ev.status, summary: ev.summary });
+        else if (ev.type === 'tool') { reply.tools.push({ name: ev.name, status: ev.status, summary: ev.summary }); onTool?.(ev.name); }
         else if (ev.type === 'error') reply.text += '\n[' + ev.message + ']';
         notify();
       }
