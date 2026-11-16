@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const ALLOW = ['core/migrations.js', 'core/goals.js', 'features/capture/captures.js', 'voice/tts.js'];
+const ALLOW = ['core/migrations.js', 'core/goals.js', 'features/capture/captures.js', 'voice/tts.js', 'voice/greeting.js'];   // greeting.js: Lina's spoken hello in German
 const GERMAN = /[äöüÄÖÜß]|\b(Heute|Woche|Ziele|Bewerbung|Hinzufügen|erledigt|Tagesplan|Speichern|Verbinden|Schliessen|Nächster|offen)\b/;
 
 function files(dir) {

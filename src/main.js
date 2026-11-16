@@ -30,7 +30,7 @@ import { talk, toggleTalk } from './voice/talk.js';
 import { mountVoicePill } from './components/voice-pill.js';
 import COUNTRIES from './assets/country-centroids.json';
 
-import lina from './views/lina.js';
+import lina, { closeFocus } from './views/lina.js';
 import home from './views/home.js';
 import today from './views/today.js';
 import calendar from './views/calendar.js';
@@ -113,7 +113,7 @@ const clockEl = h('span.clock.data');
 const weatherEl = h('span.hide-m.weather');
 const syncBtn = h('button.sync', { type: 'button', onclick: () => go('settings') });
 const pointsEl = h('span.hide-m');
-const crumb = h('button.crumb', { type: 'button', title: 'Back to Lina (Esc)', onclick: () => go('lina') });
+const crumb = h('button.crumb', { type: 'button', title: 'Back to Lina (Esc)', onclick: () => { closeFocus(); go('lina'); } });
 /* The voice agent from anywhere. On Home it knows the briefing, on World the news digest. */
 const talkContext = () => ({ home: 'briefing', news: 'world' })[currentRoute() && currentRoute().id] || null;
 const talkBtn = h('button.talk', { type: 'button', 'aria-label': 'Talk to Lina', title: 'Talk to Lina', onclick: () => toggleTalk(talkContext()) }, icon('mic'));
@@ -211,7 +211,7 @@ function paintMaximized(on) {
 
 function statusBar() {
   return h('header.status', { 'data-tauri-drag-region': 'deep' },
-    h('button.wordmark', { type: 'button', title: 'Back to Lina (Esc)', onclick: () => go('lina') }, 'AGENTIC', h('span', '/'), 'OS'),
+    h('button.wordmark', { type: 'button', title: 'Back to Lina (Esc)', onclick: () => { closeFocus(); go('lina'); } }, 'AGENTIC', h('span', '/'), 'OS'),
     h('span.sep.hide-m'), crumb,
     h('span.push'),
     weatherEl, pointsEl,
