@@ -53,11 +53,11 @@ import { initDesktopWake } from './voice/wake.js';
 
 const ROUTES = [
   { id: 'lina', label: 'Lina', short: 'Lina', icon: 'agent', view: lina, dock: true, key: 'G L' },
-  { id: 'home', label: 'Home', short: 'Overview', icon: 'home', view: home, dock: true, key: 'G H' },
+  { id: 'home', label: 'Home', short: 'Overview', icon: 'home', view: home, key: 'G H' },   // in More on the phone: Lina is home
   { id: 'captures', label: 'Captures', short: 'Notes', icon: 'capture', view: captures, dock: true, key: 'G N' },
   { id: 'today', label: 'Today', icon: 'today', view: today, dock: true, key: 'G T' },
   { id: 'calendar', label: 'Calendar', icon: 'calendar', view: calendar, dock: true, key: 'G C' },
-  { id: 'inbox', label: 'Inbox', icon: 'inbox', view: inbox, key: 'G I' },
+  { id: 'inbox', label: 'Inbox', icon: 'inbox', view: inbox, dock: true, key: 'G I' },
   { id: 'news', label: 'World', icon: 'globe', view: news, key: 'G W' },
   // AI and Jobs open from their cards on Home; still reachable with Ctrl K and G A / G J
   { id: 'ai', label: 'AI', icon: 'spark', view: ai, key: 'G A', nav: false },
