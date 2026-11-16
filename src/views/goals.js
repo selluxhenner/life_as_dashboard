@@ -19,7 +19,7 @@ import {
 } from '../core/board.js';
 
 // Workbench on the home PC, reachable inside the tailnet only
-const WORKBENCH_URL = 'https://kev-pc.tailb66bb7.ts.net';
+const WORKBENCH_URL = 'https://desktop-oe7cumo.tailb66bb7.ts.net';
 const KIND_COLOR = { private: 'var(--tone-samerica)', next: 'var(--amber)', project: 'var(--signal)' };
 const PRIO_COLOR = { high: 'var(--flare)', med: 'var(--amber)', low: 'var(--ink-3)' };
 
