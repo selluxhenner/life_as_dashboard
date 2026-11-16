@@ -103,7 +103,7 @@ buttons into `approve`/`reject` calls with its own full-scope token. **Who consu
 calls `consume` right before it runs the verb, so a second run with the same id is refused. Both live in
 `selluxhenner/agent-box` (`phase1/main-server/`).
 
-## agent-tasks 1.0.0
+## agent-tasks 1.1.0
 
 Work Lina (or Kevin in the app) hands to an agent, with its whole life in one place: approval, start, progress,
 result. A task that needs Kevin's OK creates an ordinary approval (source `lina`), so the phone, the Hub and the
@@ -113,7 +113,7 @@ task's, so Hermes passes the task's `approvalId` to `agent-ops.sh`, which consum
 | kind | target | params | needs approval |
 |---|---|---|---|
 | `server-op` | `hermes` | `{verb, args}`: a verb of `agent-ops.sh`, args as for approvals | write verbs (`restart-container`, `pm2-restart`, `deploy`, `prune-docker`, `rotate-logs`, `renew-cert`); read verbs (`status`, `pm2`, `docker`, `web`, `backups`, `errors`, `crawler`) don't |
-| `coding` | `workbench` | `{project, prompt}`: a hub project id, 10–4000 characters | always (approval verb `coding-session`, args `[project]`) |
+| `coding` | `workbench` | `{project, prompt, agent?, profile?}`: a hub project id, 10–4000 characters, `claude` (default) or `codex`, a Workbench profile id | always, once (approval verb `coding-session`, args `[project, agent]`); the box's `workbench-relay` then starts it with an orch token, so Workbench doesn't ask again |
 | `job` | `server` | `{job}`: `refresh`, `calendar`, `news`, `digest`, `briefing`, `triage`, `hub` or `aimodels` | no; this server runs it at once |
 
 **Lifecycle:** `awaiting_approval` → `queued` → `running` → `done` | `failed`. Off the path: `rejected` and `expired`
@@ -123,12 +123,12 @@ task's, so Hermes passes the task's `approvalId` to `agent-ops.sh`, which consum
 |---|---|---|
 | `POST /api/tasks` `{kind, title, params, reason?, ttlMinutes?}` | full | `201` task. `title` 3–120 characters, `reason` up to 300 (shown on the approval), `ttlMinutes` 5–1440 (approval lifetime, default 60) |
 | `GET /api/tasks?active=1&limit=` | full | newest first; `active=1`: only waiting, queued or running |
-| `GET /api/tasks/:id` | full; ops for `hermes` tasks | the task |
+| `GET /api/tasks/:id` | full; ops for `hermes` and `workbench` tasks | the task |
 | `POST /api/tasks/:id/cancel` | full | `cancelled`; withdraws its approval if not used yet; `409` once over |
-| `GET /api/tasks/queue` | ops | `hermes` tasks ready to start (`queued`), oldest first, at most 10. No side effects, so a monitor can diff it |
+| `GET /api/tasks/queue?target=` | ops | tasks of `target` (`hermes`, the default, or `workbench`) ready to start (`queued`), oldest first, at most 10. No side effects, so a monitor can diff it |
 | `POST /api/tasks/:id/start` | ops | `running`, `worker` set; `409` unless `queued` (so it starts once) |
 | `POST /api/tasks/:id/progress` `{note}` | the worker | appends a note (1–300 characters, the last 20 kept); `409` if no longer running: stop, Kevin cancelled |
-| `POST /api/tasks/:id/finish` `{status, result, links?}` | the worker | `done` or `failed`, `result` 1–4000 characters, `links` `{pr?, url?, report?}` (http(s) URLs, an ops report id); push to Kevin |
+| `POST /api/tasks/:id/finish` `{status, result, links?}` | the worker | `done` or `failed`, `result` 1–4000 characters, `links` `{pr?, url?, report?, device?}` (http(s) URLs, an ops report id, where a coding session ran); push to Kevin |
 
 A task answers in camelCase:
 
@@ -145,7 +145,11 @@ A task answers in camelCase:
   for Kevin's approval, also for a read verb, and its approval `reason` starts with "Lina suggests:". Workers treat it
   like any other task.
 - `stale` is true for a running task without progress for 2 hours.
-- Ops tokens can't create, list or cancel tasks and only see `hermes` tasks. Only the token that started a task may
+- Kevin can also decide through Lina (her `decide_approval` tool, `decided_by: lina-chat|lina-voice|lina-phone`): only
+  in his own conversations, never in a background run. 1.1.0 added `agent`/`profile` on `coding`, `?target=` on the
+  queue, ops access to `workbench` tasks and `links.device`.
+- Ops tokens can't create, list or cancel tasks and only see `hermes` and `workbench` tasks (the box runs both: Hermes the
+  server verbs, `workbench-relay` the coding sessions). Only the token that started a task may
   report progress or finish it.
 - **The Hermes loop:** poll `GET /tasks/queue`. For each task, `start` it, run
   `ssh hetzner-ops <verb> <args...> [--approval <approvalId>]`, post `progress` as useful, then `finish` with what
