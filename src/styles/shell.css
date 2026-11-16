@@ -20,7 +20,7 @@
   position: relative;
   z-index: var(--z-app);
   display: grid;
-  /* One page: no rail. Lina's deck is home; she opens everything else ("öffne den Kalender"), Esc or the wordmark
+  /* One page: no rail. Lina's deck is home; she opens everything else by voice ("open the calendar"), Esc or the wordmark
      goes back. The rail is still built (keyboard shortcuts, the palette) but not shown. */
   grid-template-columns: 1fr;
   grid-template-rows: 52px 1fr;
