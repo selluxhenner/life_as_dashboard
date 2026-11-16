@@ -141,6 +141,8 @@ async function runTool(name, input, ctx) {
   }
   try {
     const result = await t.run(parsed.data, ctx);
+    // tools that drive the app (open a page, sort captures): the app does it, from this event
+    if (t.ui && result && !result.error) ctx.onEvent?.({ type: 'ui', action: name, data: result });
     // propose (Lina's suggestions from the background, agent/watch.js) is logged like internal: the table only knows those
     if (t.risk === 'internal' || t.risk === 'propose') {
       db.run(`INSERT INTO agent_actions (id, run_id, tool, input, risk, status, summary, result, created_at, decided_at) VALUES (?, ?, ?, ?, 'internal', 'done', ?, ?, ?, ?)`,
@@ -219,12 +221,13 @@ export async function runDirect(calls, { trigger = 'voice', allowed = ['read', '
   db.run('INSERT INTO agent_runs (id, trigger, started_at, status) VALUES (?, ?, ?, ?)', runId, trigger, Date.now(), 'running');
   const tools = [];
   const ctx = { runId, trigger, allowed, source: trigger === 'phone' ? 'phone' : 'voice',
-    onEvent: ev => { if (ev.type === 'tool') tools.push({ name: ev.name, status: ev.status, summary: ev.summary }); } };
+    onEvent: ev => { if (ev.type === 'tool') tools.push({ name: ev.name, status: ev.status, summary: ev.summary }); else if (ev.type === 'ui') ui.push({ action: ev.action, data: ev.data }); } };
+  const ui = [];
   const results = await Promise.all(calls.map(c => runTool(c.name, c.input, ctx)));
   const failed = results.find(r => r.isError);
   db.run('UPDATE agent_runs SET finished_at = ?, status = ?, summary = ? WHERE id = ?', Date.now(), failed ? 'error' : 'done',
     (failed ? failed.content : calls.map(c => c.name).join(', ')).slice(0, 200), runId);
-  return { runId, results, tools };
+  return { runId, results, tools, ui };
 }
 
 /* A spoken exchange answered without the model still belongs to the conversation, so "and move it to 5" can follow. */

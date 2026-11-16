@@ -1,3 +1,4 @@
+import { runUiActions } from '../voice/ui-actions.js';
 import { h } from '../core/dom.js';
 import { notify } from '../core/store.js';
 import { fmt } from '../core/dates.js';
@@ -54,6 +55,7 @@ export async function sendToAgent(text, { viaVoice = false, context = null, spea
         if (ev.type === 'start') conv.id = ev.conversationId;
         else if (ev.type === 'text') { reply.text += ev.text; onText?.(reply.text); }
         else if (ev.type === 'tool') { reply.tools.push({ name: ev.name, status: ev.status, summary: ev.summary }); onTool?.(ev.name); }
+        else if (ev.type === 'ui') runUiActions([ev]);           // she opened a page or sorted captures
         else if (ev.type === 'error') reply.text += '\n[' + ev.message + ']';
         notify();
       }

@@ -113,7 +113,7 @@ const clockEl = h('span.clock.data');
 const weatherEl = h('span.hide-m.weather');
 const syncBtn = h('button.sync', { type: 'button', onclick: () => go('settings') });
 const pointsEl = h('span.hide-m');
-const crumb = h('span.crumb');
+const crumb = h('button.crumb', { type: 'button', title: 'Back to Lina (Esc)', onclick: () => go('lina') });
 /* The voice agent from anywhere. On Home it knows the briefing, on World the news digest. */
 const talkContext = () => ({ home: 'briefing', news: 'world' })[currentRoute() && currentRoute().id] || null;
 const talkBtn = h('button.talk', { type: 'button', 'aria-label': 'Talk to Lina', title: 'Talk to Lina', onclick: () => toggleTalk(talkContext()) }, icon('mic'));
@@ -211,7 +211,7 @@ function paintMaximized(on) {
 
 function statusBar() {
   return h('header.status', { 'data-tauri-drag-region': 'deep' },
-    h('span.wordmark', 'AGENTIC', h('span', '/'), 'OS'),
+    h('button.wordmark', { type: 'button', title: 'Back to Lina (Esc)', onclick: () => go('lina') }, 'AGENTIC', h('span', '/'), 'OS'),
     h('span.sep.hide-m'), crumb,
     h('span.push'),
     weatherEl, pointsEl,
@@ -381,6 +381,13 @@ async function start() {
   onShellEvent('os://shown', openWindow);
   // The first click or key ends the render hold, so the user's own changes show at once.
   for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => holdRenders(0), { capture: true });
+  // One page: Lina is home. Escape on any other page (outside a field, with no dialog or menu open) goes back to her.
+  window.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || e.defaultPrevented || !currentRoute() || currentRoute().id === 'lina') return;
+    if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
+    if (document.querySelector('[role="dialog"], [role="menu"], .popover, .overlay.open, dialog[open]')) return;
+    go('lina');
+  });
   // Ctrl+R replays the clock's intro instead of reloading the page; Ctrl+Shift+R still hard-reloads.
   window.addEventListener('keydown', e => {
     if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'r' || phase !== 'open') return;

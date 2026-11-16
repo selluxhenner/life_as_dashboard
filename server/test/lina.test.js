@@ -498,3 +498,11 @@ test('Lina: "danke" and "thanks, that\'s all" end the conversation; a thanks wit
   for (const t of ['danke, und jetzt noch den Termin verschieben', 'thanks, now add milk', 'stop the container', 'ja', 'was ist neu'])
     assert.equal(isClosing(t), false, t);
 });
+
+test('Lina: "öffne mir den Kalender" opens a page without the model; mixed requests go to the model', async () => {
+  const { pageFor } = await import('../src/voice/lina.js');
+  const cases = { 'öffne mir den Kalender': 'calendar', 'öffne mir die Captures': 'captures', 'Hey, öffne mir die Inbox': 'inbox',
+    'zeig mir die Worldview': 'world', 'öffne mir Settings': 'settings', 'open my calendar': 'calendar', 'zurück': 'lina' };
+  for (const [t, page] of Object.entries(cases)) assert.equal(pageFor(t), page, t);
+  for (const t of ['öffne die Captures und sortiere sie', 'was steht im Kalender', 'add milk to my list']) assert.equal(pageFor(t), null, t);
+});

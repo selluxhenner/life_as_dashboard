@@ -16,6 +16,7 @@ import { voiceTurn, prepareTurn, prepareText, preparedFinished, preparedVoice, w
 import { openLive } from './live.js';
 import { chatConversationId, logVoiceExchange, sendToAgent } from '../views/assistant.js';
 import { state } from '../core/store.js';
+import { runUiActions } from './ui-actions.js';
 
 const MAX_TURNS = 8;
 const FIRST_WAIT = 8000, NEXT_WAIT = 6000;      // how long she waits for you to start talking
@@ -195,6 +196,7 @@ async function converse(context, { followUp = false } = {}) {
       if (my !== run) return;
       logVoiceExchange(r);
       if (r.tools && r.tools.length) set({ tools: r.tools.map(t => t.name) });
+      if (r.ui && r.ui.length) runUiActions(r.ui);                // she opens a page or sorts captures in the app
       if (r.tools && r.tools.length) runSync();                    // what she changed shows up right away
       awaiting = { ids: (r.awaiting || []).map(a => a.id).join(','), at: Date.now() };
       if (said) {

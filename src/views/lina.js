@@ -110,28 +110,34 @@ function playIntro(fresh) {
 
 /* ---------- the satellites: plain text around her, shown only when there is something to show ---------- */
 
-const satHead = (name, sub, onclick) => h('button.sat-head', { type: 'button', onclick, title: 'Ask Lina' }, h('span.sat-name', name), sub ? h('span.sat-sub', sub) : null);
+/* A box's name opens its page (or Obsidian itself); the lines inside open what they are. */
+const satHead = (name, sub, onclick, title = 'Open') => h('button.sat-head', { type: 'button', onclick, title }, h('span.sat-name', name), sub ? h('span.sat-sub', sub) : null);
+const VAULT = 'obsidian_vault';
+const openNote = path => { location.href = 'obsidian://open?vault=' + encodeURIComponent(VAULT) + (path ? '&file=' + encodeURIComponent(path.replace(/\.md$/i, '')) : ''); };
+/* How many lines a box shows: more when the window is taller (a bigger screen, a maximised window). */
+const rowsFor = () => (innerHeight >= 1150 ? 6 : innerHeight >= 980 ? 5 : innerHeight >= 820 ? 4 : 3);
 
 function nextSat(s) {
   const tk = todayKey();
   const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
-  const upcoming = agendaFor(tk).filter(i => !i.allDay && i.start != null && (i.end ?? i.start + 60) > nowMin).slice(0, 3);
-  const focus = s && s.todos ? s.todos.focus.slice(0, 3) : [];
+  const rows = rowsFor();
+  const upcoming = agendaFor(tk).filter(i => !i.allDay && i.start != null && (i.end ?? i.start + 60) > nowMin).slice(0, rows);
+  const focus = s && s.todos ? s.todos.focus.slice(0, rows) : [];
   if (!upcoming.length && !focus.length && !(s && s.next)) return null;
   return [
-    satHead('Up next', s && s.todos ? s.todos.open + ' open tasks' : null, () => askLina(COMMANDS[1].ask)),
-    ...upcoming.map(a => h('div.sat-line', h('span.sat-time.data', a.time || ''), h('span', a.title))),
+    satHead('Up next', s && s.todos ? s.todos.open + ' open tasks' : null, () => go('today')),
+    ...upcoming.map(a => h('button.sat-line', { type: 'button', onclick: () => go('calendar') }, h('span.sat-time.data', a.time || ''), h('span', a.title))),
     !upcoming.length && s && s.next ? h('div.sat-line', h('span.sat-time.data', new Date(s.next.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })), h('span', s.next.title)) : null,
-    ...focus.map(t => h('div.sat-line.todo', h('span', { class: 'status-dot ' + (t.due && t.due < tk ? 'error' : t.high ? 'running' : 'idle') }), h('span', t.title)))
+    ...focus.map(t => h('button.sat-line.todo', { type: 'button', onclick: () => go('today') }, h('span', { class: 'status-dot ' + (t.due && t.due < tk ? 'error' : t.high ? 'running' : 'idle') }), h('span', t.title)))
   ];
 }
 
 function vaultSat(v) {
   if (!v) return null;
-  if (!v.connected || !v.recent.length) return [satHead('Obsidian', null, () => askLina(COMMANDS[4].ask)), h('div.sat-line.sat-dim', 'Not linked to the server yet')];
+  if (!v.connected || !v.recent.length) return [satHead('Obsidian', null, () => openNote(null), 'Open Obsidian'), h('div.sat-line.sat-dim', 'Not linked to the server yet')];
   return [
-    satHead('Obsidian', v.notes + ' notes', () => askLina(COMMANDS[4].ask)),
-    ...v.recent.slice(0, 4).map(n => h('button.sat-line.note', { type: 'button', onclick: () => askLina(`Open my note "${n.path}" and tell me briefly what's in it and where I left off.`) },
+    satHead('Obsidian', v.notes + ' notes', () => openNote(null), 'Open Obsidian'),
+    ...v.recent.slice(0, rowsFor()).map(n => h('button.sat-line.note', { type: 'button', title: 'Open in Obsidian', onclick: () => openNote(n.path) },
       h('span', n.title), h('span.sat-dim', fmt.ago(n.at))))
   ];
 }
@@ -140,23 +146,23 @@ const WB_DOT = { running: 'running', active: 'running', working: 'running', busy
 function workbenchSat(w) {
   if (!w || !w.configured || (!w.sessions.length && !(w.plans && w.plans.length))) return null;
   return [
-    satHead('Workbench', w.reachable ? w.active + ' active' : 'not reachable', () => askLina(COMMANDS[5].ask)),
+    satHead('Workbench', w.reachable ? w.active + ' active' : 'not reachable', () => window.open(WORKBENCH_URL, '_blank', 'noopener'), 'Open Workbench'),
     ...(w.plans || []).slice(0, 3).map(p => h('div.sat-plan', h('div.sat-line', h('span', p.title), h('span.sat-dim.data', p.total ? `${p.done}/${p.total}` : '')),
       h('div.plan-bar', h('i', { style: { width: (p.total ? Math.round((p.done / p.total) * 100) : 0) + '%' } })))),
     ...(w.attention || []).slice(0, 2).map(a => h('div.sat-line', h('span.status-dot.running'), h('span', a.title))),
-    ...w.sessions.slice(0, 3).map(x => h('div.sat-line', h('span', { class: 'status-dot ' + (WB_DOT[x.status] || 'idle') }), h('span', x.title || x.project))),
+    ...w.sessions.slice(0, Math.max(2, rowsFor() - 1)).map(x => h('div.sat-line', h('span', { class: 'status-dot ' + (WB_DOT[x.status] || 'idle') }), h('span', x.title || x.project))),
     h('a.sat-link', { href: WORKBENCH_URL, target: '_blank', rel: 'noopener', title: 'Needs Tailscale' }, 'Open', icon('ext'))
   ];
 }
 
 function liveSat(data) {
-  const list = ((data && data.events) || []).filter(e => Date.now() - e.at < 2 * 86400000).slice(0, 4);
+  const list = ((data && data.events) || []).filter(e => Date.now() - e.at < 2 * 86400000).slice(0, rowsFor());
   if (!list.length) return null;
   const top = list[0].id;
   if (seenTop && top > seenTop) list.filter(e => e.id > seenTop).forEach(e => freshUntil.set(e.id, Date.now() + 12000));
   seenTop = Math.max(seenTop, top);
   return [
-    satHead('Just in', data.unread ? data.unread + ' new' : null, () => askLina(COMMANDS[3].ask)),
+    satHead('Just in', data.unread ? data.unread + ' new' : null, () => go('hub')),
     ...list.map(e => h('div.sat-event' + ((freshUntil.get(e.id) || 0) > Date.now() ? '.fresh' : ''), { dataset: { level: e.level } },
       h('div.sat-dim', sourceName(e.source) + ' · ' + fmt.ago(e.at)), h('div', e.title)))
   ];
@@ -169,7 +175,7 @@ function hermesSat(s) {
   const recent = hm.lastAnswer && hm.lastAnswer.at && Date.now() - hm.lastAnswer.at < 86400000;
   if (hm.online && !hm.openAsks && !recent && !waiting) return null;   // nothing to say: Hermes stays out of the way
   return [
-    satHead('Hermes', hm.online ? 'online' : hm.lastSeenAt ? 'seen ' + fmt.ago(hm.lastSeenAt) : 'offline', () => askLina(COMMANDS[6].ask)),
+    satHead('Hermes', hm.online ? 'online' : hm.lastSeenAt ? 'seen ' + fmt.ago(hm.lastSeenAt) : 'offline', () => go('hub')),
     !hm.online ? h('div.sat-line', h('span.status-dot.error'), h('span', 'The agent box is not checking in')) : null,
     hm.openAsks ? h('div.sat-line', h('span.status-dot.running'), h('span', hm.openAsks + (hm.openAsks === 1 ? ' question' : ' questions') + ' with Hermes')) : null,
     waiting ? h('button.sat-line', { type: 'button', onclick: () => go('hub') }, h('span', [s.tasks.open ? s.tasks.open + (s.tasks.open === 1 ? ' task' : ' tasks') + ' running or waiting' : null, s.approvals ? s.approvals + ' waiting for your OK' : null].filter(Boolean).join(' · '))) : null,
@@ -180,7 +186,7 @@ function hermesSat(s) {
 function serverSat(s) {
   if (!s || !s.server || s.server.status === 'ok') return null;
   return [
-    satHead('Server', s.server.status === 'fail' ? 'needs attention' : 'warning', () => askLina('What is wrong with the server? Give me the short version.')),
+    satHead('Server', s.server.status === 'fail' ? 'needs attention' : 'warning', () => go('hub')),
     h('div.sat-event', { dataset: { level: s.server.status === 'fail' ? 'alert' : 'warn' } }, h('div.sat-dim', fmt.ago(s.server.at)), h('div', s.server.summary))
   ];
 }
@@ -197,6 +203,37 @@ function systems(s, connected, error) {
     s.server ? item('Server', s.server.status === 'ok', s.server.status === 'ok' ? null : s.server.status) : null,
     s.tasks.open || s.approvals ? item('Waiting', null, [s.tasks.open ? s.tasks.open + ' tasks' : null, s.approvals ? s.approvals + ' OKs' : null].filter(Boolean).join(' · '), () => go('hub')) : null
   ].filter(Boolean);
+}
+
+/* ---------- a new layout: the boxes glide to their new places ----------
+   A different window size (another screen, maximised, a resize) can change how many lines fit and where the boxes
+   sit. When that happens they move there instead of jumping, and the lines follow. */
+let layoutSig = '', followUntil = 0, resizeTimer = 0, lastRects = new Map();
+const layoutNow = () => (innerWidth <= 860 ? 'one' : innerWidth <= 1100 ? 'two' : 'space') + ':' + rowsFor() + ':' +
+  Object.entries(deck.sats).map(([k, el]) => (el.hidden ? '' : k)).join(',');
+/* Where every box was after the last paint: a resize has already moved them by the time it is reported. */
+const remember = () => { if (deck) lastRects = new Map([...Object.values(deck.sats), deck.dial].filter(el => !el.hidden).map(el => [el, el.getBoundingClientRect()])); };
+function glide(change, before = null) {
+  const els = [...Object.values(deck.sats).filter(el => !el.hidden), deck.dial];
+  before = before || new Map(els.map(el => [el, el.getBoundingClientRect()]));
+  change();
+  if (!deck || !deck.el.isConnected || typeof Element.prototype.animate !== 'function') return;
+  for (const el of [...Object.values(deck.sats), deck.dial]) {
+    if (el.hidden) continue;
+    const a = before.get(el), b = el.getBoundingClientRect();
+    if (!a) { el.animate([{ opacity: 0, filter: 'blur(4px)' }, { opacity: 1, filter: 'blur(0)' }], { duration: 500, easing: 'ease-out' }); continue; }
+    const dx = a.left - b.left, dy = a.top - b.top;
+    if (Math.abs(dx) + Math.abs(dy) < 2) continue;
+    el.animate([{ translate: `${dx}px ${dy}px` }, { translate: '0px 0px' }], { duration: 700, easing: 'cubic-bezier(.2,.9,.25,1.12)' });
+  }
+  followUntil = performance.now() + 760;
+  scheduleLinks();
+  setTimeout(remember, 760);
+}
+function onResize() {
+  scheduleLinks();
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (deck && deck.el.isConnected) glide(paint, lastRects); }, 140);
 }
 
 /* ---------- light lines from Lina to each satellite ---------- */
@@ -230,6 +267,7 @@ function drawLinks() {
     parts.push(h('circle', { cx: tx, cy: ty, r: active ? 3.5 : 2, class: 'node' + (active ? ' active' : '') }));
   }
   deck.links.replaceChildren(...parts);
+  if (performance.now() < followUntil) scheduleLinks();     // the boxes are still gliding
 }
 const scheduleLinks = () => { if (!linkRaf) linkRaf = requestAnimationFrame(drawLinks); };
 
@@ -270,6 +308,8 @@ function paint() {
   deck.chrono.update({ events: agenda.map(a => ({ start: a.start, end: a.end ?? a.start + 60, color: a.color, title: a.title, time: a.time })) });
   wakeOrb();
   scheduleLinks();
+  layoutSig = layoutNow();
+  if (performance.now() > followUntil) requestAnimationFrame(remember);
 }
 
 /* Space or Enter anywhere on the deck (outside a field) talks; Escape stops her. */
@@ -290,11 +330,14 @@ export default {
       deck = build();
       fresh = true;
       window.addEventListener('keydown', onKey);
-      window.addEventListener('resize', scheduleLinks);
+      window.addEventListener('resize', onResize);
+      matchMedia('(resolution: 1dppx), (resolution: 2dppx)').addEventListener?.('change', onResize);   // moved to another screen
     }
     root.append(deck.el);
     deck.el.classList.toggle('phone', isPhone());
-    paint();
+    // a box that appears or goes, or more lines: glide into the new layout (not on the first paint)
+    const shownBefore = layoutSig;
+    if (!fresh && shownBefore) { glide(paint); } else paint();
     if (fresh) playIntro(true);
     if (!poll) poll = setInterval(() => { if (deck && deck.el.isConnected && document.visibilityState === 'visible') refresh('linaFeed', FEED); }, POLL_MS);
   },
@@ -304,7 +347,7 @@ export default {
       if (!deck || deck.el.isConnected) return;
       clearInterval(poll); poll = 0; announcedTop = null;
       window.removeEventListener('keydown', onKey);
-      window.removeEventListener('resize', scheduleLinks);
+      window.removeEventListener('resize', onResize);
       deck.chrono.destroy();
       deck = null;
     }, 0);

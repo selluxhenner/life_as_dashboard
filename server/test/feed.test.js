@@ -77,3 +77,17 @@ test('alert-level app updates also push', async () => {
   assert.equal(db.get('SELECT COUNT(*) AS n FROM notifications').n, before + 1);
   assert.equal(db.get("SELECT COUNT(*) AS n FROM lina_feed WHERE title = 'Rent payment failed'").n, 1, 'one feed entry, not two');
 });
+
+test('open_page and sort_captures hand their result to the app; unknown captures are refused', async () => {
+  const { runDirect } = await import('../src/agent/runner.js');
+  const { writeDoc } = await import('../src/routes/docs.js');
+  writeDoc('capture:c1', { id: 'c1', text: 'Buy a bike lock', type: 'none', createdAt: 1, archived: false });
+  writeDoc('capture:c2', { id: 'c2', text: 'Read 20 pages every day', type: 'none', createdAt: 2, archived: false });
+  const list = await TOOLS.list_captures.run({});
+  assert.deepEqual(list.map(c => c.id).sort(), ['c1', 'c2']);
+  const r = await runDirect([{ name: 'open_page', input: { page: 'calendar' } }, { name: 'sort_captures', input: { items: [{ id: 'c1', type: 'task' }, { id: 'c2', type: 'habit' }, { id: 'nope', type: 'note' }] } }]);
+  assert.deepEqual(r.ui.find(u => u.action === 'open_page').data, { page: 'calendar' });
+  const sorted = r.ui.find(u => u.action === 'sort_captures').data;
+  assert.deepEqual(sorted.items.map(i => [i.id, i.type]), [['c1', 'task'], ['c2', 'habit']]);
+  assert.equal((await TOOLS.sort_captures.run({ items: [{ id: 'nope', type: 'note' }] })).error !== undefined, true);
+});

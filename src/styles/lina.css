@@ -75,7 +75,10 @@
 .sat-line > span:last-child:not(.sat-dim) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sat-line { min-width: 0; max-width: 100%; }
 .sat-event > div:last-child { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
-button.sat-line { background: none; border: 0; padding: 0; font: inherit; color: var(--ink-2); cursor: pointer; text-align: left; justify-content: space-between; }
+button.sat-line { background: none; border: 0; padding: 0; font: inherit; color: var(--ink-2); cursor: pointer; text-align: left; justify-content: flex-start; width: 100%; }
+button.sat-line.note { justify-content: space-between; }
+.sat-head { -webkit-app-region: no-drag; }
+.sat-head:hover .sat-sub { color: var(--ink-2); }
 button.sat-line:hover { color: var(--ink); }
 .sat-time { color: var(--signal); width: 42px; flex: none; font-size: var(--fs-xs); }
 .sat-dim { color: var(--ink-3); font-size: var(--fs-xs); flex: none; }
