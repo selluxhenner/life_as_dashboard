@@ -1,6 +1,6 @@
 {
   "name": "agentic-os-server",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "description": "Agentic OS backend: sync, connectors, scheduler, AI agent. Runs as one Node process on Hetzner.",
   "type": "module",

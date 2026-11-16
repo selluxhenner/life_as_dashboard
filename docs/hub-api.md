@@ -140,6 +140,10 @@ A task answers in camelCase:
   "updatedAt": 1793200700000, "createdAt": 1793200000000 }
 ```
 
+- `source` is where it came from: `chat`, `voice`, `phone` (Lina, asked by Kevin), `app`, or `lina-watch`: Lina proposed it
+  herself after an ops report that wasn't `ok` or a registry service that went down. A `lina-watch` task always waits
+  for Kevin's approval, also for a read verb, and its approval `reason` starts with "Lina suggests:". Workers treat it
+  like any other task.
 - `stale` is true for a running task without progress for 2 hours.
 - Ops tokens can't create, list or cancel tasks and only see `hermes` tasks. Only the token that started a task may
   report progress or finish it.
