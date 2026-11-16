@@ -14,7 +14,7 @@
         "decorations": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "trafficLightPosition": { "x": 24, "y": 22 },
+        "trafficLightPosition": { "x": 14, "y": 22 },
         "transparent": false,
         "backgroundColor": "#05070A",
         "resizable": true
@@ -24,6 +24,6 @@
   "bundle": {
     "targets": ["app", "dmg"],
     "resources": null,
-    "macOS": { "minimumSystemVersion": "13.0" }
+    "macOS": { "minimumSystemVersion": "13.0", "entitlements": "Entitlements.plist" }
   }
 }
