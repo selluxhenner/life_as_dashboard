@@ -53,7 +53,7 @@ import { initDesktopWake } from './voice/wake.js';
 
 const ROUTES = [
   { id: 'lina', label: 'Lina', short: 'Lina', icon: 'agent', view: lina, dock: true, key: 'G L' },
-  { id: 'home', label: 'Home', short: 'Overview', icon: 'home', view: home, dock: true, key: 'G H' },
+  { id: 'home', label: 'Home', short: 'Overview', icon: 'home', view: home, key: 'G H' },   // in More on the phone: Lina is home
   { id: 'captures', label: 'Captures', short: 'Notes', icon: 'capture', view: captures, dock: true, key: 'G N' },
   { id: 'today', label: 'Today', icon: 'today', view: today, dock: true, key: 'G T' },
   { id: 'calendar', label: 'Calendar', icon: 'calendar', view: calendar, dock: true, key: 'G C' },
@@ -129,9 +129,13 @@ function buildNav() {
   markCurrent();
 }
 /* The dock, or after More the other pages in its place, until a page is picked or the screen is touched anywhere else. */
+/* At most four tabs plus More on the phone: the first four routes marked dock; anything else is behind More. */
+const DOCK_TABS = 4;
+const dockIds = () => routeList().filter(r => r.dock && r.nav !== false).slice(0, DOCK_TABS).map(r => r.id);
 function buildDock(swap = false) {
   moreBtn = more ? null : h('button', { type: 'button', onclick: () => showMore(true) }, icon('more'), h('span', 'More'));
-  dock.replaceChildren(...navLinks(r => more ? !r.dock : r.dock, true), ...(moreBtn ? [moreBtn] : []));
+  const tabs = dockIds();
+  dock.replaceChildren(...navLinks(r => more ? !tabs.includes(r.id) : tabs.includes(r.id), true), ...(moreBtn ? [moreBtn] : []));
   dock.setAttribute('aria-label', more ? 'More pages' : 'Main');
   dock.classList.toggle('swap', swap);
 }
@@ -157,7 +161,7 @@ function markCurrent() {
     if (n) document.querySelectorAll(`[data-route="${id}"]`).forEach(a => a.append(h('span.badge' + (id === 'captures' ? '.soft' : ''), String(n))));
   }
   // More lights up like a tab while one of its pages is open
-  if (moreBtn) moreBtn.classList.toggle('here', !!id && !currentRoute().dock);
+  if (moreBtn) moreBtn.classList.toggle('here', !!id && !dockIds().includes(currentRoute().id));
 }
 
 /* Phone: swipe left/right on a page to move to the next/previous page, like tabs in WhatsApp.

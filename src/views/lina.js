@@ -285,10 +285,13 @@ const titleOf = id => (routeList().find(r => r.id === id) || {}).label || id;
 /** Open a page inside the deck (Kalender, Inbox, Hub …). From another page, the deck comes back first.
     explain: with Live voice on she then tells what is new there; off, she stays quiet and Kevin looks himself. */
 export function openInDeck(id, { explain = true } = {}) {
-  if (!id || id === 'lina') return closeFocus();
-  const changed = focus !== id;
-  focus = id;
-  if (!currentRoute() || currentRoute().id !== 'lina') go('lina'); else routerRender();
+  if (!id || id === 'lina') { if (isPhone()) go('lina'); return closeFocus(); }
+  const changed = isPhone() ? !currentRoute() || currentRoute().id !== id : focus !== id;
+  if (isPhone()) go(id);                            // the phone keeps its tabs: the box switches to its tab
+  else {
+    focus = id;
+    if (!currentRoute() || currentRoute().id !== 'lina') go('lina'); else routerRender();
+  }
   const ask = pageBrief(id);
   if (explain && changed && ask && liveVoiceOn() && apiConfig()) setTimeout(() => askLina(ask), 350);
 }
