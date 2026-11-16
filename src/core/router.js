@@ -59,7 +59,7 @@ export function render(intro = false) {
 }
 
 function resolve() {
-  const id = (location.hash.match(/^#\/([\w-]+)/) || [])[1] || 'home';
+  const id = (location.hash.match(/^#\/([\w-]+)/) || [])[1] || (routes[0] && routes[0].id) || 'home';
   const next = routes.find(r => r.id === id && (!r.hidden || !r.hidden())) || routes[0];
   if (current && current !== next && current.view.unmount) current.view.unmount();
   current = next;

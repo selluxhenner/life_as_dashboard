@@ -54,6 +54,22 @@ export function yesNo(text) {
   return null;
 }
 
+/* "Hey, danke", "passt, das wär's", "thanks Lina": the conversation is over. She says nothing and goes back to rest.
+   Only short answers made of these words; "danke, und jetzt noch …" goes on. */
+const CLOSE_LEAD = new Set(['ok', 'okay', 'alles', 'klar', 'super', 'perfekt', 'cool', 'gut', 'great', 'nice', 'alright', 'all', 'right',
+  'ah', 'oh', 'ja', 'jo', 'yes', 'yeah', 'hey', 'na', 'lina', 'mega', 'top', 'sehr', 'ganz', 'awesome', 'perfect', 'good', 'got', 'it']);
+const CLOSE_CORE = new Set(['danke', 'dankeschön', 'merci', 'thanks', 'thank', 'thx', 'passt', 'tschüss', 'ciao', 'bye', 'goodbye', 'stopp', 'stop', 'genug', 'reicht', 'fertig', 'done']);
+const CLOSE_TAIL = new Set(['dir', 'schön', 'vielen', 'dank', 'you', 'so', 'much', 'a', 'lot', 'das', 'wars', "war's", 'wärs', "wär's", 'wäre', 'es', 'war',
+  "that's", 'thats', 'that', 'is', 'all', 'nothing', 'else', 'nichts', 'mehr', 'bis', 'später', 'see', 'ya', 'for', 'now', 'erstmal', 'erst', 'mal', 'lina', 'schon', 'gut']);
+const CLOSE_PHRASE = /\b(das wa?e?r'?s|that'?s (all|it)|nothing else|nichts mehr|das reicht|bis später|see you)\b/;
+export function isClosing(text) {
+  const t = norm(text);
+  const w = t.split(' ').filter(Boolean);
+  if (!w.length || w.length > 7) return false;
+  if (!w.some(x => CLOSE_CORE.has(x)) && !CLOSE_PHRASE.test(t)) return false;
+  return w.every(x => CLOSE_LEAD.has(x) || CLOSE_CORE.has(x) || CLOSE_TAIL.has(x));
+}
+
 /** en | de for the voice, from the reply itself (Lina answers in English or Standard German). */
 const DE_WORDS = /\b(ich|du|dein|deine|der|die|das|und|ist|nicht|um|uhr|für|mit|habe|hab|eine?n?|heute|morgen|soll|schicke?|termin|einladung|erledigt|wann|wer|wie|gerne?)\b/gi;
 const EN_WORDS = /\b(i|you|your|the|and|is|not|at|for|with|have|a|an|today|tomorrow|shall|send|meeting|invite|done|when|who|how)\b/gi;
@@ -190,6 +206,9 @@ export async function linaTurn({ audio, type, prepared: prepId, conversationId, 
     if (!viaWake || !raw.trim()) return { heard: '', reply: '', lang, conversationId: cid, awaiting: [], listen: false, audio: null };
     lang = /^\W*(hallo|hoi)\b/i.test(raw) ? 'de' : 'en';
     reply = SAY[lang].empty;                                       // only "Hey Lina" so far: ask what he wants
+  } else if (!yn && isClosing(heard)) {
+    // "danke" / "thanks, that's all": nothing more to say; the app goes back to rest
+    return { heard, reply: '', lang, conversationId: cid, awaiting: [], tools: [], listen: false, audio: null, end: true, ms: { stt: t1 - t0, think: 0, voice: 0 } };
   } else if (yn) {
     lang = yn.lang;
     const errors = [];

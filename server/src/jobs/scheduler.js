@@ -13,6 +13,7 @@ import { briefingJob } from './briefing.js';
 import { triageInbox } from './triage.js';
 import { meetingPrep, jobNudge } from './assist.js';
 import { pullRegistry } from '../hub/registry.js';
+import { pruneFeed } from '../lina/feed.js';
 
 export const JOBS = {
   refresh: async () => ({ inbox: await refreshInbox(), triaged: await triageInbox() }),
@@ -67,6 +68,7 @@ async function maintenance() {
   db.run('DELETE FROM agent_runs WHERE started_at < ?', now - 90 * day);
   db.run('DELETE FROM notifications WHERE created_at < ?', now - 30 * day);
   db.run('DELETE FROM ops_reports WHERE created_at < ?', now - 90 * day);
+  pruneFeed(now);
   db.exec('PRAGMA optimize');
   return { ok: true };
 }

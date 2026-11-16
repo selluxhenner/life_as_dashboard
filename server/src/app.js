@@ -1,3 +1,4 @@
+import { lina } from './routes/lina.js';
 import { Hono } from 'hono';
 import { readFileSync } from 'node:fs';
 import { config } from './config.js';
@@ -76,6 +77,9 @@ app.route('/api', hermes);
 app.use('/api/tasks/*', requireDevice);
 app.use('/api/tasks', requireDevice);
 app.route('/api', tasks);
+/* Lina's feed: every device token may post an update (Kevin's apps, Hermes, Workbench), the apps read it. */
+app.use('/api/lina/*', requireDevice);
+app.route('/api', lina);
 /* Hub state: the apps see everything, an ops token (Hermes's hub-status skill) a summary without ids. */
 app.get('/api/hub/state', requireDevice, hubState);
 

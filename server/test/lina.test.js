@@ -490,3 +490,11 @@ test('on watch: off switch, daily cap, and proposals only from the watch', async
   await assert.rejects(TOOLS.propose_task.run(p, ctx), /At most two/);
   await assert.rejects(TOOLS.propose_task.run({ ...p, params: { verb: 'restart-container', args: ['shop; reboot'] } }, { trigger: 'watch' }), /params/);
 });
+
+test('Lina: "danke" and "thanks, that\'s all" end the conversation; a thanks with a request does not', async () => {
+  const { isClosing } = await import('../src/voice/lina.js');
+  for (const t of ['Ah ja, hey, danke', 'Okay danke', 'Thanks Lina', 'Passt, das wär\'s', 'that\'s all, thanks', 'super, danke dir', 'tschüss'])
+    assert.equal(isClosing(t), true, t);
+  for (const t of ['danke, und jetzt noch den Termin verschieben', 'thanks, now add milk', 'stop the container', 'ja', 'was ist neu'])
+    assert.equal(isClosing(t), false, t);
+});
