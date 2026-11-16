@@ -137,7 +137,8 @@ async function runTool(name, input, ctx) {
   }
   try {
     const result = await t.run(parsed.data, ctx);
-    if (t.risk === 'internal') {
+    // propose (Lina's suggestions from the background, agent/watch.js) is logged like internal: the table only knows those
+    if (t.risk === 'internal' || t.risk === 'propose') {
       db.run(`INSERT INTO agent_actions (id, run_id, tool, input, risk, status, summary, result, created_at, decided_at) VALUES (?, ?, ?, ?, 'internal', 'done', ?, ?, ?, ?)`,
         actionId, ctx.runId, name, j.str(parsed.data), t.summary(parsed.data), j.str(result), Date.now(), Date.now());
       ctx.onEvent?.({ type: 'tool', name, status: 'done', summary: t.summary(parsed.data) });

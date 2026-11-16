@@ -7,6 +7,7 @@ import { db, j } from '../db.js';
 import { HttpError } from '../http.js';
 import { notify, alertedRecently } from '../notify/index.js';
 import { localDate } from '../lib/time.js';
+import { watchReport } from '../agent/watch.js';
 
 const MAX_BYTES = 32 * 1024;
 export const OPS_STATUS = ['ok', 'warn', 'fail'];
@@ -52,6 +53,7 @@ export async function postReport(c) {
     await notify({ title: 'Server · ' + r.summary, body: top || r.summary, url: '#/home', priority: r.status === 'fail' ? 4 : 3,
       tags: ['server'], kind: 'ops', ref }).catch(e => console.error('ops: notify', e.message));
   }
+  watchReport(r);   // Lina looks at it in the background and may propose a fix (agent/watch.js); doesn't wait
   return c.json({ id: r.id }, 201);
 }
 

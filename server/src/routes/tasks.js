@@ -99,8 +99,9 @@ export function listTasks({ active = false, limit = 20 } = {}) {
 const serverRuns = new Map();
 export const serverRun = id => serverRuns.get(id);
 
-/** Creates a task (Lina's start_task tool and POST /api/tasks). Returns the task as the outside sees it. */
-export async function createTask(input, source = 'app') {
+/** Creates a task (Lina's start_task tool and POST /api/tasks). Returns the task as the outside sees it.
+    requireApproval: Kevin must OK it even when its kind wouldn't need that (Lina's proposals from the background). */
+export async function createTask(input, source = 'app', { requireApproval = false } = {}) {
   const parsed = CreateSchema.safeParse(input);
   if (!parsed.success) throw new HttpError(400, issues(parsed.error));
   const t = parsed.data;
@@ -112,7 +113,8 @@ export async function createTask(input, source = 'app') {
   const id = uid('tsk_');
   const now = Date.now();
   let approvalId = null;
-  if (kind.needsApproval(params)) {
+  if (requireApproval && !kind.approval) throw new HttpError(400, `kind ${t.kind} can't wait for an approval`);
+  if (requireApproval || kind.needsApproval(params)) {
     const a = await createApproval('lina', { ...kind.approval(params), reason: (t.reason || t.title).slice(0, 300), ttlMinutes: t.ttlMinutes });
     approvalId = a.id;
   }

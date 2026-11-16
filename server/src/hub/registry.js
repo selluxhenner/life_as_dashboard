@@ -58,6 +58,8 @@ export async function pullRegistry() {
   current = { projects, devices: devices.map(d => ({ name: d.name, os: d.os, role: d.role, status: d.status || 'active', tailnetName: d.tailnet_name || d.name })),
     services, pulledAt, error };
   try { writeFileSync(FILE(), JSON.stringify(current)); } catch (e) { console.error('hub registry: save', e.message); }
+  // a service that was up at the last check and isn't now: Lina takes a look and may propose a fix (agent/watch.js)
+  import('../agent/watch.js').then(w => w.watchServices(prev.services, services)).catch(e => console.error('hub registry: watch', e.message));
   return { pulled: !error, projects: projects.length, up: services.filter(s => s.status === 'up').length, error };
 }
 

@@ -426,3 +426,67 @@ test('agent tasks by voice: Lina asks, a spoken yes approves the task, and she s
   assert.equal(no.reply, 'Okay, I’ll leave it.');
   assert.equal(db.get('SELECT a.status FROM agent_tasks t JOIN approvals a ON a.id = t.approval_id WHERE t.id = ?', d.awaiting[0].id).status, 'rejected');
 });
+
+test('on watch: a failed ops report gets one background look, and her proposal waits for Kevin', async () => {
+  const { watchIdle, watchServices } = await import('../src/agent/watch.js');
+  setSetting('lina', { people: [], quick: true, instant: false, watch: true, watchPerDay: 6 });
+  let offered = null, prompt = '';
+  script.push(body => {
+    offered = body.tools.map(t => t.name);
+    prompt = JSON.stringify(body.messages);
+    return [{ type: 'tool_use', id: 'tu_w1', name: 'propose_task', input: { kind: 'server-op', title: 'Restart the shop container', params: { verb: 'restart-container', args: ['shop'] }, reason: 'shop exited 2 h ago and answers 502' } }];
+  });
+  script.push(() => [{ type: 'text', text: 'Proposed restarting shop: it exited 2 h ago.' }]);
+  const report = { job: 'site-check', status: 'fail', summary: 'shop answers 502', findings: [{ level: 'fail', text: 'container shop exited 2 hours ago' }, { level: 'ok', text: 'blog fine' }] };
+  assert.equal((await api('POST', '/api/ops/report', report)).status, 201, 'the report itself never waits for Lina');
+  await watchIdle();
+
+  assert.ok(offered.includes('propose_task') && offered.includes('get_today'));
+  for (const t of ['start_task', 'create_todo', 'write_vault_note', 'draft_email', 'ask_hermes']) assert.ok(!offered.includes(t), t + ' must not be offered on watch');
+  assert.match(prompt, /container shop exited 2 hours ago/);
+  assert.doesNotMatch(prompt, /blog fine/, 'only what is wrong');
+
+  const ev = db.get("SELECT * FROM watch_events WHERE kind = 'ops'");
+  assert.match(ev.ref, /^ops:site-check:\d{4}-\d{2}-\d{2}:fail$/);
+  const [taskId] = JSON.parse(ev.task_ids);
+  const t = db.get('SELECT * FROM agent_tasks WHERE id = ?', taskId);
+  assert.deepEqual([t.source, t.status, t.kind], ['lina-watch', 'awaiting_approval', 'server-op']);
+  const a = db.get('SELECT * FROM approvals WHERE id = ?', t.approval_id);
+  assert.deepEqual([a.verb, a.args, a.source, a.status], ['restart-container', '["shop"]', 'lina', 'pending']);
+  assert.equal(a.reason, 'Lina suggests: shop exited 2 h ago and answers 502');
+  assert.ok(db.get('SELECT 1 AS x FROM notifications WHERE ref = ?', 'approval:' + a.id), 'Kevin gets the Approve / Reject push');
+
+  // the same report again: no second look
+  const before = modelCalls().length;
+  await api('POST', '/api/ops/report', report);
+  await watchIdle();
+  assert.equal(modelCalls().length, before);
+
+  // a service that went down: even a read verb waits for Kevin when Lina proposes it
+  script.push(() => [{ type: 'tool_use', id: 'tu_w2', name: 'propose_task', input: { kind: 'server-op', title: 'Check the containers', params: { verb: 'docker' }, reason: 'life-os health check fails' } }]);
+  script.push(() => [{ type: 'text', text: 'Asked to check docker first.' }]);
+  watchServices([{ id: 'life-os', status: 'up' }, { id: 'blog', status: 'down' }],
+    [{ id: 'life-os', name: 'LIFE OS', status: 'unreachable', code: null, health: 'https://x/api/health', runsOn: ['hetzner-main'] }, { id: 'blog', status: 'down' }]);
+  await watchIdle();
+  const svc = db.get("SELECT * FROM watch_events WHERE kind = 'service'");
+  assert.match(svc.ref, /^svc:life-os:/, 'only the one that was up before');
+  const read = db.get('SELECT * FROM agent_tasks WHERE id = ?', JSON.parse(svc.task_ids)[0]);
+  assert.equal(read.status, 'awaiting_approval', 'a read verb proposal still needs the OK');
+});
+
+test('on watch: off switch, daily cap, and proposals only from the watch', async () => {
+  const { watchEvent, watchIdle } = await import('../src/agent/watch.js');
+  const { TOOLS } = await import('../src/agent/tools.js');
+  setSetting('lina', { people: [], quick: true, instant: false, watch: false });
+  assert.deepEqual(await watchEvent({ ref: 'x:1', kind: 'ops', summary: 's', data: {} }), { skipped: 'off' });
+  setSetting('lina', { people: [], quick: true, instant: false, watch: true, watchPerDay: 0 });
+  assert.deepEqual(await watchEvent({ ref: 'x:2', kind: 'ops', summary: 's', data: {} }), { skipped: 'cap' });
+  await watchIdle();
+
+  await assert.rejects(TOOLS.propose_task.run({ kind: 'server-op', title: 'Restart shop', params: { verb: 'restart-container', args: ['shop'] }, reason: 'because' }, { trigger: 'chat' }), /only come from Lina’s watch/);
+  const ctx = { trigger: 'watch' };
+  const p = { kind: 'server-op', title: 'Check pm2', params: { verb: 'pm2', args: [] }, reason: 'apps restarting' };
+  await TOOLS.propose_task.run(p, ctx); await TOOLS.propose_task.run(p, ctx);
+  await assert.rejects(TOOLS.propose_task.run(p, ctx), /At most two/);
+  await assert.rejects(TOOLS.propose_task.run({ ...p, params: { verb: 'restart-container', args: ['shop; reboot'] } }, { trigger: 'watch' }), /params/);
+});
