@@ -3,6 +3,7 @@ import './styles/base.css';
 import './styles/components.css';
 import './styles/shell.css';
 import './styles/views.css';
+import './styles/lina.css';
 import './styles/features.css';
 import './styles/responsive.css';
 
@@ -29,6 +30,7 @@ import { talk, toggleTalk } from './voice/talk.js';
 import { mountVoicePill } from './components/voice-pill.js';
 import COUNTRIES from './assets/country-centroids.json';
 
+import lina from './views/lina.js';
 import home from './views/home.js';
 import today from './views/today.js';
 import calendar from './views/calendar.js';
@@ -50,6 +52,7 @@ import { liveTasks, applyWidgetTasks } from './core/model.js';
 import { initDesktopWake } from './voice/wake.js';
 
 const ROUTES = [
+  { id: 'lina', label: 'Lina', short: 'Lina', icon: 'agent', view: lina, dock: true, key: 'G L' },
   { id: 'home', label: 'Home', short: 'Overview', icon: 'home', view: home, dock: true, key: 'G H' },
   { id: 'captures', label: 'Captures', short: 'Notes', icon: 'capture', view: captures, dock: true, key: 'G N' },
   { id: 'today', label: 'Today', icon: 'today', view: today, dock: true, key: 'G T' },
@@ -144,6 +147,7 @@ function showMore(on) {
 }
 function markCurrent() {
   const at = currentRoute() && currentRoute().id;
+  document.documentElement.dataset.route = at || '';         // Lina's deck shows her itself: no floating voice bar there
   const id = MENU_PAGES.includes(at) ? 'settings' : at;    // the menu's pages light up the Settings button
   document.querySelectorAll('[data-route]').forEach(a => { if (a.dataset.route === id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   crumb.textContent = currentRoute() ? currentRoute().label : '';

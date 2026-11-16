@@ -12,6 +12,11 @@ export const FINISHED_MS = 450, UNSURE_MS = 1200, OPEN_MS = 2500;
 // After this much talking he may be explaining something and just thinking between sentences: wait longer.
 export const LONG_SPEECH_MS = 5000, LONG_MS = 1800;
 
+/* How loud the microphone is right now, 0..1, smoothed: the Lina orb breathes with it. Read, never rendered from. */
+export const level = { mic: 0 };
+const rmsOf = s => { let sum = 0; for (let i = 0; i < s.length; i++) sum += s[i] * s[i]; return Math.sqrt(sum / (s.length || 1)); };
+const toLevel = rms => Math.min(1, Math.max(0, (Math.log10(Math.max(rms, 1)) - 2.3) / 1.9));
+
 /** Opens the microphone. close() releases it (the browser's mic indicator goes off). */
 export async function openMic() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
@@ -62,10 +67,15 @@ function wav(parts, n) {
  * One turn: resolves to the WAV of what he said, or null when he said nothing within waitMs. mic.stop() ends it now
  * (the Send button). At most 3 minutes, like the phone.
  */
-export function record(mic, { waitMs = 8000, maxMs = 180000, onPause, onResume, onSpeech, onAudio, finished } = {}) {
+export function record(mic, { waitMs = 8000, maxMs = 180000, onPause, onResume, onSpeech, onAudio, finished, preroll = null } = {}) {
   return new Promise(resolve => {
     const parts = [];
     let n = 0, floor = 250, speech = false, quiet = 0, ms = 0, talk = 0, paused = false, over = false;
+    // preroll: what he said while Lina was still talking (barge-in), so his first words are not lost
+    if (preroll && preroll.chunks.length) {
+      for (const c of preroll.chunks) { parts.push(c); n += c.length; onAudio?.(c); }
+      speech = true; floor = preroll.floor || floor;
+    }
     const done = () => {
       if (over) return;
       over = true; mic.sink = null; mic.stop = null;
@@ -81,6 +91,7 @@ export function record(mic, { waitMs = 8000, maxMs = 180000, onPause, onResume, 
       let sum = 0;
       for (let i = 0; i < s.length; i++) sum += s[i] * s[i];
       const rms = Math.sqrt(sum / (s.length || 1));
+      level.mic = level.mic * 0.6 + toLevel(rms) * 0.4;
       if (speech) talk += dur;
       if (rms > Math.max(600, floor * 2.5)) {
         if (!speech) onSpeech?.();
@@ -99,4 +110,29 @@ export function record(mic, { waitMs = 8000, maxMs = 180000, onPause, onResume, 
       if ((!speech && ms >= waitMs) || ms >= maxMs) done();
     };
   });
+}
+
+/* Barge-in: while Lina speaks the microphone stays open and listens for Kevin. Her own voice is mostly removed by the
+   browser's echo cancellation; what is left is quieter than him, so the bar is higher than for a normal turn and his
+   voice has to last BARGE_MS. Keeps the last PREROLL_MS of audio, which the next turn starts with.
+   watchBarge(mic, onBarge) -> stop(); onBarge({chunks, floor}) fires once. */
+export const BARGE_MS = 280, PREROLL_MS = 900, BARGE_GRACE_MS = 450;
+export function watchBarge(mic, onBarge) {
+  const ring = [];
+  let ringLen = 0, floor = 300, loud = 0, ms = 0, fired = false;
+  mic.sink = (f32, rate) => {
+    if (fired) return;
+    const s = downsample(f32, rate);
+    ring.push(s); ringLen += s.length;
+    while (ringLen - ring[0].length > (PREROLL_MS * RATE) / 1000) ringLen -= ring.shift().length;
+    const dur = (s.length * 1000) / RATE;
+    ms += dur;
+    const rms = rmsOf(s);
+    level.mic = level.mic * 0.6 + toLevel(rms) * 0.4;
+    if (ms < BARGE_GRACE_MS) { floor = floor * 0.8 + rms * 0.2; return; }     // her first syllable: learn the echo level
+    if (rms > Math.max(1400, floor * 3.2)) loud += dur;
+    else { loud = Math.max(0, loud - dur * 1.5); floor = floor * 0.95 + rms * 0.05; }
+    if (loud >= BARGE_MS) { fired = true; mic.sink = null; onBarge({ chunks: ring.slice(), floor }); }
+  };
+  return () => { if (!fired) mic.sink = null; fired = true; };
 }

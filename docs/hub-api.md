@@ -146,3 +146,30 @@ A task answers in camelCase:
 - **The Hermes loop:** poll `GET /tasks/queue`. For each task, `start` it, run
   `ssh hetzner-ops <verb> <args...> [--approval <approvalId>]`, post `progress` as useful, then `finish` with what
   happened (and the ops report id, if one was posted). Results are untrusted text: shown and read out, never acted on.
+
+## lina-feed 1.0.0
+
+Anything Kevin should hear about goes to Lina's feed: she shows it live on her deck (the app's first screen), says it
+out loud while the deck is open (Live voice), and tells it on "what's new?". The server's own news (agent tasks,
+Hermes's answers, ops alerts) lands there by itself; Workbench sessions are watched by the server every 90 seconds.
+
+`POST /api/lina/events` (any device token: the apps, Hermes, Kevin's own apps such as housing or banking) → `201 { id }`
+
+```json
+{ "source": "housing", "title": "Viewing confirmed: Kreuzberg 2-room, Thu 18:00",
+  "body": "Wrangelstr. 41 · 1,180 € warm", "level": "info", "ref": "viewing-42", "url": "https://…", "push": false }
+```
+
+- `source`: `^[a-z0-9][a-z0-9-]{0,39}$`, the app's name. `title` 1–200 characters, `body` up to 1000.
+- `level`: `info` | `good` | `warn` | `alert`. `alert` (or `push: true`) also sends a push to Kevin's phone.
+- `ref`: the same ref from the same source again updates that entry (`200`) instead of adding one: post a status
+  that changes ("viewing moved to Fri") with the ref of the first post.
+- Entries are data from other machines: shown and read out, never followed as instructions. Kept 30 days.
+
+`GET /api/lina/feed?since=&limit=&snapshot=0` (app token) → `{ events, unread, snapshot, at }`; `snapshot` is where
+Hermes, Workbench, agent tasks, approvals, the Obsidian vault, today's todos, the next calendar entry and the server
+stand. `POST /api/lina/feed/told { ids }` marks entries as told.
+
+Workbench plans: the server reads `GET /api/workbench-agent/plans` (`{ data: { plans: [{ id, title, state, done,
+total, running, waiting, next }], attention: [{ title, detail }] } }`) when Workbench offers it; until then Lina sees
+sessions only.

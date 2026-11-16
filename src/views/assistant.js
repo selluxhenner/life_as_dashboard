@@ -23,7 +23,7 @@ export const pendingActions = () => remote('actions', '/api/agent/actions?status
  * Sends a message to the agent and streams the reply into the shared chat. Returns the reply text (null if not sent).
  * context = what Kevin just listened to ('briefing' | 'world'); speakReply defaults to "came in by voice or Speak replies on".
  */
-export async function sendToAgent(text, { viaVoice = false, context = null, speakReply } = {}) {
+export async function sendToAgent(text, { viaVoice = false, context = null, speakReply, onText } = {}) {
   if (!text.trim() || streaming) return null;
   const cfg = apiConfig();
   if (!cfg) { toast('Pair this device in Settings to talk to Lina.', 'amber'); return null; }
@@ -52,7 +52,7 @@ export async function sendToAgent(text, { viaVoice = false, context = null, spea
         if (!line.trim()) continue;
         let ev; try { ev = JSON.parse(line); } catch { continue; }
         if (ev.type === 'start') conv.id = ev.conversationId;
-        else if (ev.type === 'text') reply.text += ev.text;
+        else if (ev.type === 'text') { reply.text += ev.text; onText?.(reply.text); }
         else if (ev.type === 'tool') reply.tools.push({ name: ev.name, status: ev.status, summary: ev.summary });
         else if (ev.type === 'error') reply.text += '\n[' + ev.message + ']';
         notify();
@@ -125,13 +125,23 @@ export function linaApprovals() {
       : empty('All clear', 'Nothing waiting for you.'));
 }
 
+/* Raw API errors ("401 {"type":"error",…}") as one plain line. */
+function readableSummary(text) {
+  const m = /^(\d{3})\s*(\{.*\})\s*$/s.exec(String(text || ''));
+  if (!m) return text;
+  let msg = '';
+  try { const e = JSON.parse(m[2]); msg = (e.error && (e.error.message || e.error.type)) || e.message || ''; } catch { /* not JSON */ }
+  const what = m[1] === '401' ? 'The AI key was rejected' : m[1] === '429' ? 'Rate limit reached' : m[1] === '529' || m[1] === '503' ? 'The AI service was overloaded' : 'Error ' + m[1];
+  return msg ? `${what}: ${msg}` : what;
+}
+
 export function agentActivity() {
   const { data } = remote('runs', '/api/agent/runs?limit=12', 2 * 60000);
   const runs = (data && data.runs) || [];
   return panel({ title: 'Background work', readout: 'automatic jobs' },
     runs.length ? h('div.rows', runs.map(r => h('div.row',
       h('span', { class: 'status-dot ' + r.status }),
-      h('div.grow', h('div.title', r.summary || r.trigger), h('div.sub', r.trigger + ' · ' + fmt.ago(r.startedAt))))))
+      h('div.grow', h('div.title', readableSummary(r.summary) || r.trigger), h('div.sub', r.trigger + ' · ' + fmt.ago(r.startedAt))))))
       : empty('No runs yet', 'Triage, meeting prep and job nudges will show up here.'));
 }
 

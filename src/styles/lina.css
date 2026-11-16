@@ -1,0 +1,115 @@
+/* ---------- Lina's deck (views/lina.js) ----------
+   Three columns: the live feed, the stage (clock beside Lina's orb, her words, commands), and what she can work with. */
+.view.lina { display: grid; gap: var(--s-5); padding-bottom: var(--s-8); }
+
+.lina-top { display: flex; align-items: center; gap: var(--s-5); flex-wrap: wrap; }
+.lina-hello { display: flex; align-items: baseline; gap: var(--s-3); }
+.lina-name { font-family: var(--font-dot); font-size: var(--fs-2xl); letter-spacing: .18em; color: var(--signal); text-shadow: var(--glow); }
+.lina-hello .dim { font-family: var(--font-data); font-size: var(--fs-xs); color: var(--ink-3); }
+.lina-systems { display: flex; gap: var(--s-2); flex-wrap: wrap; margin-left: auto; }
+.lina-systems .sys {
+  display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 12px;
+  border: 1px solid var(--seam); border-radius: var(--r-pill); background: color-mix(in oklab, var(--hull) 70%, transparent);
+  font-family: var(--font-data); font-size: var(--fs-xs); color: var(--ink);
+}
+.lina-systems button.sys { cursor: pointer; transition: border-color var(--t-fast); }
+.lina-systems button.sys:hover { border-color: var(--seam-strong); }
+.lina-systems .sys .dim { color: var(--ink-3); }
+
+.lina-grid { display: grid; grid-template-columns: minmax(250px, 1fr) minmax(420px, 1.55fr) minmax(250px, 1fr); gap: var(--s-5); align-items: start; }
+.lina-col { display: grid; gap: var(--s-5); min-width: 0; }
+.lina-center { display: grid; gap: var(--s-4); min-width: 0; }
+
+/* the stage: the clock and Lina side by side, her words under them */
+.lina-stage {
+  position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-areas: 'clock core' 'words words';
+  align-items: center; gap: var(--s-2) var(--s-4); padding: var(--s-4) var(--s-4) var(--s-5);
+  border: 1px solid var(--seam); background: radial-gradient(ellipse at 62% 40%, color-mix(in oklab, var(--signal) 9%, transparent), transparent 62%), color-mix(in oklab, var(--hull) 55%, transparent);
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+}
+.lina-clock { grid-area: clock; }
+.lina-clock .chronosphere { width: clamp(170px, 15vw, 250px); }
+.lina-core { grid-area: core; display: grid; justify-items: center; gap: var(--s-2); }
+.lina-orb-btn { background: none; border: 0; padding: 0; cursor: pointer; border-radius: 50%; -webkit-app-region: no-drag; }
+.lina-orb-btn:focus-visible { outline: 2px solid var(--signal); outline-offset: 4px; }
+.lina-orb { width: clamp(220px, 22vw, 340px); aspect-ratio: 1; display: grid; place-items: center; transition: transform var(--t-base) var(--ease-spring, ease); }
+.lina-orb-btn:hover .lina-orb { transform: scale(1.02); }
+.lina-orb-btn:active .lina-orb { transform: scale(.97); }
+.orb-canvas { display: block; }
+.lina-state { font-family: var(--font-data); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.view.lina[data-state='listening'] .lina-state { color: var(--pulse); }
+.view.lina[data-state='thinking'] .lina-state { color: var(--amber); }
+.view.lina[data-state='speaking'] .lina-state { color: var(--signal); }
+.lina-words { grid-area: words; display: grid; gap: var(--s-2); min-height: 4.8em; text-align: center; padding: 0 var(--s-4); }
+.lina-heard { font-size: var(--fs-sm); color: var(--ink-2); }
+.lina-heard.hint { color: var(--ink-3); }
+.lina-reply { font-size: var(--fs-lg); font-weight: 300; line-height: 1.45; color: var(--ink); max-height: 9.5em; overflow: auto; }
+
+.lina-command .lina-ask { width: 100%; height: 44px; font-size: var(--fs-md); }
+.lina-chips { display: flex; flex-wrap: wrap; gap: var(--s-2); justify-content: center; }
+.chip-btn {
+  height: 30px; padding: 0 14px; border: 1px solid var(--seam-strong); border-radius: var(--r-pill);
+  background: color-mix(in oklab, var(--hull) 60%, transparent); color: var(--ink-2); font: inherit; font-size: var(--fs-sm); cursor: pointer;
+  transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+}
+.chip-btn:hover { border-color: var(--signal); color: var(--ink); background: color-mix(in oklab, var(--signal) 10%, transparent); }
+.chip-btn:active { transform: scale(.97); }
+
+/* live feed */
+.feed { display: grid; gap: 2px; max-height: 470px; overflow: auto; margin: 0 -6px; padding: 0 6px; }
+.feed-item { display: flex; gap: var(--s-3); padding: 9px 8px; border-radius: var(--r-sm); border-left: 2px solid transparent; transition: background var(--t-slow); }
+.feed-item[data-level='good'] { border-left-color: var(--pulse); }
+.feed-item[data-level='warn'] { border-left-color: var(--amber); }
+.feed-item[data-level='alert'] { border-left-color: var(--flare); }
+.feed-item.fresh { background: color-mix(in oklab, var(--signal) 12%, transparent); animation: feed-in var(--t-slow) var(--ease-spring, ease) both; }
+@keyframes feed-in { from { opacity: 0; transform: translateY(-6px); } }
+.feed-ic { color: var(--ink-3); padding-top: 2px; }
+.feed-ic svg { width: 15px; height: 15px; }
+.feed-head { display: flex; justify-content: space-between; gap: var(--s-2); font-size: var(--fs-micro); }
+.feed-src { font-family: var(--font-data); text-transform: uppercase; letter-spacing: .08em; color: var(--signal); }
+.feed-title { font-size: var(--fs-sm); color: var(--ink); margin-top: 2px; }
+.feed-body { font-size: var(--fs-xs); color: var(--ink-3); margin-top: 2px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+.lina-time { width: 48px; color: var(--signal); }
+.lina-focus { margin-top: var(--s-4); display: grid; gap: 6px; }
+.lina-focus .micro { color: var(--ink-3); margin-bottom: 2px; }
+.focus-item { display: flex; align-items: center; gap: var(--s-2); font-size: var(--fs-sm); }
+
+button.row.lina-note { width: 100%; text-align: left; background: none; border: 0; color: inherit; font: inherit; cursor: pointer; gap: var(--s-3); }
+button.row.lina-note:hover .title { color: var(--signal); }
+button.row.lina-note svg { width: 15px; height: 15px; color: var(--ink-3); flex: none; }
+
+.lina-plans { display: grid; gap: var(--s-3); margin-bottom: var(--s-3); }
+.plan-head { display: flex; justify-content: space-between; gap: var(--s-2); font-size: var(--fs-sm); }
+.plan-bar { height: 3px; background: var(--seam); margin-top: 5px; }
+.plan-bar i { display: block; height: 100%; background: var(--signal); box-shadow: var(--glow); }
+.lina-attn { display: grid; gap: 4px; margin-bottom: var(--s-3); }
+.attn { display: flex; gap: 6px; align-items: center; font-size: var(--fs-xs); color: var(--amber); }
+.attn svg { width: 13px; height: 13px; }
+
+/* narrower windows: the stage first, the columns under it */
+@media (max-width: 1280px) {
+  .lina-grid { grid-template-columns: 1fr 1fr; }
+  .lina-center { grid-column: 1 / -1; order: -1; }
+}
+@media (max-width: 860px) {
+  .lina-grid { grid-template-columns: 1fr; }
+  .lina-stage { grid-template-columns: 1fr; grid-template-areas: 'core' 'words'; }
+  .lina-clock { display: none; }
+  .lina-orb { width: min(260px, 70vw); }
+  .lina-systems { margin-left: 0; }
+}
+html[data-route='lina'] .voice-pill-host { display: none; }
+
+/* Hub: one quiet line when nothing waits for a yes */
+.hub-needs { display: grid; gap: var(--s-5); margin-bottom: var(--s-5); }
+.hub-needs:empty { display: none; }
+.hub-clear { display: flex; align-items: center; gap: var(--s-3); padding: 12px 16px; border: 1px solid var(--seam); background: color-mix(in oklab, var(--pulse) 6%, transparent); font-size: var(--fs-sm); }
+.hub-clear .dim { color: var(--ink-3); }
+.lina-top .live-voice {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; cursor: pointer;
+  border: 1px solid var(--seam); border-radius: var(--r-pill); background: none; color: var(--ink-3);
+  font-family: var(--font-data); font-size: var(--fs-xs);
+}
+.lina-top .live-voice svg { width: 13px; height: 13px; }
+.lina-top .live-voice[aria-pressed='true'] { color: var(--signal); border-color: color-mix(in oklab, var(--signal) 45%, transparent); }

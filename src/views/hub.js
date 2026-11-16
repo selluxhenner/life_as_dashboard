@@ -11,6 +11,7 @@ import { icon } from '../core/icons.js';
 import { toast } from '../core/fx.js';
 import { serverPulse } from './ops.js';
 import { linaApprovals, agentActivity, pendingActions } from './assistant.js';
+import { linaFeed } from './lina.js';
 
 // Workbench on the home PC, reachable inside the tailnet only (tailscale serve on port 3917)
 const WORKBENCH_URL = 'https://kev-pc.tailb66bb7.ts.net';
@@ -176,19 +177,59 @@ function github() {
         })));
 }
 
+/* Everything waiting for Kevin's yes in one place. When nothing is, one quiet line instead of three empty panels. */
+function needsYou(s, connected) {
+  const hermesItems = s.approvals.filter(a => a.source !== 'lina');
+  const linaItems = ((pendingActions().data || {}).actions) || [];
+  const taskItems = (((tasksData().data || {}).tasks) || []).filter(t => t.status === 'awaiting_approval');
+  if (!connected || hermesItems.length + linaItems.length + taskItems.length) {
+    return [taskItems.length ? agentTasks(connected) : null, hermesItems.length || !connected ? approvals(hermesItems, connected) : null, linaItems.length ? linaApprovals() : null];
+  }
+  return [h('div.hub-clear', h('span.status-dot.done'), h('div.grow', h('b', 'Nothing waiting for your yes.'),
+    h('span.dim', ' Lina’s invites and emails, Hermes’s server changes and agent tasks that need an OK show up here.')))];
+}
+
+function workbenchCard(w) {
+  if (!w || !w.configured) return null;
+  const DOT = { running: 'running', active: 'running', working: 'running', waiting: 'running', done: 'done', completed: 'done', failed: 'error', error: 'error' };
+  return panel({ title: 'Workbench', readout: w.reachable ? h('span', h('b', String(w.active)), ' active') : 'not reachable' },
+    w.plans && w.plans.length ? h('div.lina-plans', w.plans.slice(0, 5).map(p => h('div.plan',
+      h('div.plan-head', h('span.title', p.title), h('span.data.muted', p.total ? `${p.done}/${p.total}` : p.state || '')),
+      h('div.plan-bar', h('i', { style: { width: (p.total ? Math.round((p.done / p.total) * 100) : 0) + '%' } }))))) : null,
+    w.sessions.length ? h('div.rows', w.sessions.map(x => h('div.row',
+      h('span', { class: 'status-dot ' + (DOT[x.status] || 'idle') }),
+      h('div.grow', h('div.title', x.title || x.project), h('div.sub', [x.project, x.branch, x.status, x.lastActivityAt ? fmt.ago(x.lastActivityAt) : null].filter(Boolean).join(' · '))))))
+      : empty('No sessions', w.error || null));
+}
+
+/* What reached Lina lately, the same feed as on her deck. */
+function liveFeed(data) {
+  const list = ((data && data.events) || []).slice(0, 8);
+  if (!list.length) return null;
+  return panel({ title: 'Live', readout: data.unread ? h('span', h('b', String(data.unread)), ' new for Lina') : '' },
+    h('div.feed', list.map(e => h('article.feed-item', { dataset: { level: e.level } },
+      h('div.grow', h('div.feed-head', h('span.feed-src', e.source), h('span.data.muted', fmt.ago(e.at))),
+        h('div.feed-title', e.title), e.body ? h('div.feed-body', e.body) : null)))));
+}
+
 export default {
   id: 'hub',
   render(root) {
     const { data, connected } = hubState();
     const s = data || { devices: [], approvals: [] };
-    const lina = linaApprovals();
+    const feed = linaFeed().data;
+    const snap = feed && feed.snapshot;
+    const reg = s.registry;
+    const hasServices = reg && reg.services && reg.services.length;
     root.append(h('div.view.hub',
-      viewHead('Hub', 'Your devices, the agent box and the server in one place. Everything waiting for your yes is here: tasks Lina handed to the agents, Hermes’s server changes, and invites and emails Lina sends only after you approve.',
+      viewHead('Hub', 'Your devices, the agent box and the server in one place, and everything that waits for your yes.',
         h('a.btn.ghost', { href: WORKBENCH_URL, target: '_blank', rel: 'noopener', title: 'Needs Tailscale on this device' }, icon('agent'), 'Open Workbench')),
+      h('div.hub-needs', ...needsYou(s, connected).filter(Boolean)),
       h('div.grid.g-2',
-        h('div.stack', agentTasks(connected), approvals(s.approvals.filter(a => a.source !== 'lina'), connected), lina, devices(s.devices),
+        h('div.stack', serverPulse(), liveFeed(feed), workbenchCard(snap && snap.workbench), hermesAsks(), devices(s.devices)),
+        h('div.stack', hasServices || (reg && reg.error) ? services(reg) : null, agentActivity(), github(),
+          (((tasksData().data || {}).tasks) || []).some(t => t.status !== 'awaiting_approval') ? agentTasks(connected) : null,
           panel({ title: 'Admin pages' }, linkRows(ADMIN)),
-          panel({ title: 'Tools' }, linkRows(TOOLS))),
-        h('div.stack', services(s.registry), hermesAsks(), serverPulse(), github(), agentActivity()))));
+          panel({ title: 'Tools' }, linkRows(TOOLS))))));
   }
 };

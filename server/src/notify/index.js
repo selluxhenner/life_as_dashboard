@@ -1,5 +1,6 @@
 // Notifications: stored for the apps to fetch (the Android app checks every 15 minutes and at the briefing time),
 // woken instantly through Firebase when that is set up, and pushed to ntfy when NTFY_TOPIC is set.
+import { addFeed, sourceOf } from '../lina/feed.js';
 import { db } from '../db.js';
 import { config } from '../config.js';
 import { getSetting } from '../settings.js';
@@ -21,8 +22,11 @@ export function newsAlertsToday(now = new Date()) {
 export const alertedRecently = (ref, ms) => !!db.get('SELECT 1 FROM notifications WHERE ref = ? AND created_at > ?', ref, Date.now() - ms);
 
 /* Returns the new notification id, or null when this kind is switched off or the daily cap is reached. */
-export async function notify({ title, body, url = null, priority = 3, tags = [], kind = 'general', ref = null }) {
+export async function notify({ title, body, url = null, priority = 3, tags = [], kind = 'general', ref = null, feed = true }) {
   if (!KINDS.includes(kind)) kind = 'general';
+  // everything Kevin is told also reaches Lina's feed, even when its push is switched off
+  if (feed) try { addFeed({ source: sourceOf(kind, title), kind, title, body, level: priority >= 4 ? 'alert' : 'info', url, ref: ref ? 'n:' + ref : null }); }
+  catch (e) { console.error('lina feed', e.message); }
   const alerts = getSetting('alerts');
   if (alerts[kind] === false) return null;
   if (NEWSY.includes(kind) && newsAlertsToday() >= alerts.maxPerDay) return null;
