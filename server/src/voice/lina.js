@@ -232,8 +232,8 @@ export async function linaTurn({ audio, type, prepared: prepId, conversationId, 
   } else if (!yn && !(waiting.length || tasks.length) && (ui = pageFor(heard) ? [{ action: 'open_page', data: { page: pageFor(heard) } }] : []).length) {
     // "öffne den Kalender": the app opens it, she just says okay
     lang = guessLang(heard) === 'de' || /\b(öffne|zeig|geh|wechsel|zurück|mir)\b/i.test(heard) ? 'de' : 'en';
-    reply = 'Okay.';
-    cid = recordExchange(cid, heard, reply);
+    reply = '';                                                     // nothing to say: the app opens it (and explains it when Live voice is on)
+    cid = recordExchange(cid, heard, '(opened ' + ui[0].data.page + ')');
   } else if (!yn && isClosing(heard)) {
     // "danke" / "thanks, that's all": nothing more to say; the app goes back to rest
     return { heard, reply: '', lang, conversationId: cid, awaiting: [], tools: [], listen: false, audio: null, end: true, ms: { stt: t1 - t0, think: 0, voice: 0 } };

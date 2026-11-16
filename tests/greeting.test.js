@@ -19,3 +19,12 @@ describe('greetingFor', () => {
     expect(greetingFor(null, [], at(14, 0))).toMatch(/Kevin.*\?$/);
   });
 });
+
+import { pageBrief } from '../src/voice/greeting.js';
+describe('pageBrief', () => {
+  it('asks about what is new on content pages and stays quiet on settings', () => {
+    expect(pageBrief('calendar')).toMatch(/Kalender/);
+    expect(pageBrief('inbox')).toMatch(/Inbox/);
+    expect(pageBrief('settings')).toBe(null);
+  });
+});

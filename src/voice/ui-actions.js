@@ -10,10 +10,11 @@ import { openInDeck } from '../views/lina.js';
 const ROUTE = { world: 'news', plan: 'goals', chat: 'assistant' };
 export const routeFor = page => ROUTE[page] || page;
 
-export function runUiActions(list) {
+/** explain: she may tell what's new on an opened page (only when she has nothing else to say). */
+export function runUiActions(list, { explain = false } = {}) {
   for (const u of list || []) {
     try {
-      if (u.action === 'open_page' && u.data && u.data.page) openInDeck(routeFor(u.data.page));   // one page: it opens inside Lina's deck
+      if (u.action === 'open_page' && u.data && u.data.page) openInDeck(routeFor(u.data.page), { explain });   // one page: it opens inside Lina's deck
       else if (u.action === 'sort_captures' && u.data && Array.isArray(u.data.items)) {
         let n = 0;
         for (const it of u.data.items) {
@@ -26,7 +27,7 @@ export function runUiActions(list) {
           n++;
         }
         showByArea();
-        openInDeck('captures');
+        openInDeck('captures', { explain: false });   // she says what she sorted herself
         if (n) toast(`Lina sorted ${n} capture${n === 1 ? '' : 's'}`, 'pulse');
       }
     } catch (e) { console.warn('lina action', u.action, e); }

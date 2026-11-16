@@ -58,8 +58,6 @@ export default {
     const top = (d.highlights || []).slice(0, 8);
     root.append(h('div.view.ai',
       viewHead('AI models', 'The 8 most important changes from the AI labs this week, and which models lead right now.',
-        top.length ? h('button.btn', { type: 'button', onclick: () => (speakingWhat() === 'ai' ? stopSpeaking() : speak(spoken(top), null, { what: 'ai', lang: 'en' })) },
-          icon(speakingWhat() === 'ai' ? 'pause' : 'volume'), speakingWhat() === 'ai' ? 'Stop' : 'Listen') : null,
         connected ? btn(loading ? 'Refreshing…' : 'Refresh', () => refresh('aimodels', '/api/ai-models/today'), 'ghost', 'sync') : null),
       !connected ? panel({}, empty('The tracker runs on the server', 'Connect to your server in Settings. It checks vendor blogs and leaderboards every morning at 07:30.'))
       : h('div.grid.g-ai',

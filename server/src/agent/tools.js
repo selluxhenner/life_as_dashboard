@@ -161,7 +161,7 @@ export const TOOLS = {
   },
   open_page: {
     risk: 'read', ui: true,
-    description: 'Open a page of the Agentic OS app on Kevin\'s screen. Use when he says "open / show me / go to" one: lina (her own start screen, also "back"), today, calendar, captures, inbox, world (news map), plan (goals and board), hub (devices, agents, approvals), settings, home (the overview), jobs, ai (AI models), chat. Say nothing more than a short "Okay" unless he asked something else too.',
+    description: 'Open a page of the Agentic OS app on Kevin\'s screen. Use when he says "open / show me / go to" one: lina (her own start screen, also "back"), today, calendar, captures, inbox, world (news map), plan (goals and board), hub (devices, agents, approvals), settings, home (the overview), jobs, ai (AI models), chat. Reply with nothing at all (the app opens it and, when Kevin wants it, explains the page itself) unless he asked something else too.',
     schema: z.object({ page: z.enum(PAGES) }),
     run: ({ page }) => ({ page })
   },

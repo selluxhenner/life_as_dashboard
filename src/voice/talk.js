@@ -199,7 +199,7 @@ async function converse(context, { followUp = false } = {}) {
       if (my !== run) return;
       logVoiceExchange(r);
       if (r.tools && r.tools.length) set({ tools: r.tools.map(t => t.name) });
-      if (r.ui && r.ui.length) runUiActions(r.ui);                // she opens a page or sorts captures in the app
+      if (r.ui && r.ui.length) runUiActions(r.ui, { explain: !r.reply });   // she opens a page or sorts captures; with no answer of her own she explains the page
       if (r.tools && r.tools.length) runSync();                    // what she changed shows up right away
       awaiting = { ids: (r.awaiting || []).map(a => a.id).join(','), at: Date.now() };
       if (said) {

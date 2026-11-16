@@ -170,7 +170,7 @@ export function worldPulsePanel() {
   const top = (data && data.digest && data.digest.top) || [];
   const stories = top.length ? top : digestStories(data).sort((a, b) => (b.breaking - a.breaking) || (b.significance || 0) - (a.significance || 0));
   const speech = stories.length ? worldSpeech(data && data.digest, stories) : null;
-  return panel({ title: 'World pulse', readout: data && data.digest ? fmt.ago(new Date(data.digest.createdAt).getTime()) : '', actions: [speech ? listenButton(speech, 'btn.sm.ghost') : null, h('button.btn.sm.ghost', { type: 'button', onclick: () => go('news') }, 'Open')] },
+  return panel({ title: 'World pulse', readout: data && data.digest ? fmt.ago(new Date(data.digest.createdAt).getTime()) : '', actions: [h('button.btn.sm.ghost', { type: 'button', onclick: () => go('news') }, 'Open')] },
     stories.length
       ? h('ul.stories.compact', stories.slice(0, 4).map(storyRow))
       : empty(connected ? 'First digest is on its way' : 'News needs the server', connected ? 'Digests arrive at 07:00, 13:00 and 19:00.' : 'Pair this device in Settings to get the world digest.'));
@@ -204,7 +204,6 @@ export default {
     const filterLabel = [activeTopic && TOPIC_LABEL[activeTopic], activeRegion && REGION_LABEL[activeRegion]].filter(Boolean).join(' · ');
 
     const sorted = [...visibleTop, ...[...visible].sort((a, b) => (b.breaking - a.breaking) || (b.significance || 0) - (a.significance || 0))];
-    const readBtn = listenButton(worldSpeech(digest, sorted, filterLabel ? filterLabel.replace(' · ', ', ') : '', matches));
     const reload = () => { refresh('news', '/api/news/digest/latest'); refresh('markets', '/api/markets'); };
 
     const topicBar = h('div.topic-bar', { role: 'group', 'aria-label': 'Filter by topic' },
@@ -218,7 +217,7 @@ export default {
 
     root.append(h('div.view.news',
       viewHead('World', digest.createdAt ? `Digest of ${fmt.time(new Date(digest.createdAt))} · live wire every 30 min · next digest ${nextSlot()}` : 'Politics, economy, elections and conflict — the events that move the world, three digests a day plus a live wire.',
-        readBtn, connected ? askButton() : null, connected ? btn(loading ? 'Refreshing…' : 'Refresh', reload, 'ghost', 'sync') : null),
+        connected ? btn(loading ? 'Refreshing…' : 'Refresh', reload, 'ghost', 'sync') : null),
       breaking.length ? h('div.breaking-bar', chip('breaking', 'alert', 'live'),
         h('a.grow', { href: breaking[0].url, target: '_blank', rel: 'noopener' }, breaking[0].headline),
         breaking.length > 1 ? h('span.data', `+${breaking.length - 1} more`) : null) : null,

@@ -18,7 +18,7 @@ import { go, routeList, render as routerRender, currentRoute } from '../core/rou
 import { isPhone } from '../core/platform.js';
 import { talk, toggleTalk, cancelTalk, askLina, setTalk, listenNow, canTalk } from '../voice/talk.js';
 import { apiConfig } from '../core/api.js';
-import { greetingFor } from '../voice/greeting.js';
+import { greetingFor, pageBrief } from '../voice/greeting.js';
 
 const FEED = '/api/lina/feed?limit=30';
 const POLL_MS = 15000;
@@ -80,7 +80,8 @@ function build() {
   const chrono = createChronosphere({ lat: state.settings.home.lat, lon: state.settings.home.lon, size: 760 });
   const orb = linaOrb();
   const time = h('div.lina-clock-time.data');
-  const core = h('button.lina-core', { type: 'button', 'aria-label': 'Talk to Lina', onclick: () => toggleTalk() }, orb);
+  // small Lina on an opened page: with Live voice off a tap brings the overview back; otherwise it talks
+  const core = h('button.lina-core', { type: 'button', 'aria-label': 'Talk to Lina', onclick: () => (focus && !announceOn() && talk.state === 'idle' ? closeFocus() : toggleTalk()) }, orb);
   const dial = h('div.lina-dial', chrono.el, core);
   const links = h('svg.lina-links', { 'aria-hidden': 'true' });
   const sats = Object.fromEntries(['next', 'hermes', 'workbench', 'vault', 'server', 'live'].map(k => [k, h('section.sat.' + k)]));
@@ -281,12 +282,17 @@ function importance(key, s, data) {
 let focus = null, focusView = null, focusShown = null;
 const titleOf = id => (routeList().find(r => r.id === id) || {}).label || id;
 
-/** Open a page inside the deck (Kalender, Inbox, Hub …). From another page, the deck comes back first. */
-export function openInDeck(id) {
+/** Open a page inside the deck (Kalender, Inbox, Hub …). From another page, the deck comes back first.
+    explain: with Live voice on she then tells what is new there; off, she stays quiet and Kevin looks himself. */
+export function openInDeck(id, { explain = true } = {}) {
   if (!id || id === 'lina') return closeFocus();
+  const changed = focus !== id;
   focus = id;
   if (!currentRoute() || currentRoute().id !== 'lina') go('lina'); else routerRender();
+  const ask = pageBrief(id);
+  if (explain && changed && ask && liveVoiceOn() && apiConfig()) setTimeout(() => askLina(ask), 350);
 }
+export const liveVoiceOn = () => announceOn();
 /** Back to the overview: Lina big in the middle. */
 export function closeFocus(quiet = false) {
   if (!focus) return;
