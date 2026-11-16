@@ -14,7 +14,7 @@ import { linaApprovals, agentActivity, pendingActions } from './assistant.js';
 import { linaFeed } from './lina.js';
 
 // Workbench on the home PC, reachable inside the tailnet only (tailscale serve on port 3917)
-const WORKBENCH_URL = 'https://kev-pc.tailb66bb7.ts.net';
+const WORKBENCH_URL = 'https://desktop-oe7cumo.tailb66bb7.ts.net';
 const PLATFORM = { android: 'Phone', laptop: 'Laptop', desktop: 'Desktop', windows: 'Windows', macos: 'Mac', linux: 'Server', web: 'Browser' };
 
 /* Admin pages and tools. A link without url shows as "later" (Elaria's admin is not live yet). */

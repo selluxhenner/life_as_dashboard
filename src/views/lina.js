@@ -20,7 +20,7 @@ import { talk, toggleTalk, cancelTalk, askLina } from '../voice/talk.js';
 
 const FEED = '/api/lina/feed?limit=30';
 const POLL_MS = 15000;
-const WORKBENCH_URL = 'https://kev-pc.tailb66bb7.ts.net';
+const WORKBENCH_URL = 'https://desktop-oe7cumo.tailb66bb7.ts.net';
 
 /* What a tap on a chip asks. Spoken answers, so the wording asks for short ones. */
 export const COMMANDS = [
