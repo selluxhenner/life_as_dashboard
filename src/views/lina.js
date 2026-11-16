@@ -138,9 +138,9 @@ function nextPanel(s) {
         h('span.grow', t.title), t.due ? h('span.data.muted', t.due === tk ? 'today' : t.due < tk ? 'overdue' : t.due.slice(5)) : null))) : null);
 }
 
-function vaultPanel(v) {
+function vaultPanel(v, waiting) {
   return panel({ title: 'Obsidian', readout: v && v.connected ? h('span', h('b', String(v.notes)), ' notes') : '' },
-    !v ? empty('Loading', null)
+    !v ? empty(waiting || 'Loading', null)
       : !v.connected ? empty('Vault not connected', 'Set OBSIDIAN_VAULT on the server (Settings › Lina setup).')
       : h('div.rows', v.recent.map(n => h('button.row.lina-note', { type: 'button', title: 'Ask Lina about this note',
           onclick: () => askLina(`Open my note "${n.path}" and tell me briefly what's in it and where I left off.`) },
@@ -151,9 +151,9 @@ function vaultPanel(v) {
 }
 
 const WB_DOT = { running: 'running', active: 'running', working: 'running', busy: 'running', waiting: 'running', 'needs-input': 'running', done: 'done', completed: 'done', failed: 'error', error: 'error' };
-function workbenchPanel(w) {
+function workbenchPanel(w, waiting) {
   return panel({ title: 'Workbench', readout: w && w.reachable ? h('span', h('b', String(w.active)), ' active') : '' },
-    !w ? empty('Loading', null)
+    !w ? empty(waiting || 'Loading', null)
       : !w.configured ? empty('Not connected', 'Set WORKBENCH_URL and WORKBENCH_TOKEN on the server.')
       : h('div',
           !w.reachable ? h('div.hint', (w.error || 'Workbench is not reachable') + (w.sessions.length ? ' · last known sessions' : '')) : null,
@@ -193,7 +193,8 @@ function paint() {
   deck.liveVoice.setAttribute('aria-pressed', String(announceOn()));
   if (data && data.events) announce(data.events);
   deck.left.replaceChildren(feedPanel(data), nextPanel(s));
-  deck.right.replaceChildren(vaultPanel(s && s.vault), workbenchPanel(s && s.workbench));
+  const waiting = !s && error ? 'Waiting for the server update' : null;
+  deck.right.replaceChildren(vaultPanel(s && s.vault, waiting), workbenchPanel(s && s.workbench, waiting));
   const st = talk.state;
   deck.el.dataset.state = st;
   deck.label.textContent = STATE_LABEL[st] || '';
