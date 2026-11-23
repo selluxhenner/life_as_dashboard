@@ -28,3 +28,21 @@ describe('pageBrief', () => {
     expect(pageBrief('settings')).toBe(null);
   });
 });
+
+import { askLine } from '../src/voice/greeting.js';
+describe('askLine', () => {
+  const ask = (kind, yes, extra = {}) => askLine({ kind, title: 'IN3-Z1 is blocked', task: 'IN3-Z1', yes, ...extra });
+  it('asks exactly what a plain yes would do', () => {
+    expect(ask('task-blocked', { id: 'retry', label: 'Restart' })).toMatch(/neu starten\?$/);
+    expect(ask('task-blocked', { id: 'suggestion', label: 'Do as it proposes' })).toMatch(/wie er vorschlägt\?$/);
+    expect(ask('pull-request', { id: 'merge', label: 'Agree and merge' })).toMatch(/IN3-Z1 .*gemergt werden\?$/);
+  });
+  it('still asks about a kind and an option it does not know', () => {
+    expect(ask('haupt-start', { id: 'start', label: 'Start Hauptplan' }, { title: 'FAB · Die Fabrik' })).toBe('Kurz zu Workbench: FAB , Die Fabrik. Soll ich „Start Hauptplan“ bestätigen?');
+  });
+  it('never invites a yes when there is none', () => {
+    expect(ask('session-waiting', null, { words: true })).toMatch(/antworten\?$/);
+    expect(ask('session-waiting', null)).toMatch(/in Workbench\.$/);
+    expect(askLine({ kind: 'x', title: 'a', yes: null }, 3)).toMatch(/braucht dich 3 Mal/);
+  });
+});

@@ -3,6 +3,7 @@
 // WORKBENCH_URL and WORKBENCH_TOKEN are set. The first look only remembers what is there.
 import { config } from '../config.js';
 import { workbenchSessions, workbenchPlans } from '../routes/workbench.js';
+import { linked } from '../workbench/link.js';
 import { addFeed } from './feed.js';
 
 const EVERY_MS = 90000;
@@ -28,6 +29,7 @@ export async function watchWorkbench(now = Date.now()) {
     }
   }
   seen = next;
+  if (linked()) return added;                   // the linked Workbenches report their asks themselves (workbench/link.js)
   const plans = await workbenchPlans(now);
   if (plans.available) {
     const keys = new Set(plans.attention.map(a => a.title));

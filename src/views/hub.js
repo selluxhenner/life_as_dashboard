@@ -11,10 +11,9 @@ import { icon } from '../core/icons.js';
 import { toast } from '../core/fx.js';
 import { serverPulse } from './ops.js';
 import { linaApprovals, agentActivity, pendingActions } from './assistant.js';
-import { linaFeed } from './lina.js';
+import { linaFeed, openInDeck } from './lina.js';
+import { WORKBENCH_URL } from './workbench.js';
 
-// Workbench on the home PC, reachable inside the tailnet only (tailscale serve on port 3917)
-const WORKBENCH_URL = 'https://desktop-oe7cumo.tailb66bb7.ts.net';
 const PLATFORM = { android: 'Phone', laptop: 'Laptop', desktop: 'Desktop', windows: 'Windows', macos: 'Mac', linux: 'Server', web: 'Browser' };
 
 /* Admin pages and tools. A link without url shows as "later" (Elaria's admin is not live yet). */
@@ -193,6 +192,11 @@ function needsYou(s, connected) {
 }
 
 function workbenchCard(w) {
+  if (w && w.link) return panel({ title: 'Workbench', readout: w.link.needs ? h('span', h('b', String(w.link.needs)), w.link.needs === 1 ? ' needs you' : ' need you') : 'nothing open' },
+    h('div.rows', w.link.machines.map(m => h('div.row', h('span', { class: 'status-dot ' + (m.online ? 'done' : 'idle') }),
+      h('div.grow', h('div.title', m.name), h('div.sub', m.online ? `${m.working} of ${m.total} lanes busy` : 'not connected right now')),
+      m.now == null ? null : h('span.data', m.now + ' %')))),
+    h('div.input-row', { style: { marginTop: '10px' } }, h('button.btn.sm', { type: 'button', onclick: () => openInDeck('workbench') }, 'Open Workbench page')));
   if (!w || !w.configured) return null;
   const DOT = { running: 'running', active: 'running', working: 'running', waiting: 'running', done: 'done', completed: 'done', failed: 'error', error: 'error' };
   return panel({ title: 'Workbench', readout: w.reachable ? h('span', h('b', String(w.active)), ' active') : 'not reachable' },

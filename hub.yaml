@@ -15,6 +15,7 @@ provides:
   - { type: http-api, name: ops-reports, version: 1.0.0, spec: docs/hub-api.md }
   - { type: http-api, name: approvals, version: 1.0.0, spec: docs/hub-api.md }
   - { type: http-api, name: agent-tasks, version: 1.1.0, spec: docs/hub-api.md }
+  - { type: http-api, name: workbench-link, version: 1.0.0, spec: docs/workbench-link.md }
 consumes:
   - { tool: obsidian_vault, contract: notes-fs, version: ^1.0.0 }
   - { tool: hub, contract: registry, version: ^1.0.0 }

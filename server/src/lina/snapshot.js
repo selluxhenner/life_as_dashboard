@@ -8,6 +8,7 @@ import { pendingApprovals } from '../routes/approvals.js';
 import { latestOps } from '../routes/ops.js';
 import { recentAsks } from '../routes/hermes.js';
 import { workbenchSessions, workbenchPlans } from '../routes/workbench.js';
+import { workbenchControl, yesOption } from '../workbench/link.js';
 import { vaultConnected, listNotes } from '../connectors/obsidian.js';
 import { localDate } from '../lib/time.js';
 import { untoldCount } from './feed.js';
@@ -59,6 +60,21 @@ function server() {
   return worst ? { status: worst.status, summary: worst.summary, at: worst.createdAt } : null;
 }
 
+/* The linked computers on Lina's deck: how busy their lanes are, the open plans and what needs Kevin. Null without a
+   linked Workbench; then the deck shows what the older feed knows (sessions and plan titles). */
+function link(now) {
+  const w = workbenchControl(now);
+  if (!w.linked) return null;
+  return {
+    machines: w.machines.map(m => ({ id: m.id, name: m.name, online: m.online, total: m.lanes ? m.lanes.total : 0, working: m.lanes ? m.lanes.working : 0, now: m.lanes ? m.lanes.now : null, day: m.lanes ? m.lanes.day : null })),
+    needs: w.items.filter(i => i.level === 'ask').length,
+    asks: w.items.filter(i => i.level === 'ask' && !(i.decision && ['pending', 'sent'].includes(i.decision.status))).slice(0, 6)
+      .map(i => ({ id: i.id, kind: i.kind, title: i.title, task: i.task, plan: i.plan, project: i.project, detail: i.detail.slice(0, 200), online: i.online,
+        yes: yesOption(i) ? { id: yesOption(i).id, label: yesOption(i).label } : null, words: i.options.some(o => o.text === 'required') })),
+    plans: w.plans.filter(p => p.state === 'active').map(p => ({ id: p.id, title: p.title, done: p.done, total: p.total }))
+  };
+}
+
 export async function linaSnapshot(now = Date.now()) {
   const [wb, plans] = await Promise.all([workbenchSessions(now), workbenchPlans(now)]);
   const tasks = listTasks({ limit: 12 });
@@ -69,7 +85,7 @@ export async function linaSnapshot(now = Date.now()) {
       configured: wb.configured, reachable: wb.reachable, error: wb.error || null,
       active: wb.sessions.filter(s => ACTIVE.includes(s.status)).length,
       sessions: wb.sessions.slice().sort((a, b) => (b.lastActivityAt || 0) - (a.lastActivityAt || 0)).slice(0, 6),
-      plans: plans.available ? plans.plans : null, attention: plans.available ? plans.attention : []
+      plans: plans.available ? plans.plans : null, attention: plans.available ? plans.attention : [], link: link(now)
     },
     tasks: { open: tasks.filter(t => ['awaiting_approval', 'queued', 'running'].includes(t.status)).length,
       list: tasks.slice(0, 5).map(t => ({ id: t.id, title: t.title, target: t.target, status: t.status, at: t.finishedAt || t.updatedAt })) },

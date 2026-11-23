@@ -1,11 +1,12 @@
 // Single-user auth: the master API_TOKEN pairs devices; each device gets its own revocable token.
-// A device's scope is 'full' (the apps) or 'ops' (the agent box: may post ops reports and nothing else).
+// A device's scope is 'full' (the apps), 'ops' (the agent box: may post ops reports and nothing else) or 'workbench'
+// (a computer's Workbench: only the link routes, /api/workbench-link/*).
 import { config } from './config.js';
 import { db } from './db.js';
 import { sha256, safeEqual, randomToken, uid } from './lib/crypto.js';
 import { HttpError } from './http.js';
 
-export const SCOPES = ['full', 'ops'];
+export const SCOPES = ['full', 'ops', 'workbench'];
 
 export function resolveToken(token) {
   if (!token) return null;
@@ -36,10 +37,20 @@ export async function requireOps(c, next) {
   await next();
 }
 
-/* For routes both sides use (approvals): any valid token; the handler checks the scope. */
+/* For routes both sides use (approvals): an app or ops token; the handler checks which. Never a Workbench's. */
 export async function requireDevice(c, next) {
   const user = bearer(c);
   if (!user) throw new HttpError(401, 'Unauthorized');
+  if (user.scope === 'workbench') throw new HttpError(403, 'This token may only use the Workbench link');
+  c.set('user', user);
+  await next();
+}
+
+/* A computer's Workbench: posts what it sees, picks up Kevin's answers, nothing else. */
+export async function requireWorkbench(c, next) {
+  const user = bearer(c);
+  if (!user) throw new HttpError(401, 'Unauthorized');
+  if (user.scope !== 'workbench') throw new HttpError(403, 'Use a Workbench token');
   c.set('user', user);
   await next();
 }

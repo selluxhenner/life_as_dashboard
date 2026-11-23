@@ -96,6 +96,22 @@ export async function askLina(text, { context = null, listenAfter = true } = {})
 /** Start listening now, as a follow-up (no "didn't catch that" if he says nothing). Her greeting ends with it. */
 export function listenNow() { if (talk.state === 'idle' && canTalk()) converse(null, { followUp: true }); }
 
+/**
+ * Lina asks something herself (a new ask of Workbench) and listens. awaitId: what a plain yes is about; only the
+ * server's fixed words count as one, anything longer goes to her as an answer.
+ */
+export async function askYesNo(line, awaitId) {
+  if (talk.state !== 'idle' || !canTalk()) return;
+  const my = ++run;
+  set({ state: 'speaking', heard: '', reply: line, source: null, tools: ['workbench_status'] });
+  const heard = await say(line, 'de');
+  if (my !== run) return;
+  set({ state: 'idle', reply: line });
+  if (!heard) return;                                  // a question he didn't hear must not be answered by a yes in the room
+  awaiting = { ids: awaitId, at: Date.now() };
+  converse(null, { followUp: true });
+}
+
 /** Drop whatever is happening: close the microphone, stop the voice, ignore a late answer. */
 export async function cancelTalk() {
   run++;
@@ -106,14 +122,16 @@ export async function cancelTalk() {
   set({ state: 'idle', heard: '', reply: '', source: null });
 }
 
-/* Speaks a reply (base64 mp3 from the server when there is one) and resolves when it ends or is stopped. */
+/* Speaks a reply (base64 mp3 from the server when there is one) and resolves when it ends or is stopped: false when the
+   system didn't let it play, so Kevin heard nothing. */
 function say(text, lang, audio) {
   return new Promise(done => {
     let unwatch = null;
-    endSpeech = () => { endSpeech = null; unwatch?.(); done(); };
+    let heard = true;
+    endSpeech = () => { endSpeech = null; unwatch?.(); done(heard); };
     // barge-in: he starts talking while she speaks → she stops and listens, his first words kept
     if (mic && bargeOn()) unwatch = watchBarge(mic, pre => { barged = pre; tick('open'); stopSpeaking(); endSpeech && endSpeech(); });
-    speak(text, () => endSpeech && endSpeech(), { what: 'talk', lang, audioData: audio || undefined, onBlocked: () => endSpeech && endSpeech() });
+    speak(text, () => endSpeech && endSpeech(), { what: 'talk', lang, audioData: audio || undefined, onBlocked: () => { heard = false; endSpeech && endSpeech(); } });
   });
 }
 

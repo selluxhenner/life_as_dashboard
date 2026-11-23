@@ -177,6 +177,13 @@ These keys all go in `/etc/agentic-os.env`.
 - **Windows:** Settings › Lina › *"Hey Lina" on this PC*. The window comes forward and the voice bar shows what she heard and said; it keeps listening in the tray.
 - **How it works:** the wake word is spotted on the device with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (open source, offline, the same English keyword model on phone and PC; phrases in `android/app/lina/keywords.txt`). What you say goes to `POST /api/voice/turn` (Scribe → Claude with Lina's tools → ElevenLabs voice) in one request. Builds: `android/app/lina.gradle` downloads the library and model on the first Gradle build; for Windows run `bash scripts/build-lina-wake.sh` (MinGW gcc) before `npm run desktop:build`.
 
+**Workbench (PC and MacBook):**
+- **Workbench page** (`#/workbench`, G B, or *"Hey Lina, öffne Workbench"*): what needs you with its buttons, the open plans and tasks on the left; on the right each computer with its efficiency, its busy lanes and what runs in them. Lina's deck and the Hub show the short version.
+- **Connect a computer once:** Workbench page › *Connect a computer*, then paste the code in Workbench › Settings › Notifications › Agentic OS. The computer connects out by itself (no Tailscale, no open port); *Disconnect* revokes it.
+- **Being asked:** a new ask is one push to the phone. While Lina's deck is open with Live voice on she says it and listens: a plain *ja* takes the answer Workbench marked, *nein* leaves it open, anything longer is an answer she reads back before it goes. *Say it* on the page dictates an answer into the field.
+- Once both computers are connected you can switch off the plan messages of Workbench's Telegram connector, so you are asked in one place.
+- The contract, and how new Workbench features show up without a change here: [docs/workbench-link.md](docs/workbench-link.md).
+
 **Notifications:**
 Settings › Notifications picks what reaches you. These are server settings, so they apply to every device.
 - the morning briefing
@@ -233,6 +240,7 @@ curl -X POST https://agentic-os.serviweb.ch/api/dev/run-job -H "Authorization: B
 - **Secrets stay on the server.** Google refresh tokens, Slack tokens and the ICS link are AES-GCM encrypted at rest.
 - **Untrusted content.** Emails, Slack messages and news are wrapped as data for the model, never treated as instructions.
 - **Assistant actions:** Lina may create and change todos, habits, notes, job entries, people and events on your own calendar. Emails, calls, invitations, changes that notify other people and cancellations only ever go to the **approval queue** (Lina → Needs your approval, the notification, or a spoken yes). A spoken yes is matched by fixed words on the server, never by the model, and only for the action she just asked about.
+- **Workbench** can only be given answers it offered itself, for exactly what you saw, once. Its token opens nothing but the link. Lina can prepare an answer; it goes after your yes.
 - **Room to grow.** Tables carry a `user_id` (always 1 today), so adding more people later means adding a login, not redesigning.
 
 ## Legacy

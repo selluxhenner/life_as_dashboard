@@ -5,6 +5,7 @@ import './styles/shell.css';
 import './styles/views.css';
 import './styles/lina.css';
 import './styles/features.css';
+import './styles/workbench.css';
 import './styles/responsive.css';
 
 import { h, $ } from './core/dom.js';
@@ -44,6 +45,7 @@ import settings from './views/settings.js';
 import lab from './views/lab.js';
 import captures from './views/captures.js';
 import hub, { pendingApprovalCount } from './views/hub.js';
+import workbench, { workbenchNeeds } from './views/workbench.js';
 import { linaSetup, connectors } from './views/setup.js';
 import { unsorted, settleCaptures, takeCaptures } from './features/capture/captures.js';
 import { initNotifications } from './core/notifications.js';
@@ -66,6 +68,7 @@ const ROUTES = [
   { id: 'rank', label: 'Rank', icon: 'rank', view: rankView, hidden: () => !pointsOn() },
   // Lina opens from the corner menu, the mic in the top bar, Ctrl K or G .
   { id: 'assistant', label: 'Lina', icon: 'agent', view: assistant, key: 'G .', nav: false },
+  { id: 'workbench', label: 'Workbench', short: 'Work', icon: 'bolt', view: workbench, key: 'G B' },
   { id: 'hub', label: 'Hub', icon: 'server', view: hub, key: 'G U' },
   // Settings opens the corner menu; Lina setup and Connectors are reached from there (and with Ctrl K)
   { id: 'settings', label: 'Settings', icon: 'settings', view: settings, bottom: true, menu: true },
@@ -155,7 +158,7 @@ function markCurrent() {
   const id = MENU_PAGES.includes(at) ? 'settings' : at;    // the menu's pages light up the Settings button
   document.querySelectorAll('[data-route]').forEach(a => { if (a.dataset.route === id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   crumb.textContent = currentRoute() ? currentRoute().label : '';
-  const badges = { captures: unsorted().length, hub: pendingApprovalCount() };
+  const badges = { captures: unsorted().length, hub: pendingApprovalCount(), workbench: workbenchNeeds() };
   for (const [id, n] of Object.entries(badges)) {
     document.querySelectorAll(`[data-route="${id}"] .badge`).forEach(b => b.remove());
     if (n) document.querySelectorAll(`[data-route="${id}"]`).forEach(a => a.append(h('span.badge' + (id === 'captures' ? '.soft' : ''), String(n))));
