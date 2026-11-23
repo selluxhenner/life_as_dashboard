@@ -19,18 +19,23 @@ export function remote(key, path, maxAge = 5 * 60000) {
   return { data: c ? c.data : null, at: c ? c.at : 0, loading: !!inflight[key], error: c ? c.error : null, connected: !!apiConfig() };
 }
 
-export async function refresh(key, path) {
+/* same(old, new): true when nothing the page shows has changed. Then nothing is rebuilt, so a page that polls often
+   doesn't pull a button away under the pointer. */
+export async function refresh(key, path, { same } = {}) {
   if (!apiConfig()) return;
   inflight[key] = true;
+  let quiet = false;
   try {
     const data = await api.get(path);
+    const old = same && readCache(key);
+    quiet = !!(old && old.data && !old.error && same(old.data, data));
     mem[key] = { data, at: Date.now() };
     try { localStorage.setItem(PREFIX + key, JSON.stringify(mem[key])); } catch { /* quota */ }
   } catch (e) {
     mem[key] = { ...(readCache(key) || { data: null }), at: Date.now(), error: e };
   } finally {
     delete inflight[key];
-    notify();
+    if (!quiet) notify();
   }
 }
 

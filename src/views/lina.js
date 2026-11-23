@@ -16,13 +16,13 @@ import { speak, isSpeaking } from '../voice/tts.js';
 import { icon } from '../core/icons.js';
 import { go, routeList, render as routerRender, currentRoute } from '../core/router.js';
 import { isPhone } from '../core/platform.js';
-import { talk, toggleTalk, cancelTalk, askLina, setTalk, listenNow, canTalk } from '../voice/talk.js';
+import { talk, toggleTalk, cancelTalk, askLina, askYesNo, setTalk, listenNow, canTalk } from '../voice/talk.js';
 import { apiConfig } from '../core/api.js';
-import { greetingFor, pageBrief } from '../voice/greeting.js';
+import { greetingFor, pageBrief, askLine } from '../voice/greeting.js';
+import { WORKBENCH_URL } from './workbench.js';
 
 const FEED = '/api/lina/feed?limit=30';
 const POLL_MS = 15000;
-const WORKBENCH_URL = 'https://desktop-oe7cumo.tailb66bb7.ts.net';
 
 /* What a tap on a chip asks. Spoken answers, so the wording asks for short ones. */
 export const COMMANDS = [
@@ -31,14 +31,14 @@ export const COMMANDS = [
   { label: 'Sort my tasks', ask: 'Sort my open tasks: what should I do first today, what can wait? Suggest the order and set priorities if it helps.' },
   { label: 'What’s new?', ask: 'What’s new? Catch me up on the updates.' },
   { label: 'Obsidian', ask: 'Check my Obsidian vault: what changed lately, and where did I leave off?' },
-  { label: 'Workbench', ask: 'Where does Workbench stand: which sessions are running or done, and where are the plans?' },
+  { label: 'Workbench', ask: 'Where does Workbench stand: what needs me, how busy are the PC and the MacBook, and where are the plans?' },
   { label: 'Hermes', ask: 'How are the servers? Ask Hermes for the current status if needed.' }
 ];
 
 /* Which of her tools reach which satellite. */
 const REACH = {
   vault: ['search_vault', 'read_note', 'write_vault_note', 'vault_recent', 'add_note'],
-  workbench: ['workbench_status', 'start_task', 'task_status', 'cancel_task'],
+  workbench: ['workbench_status', 'workbench_decide', 'start_task', 'task_status', 'cancel_task'],
   next: ['get_today', 'get_calendar', 'list_todos', 'create_todo', 'update_todo', 'complete_todo', 'delete_todo', 'add_calendar_block', 'move_event', 'get_briefing', 'list_habits', 'check_habit', 'schedule_meeting'],
   live: ['get_updates', 'get_news'],
   hermes: ['ask_hermes', 'hermes_answers', 'task_status'],
@@ -63,11 +63,24 @@ let poll = 0, seenTop = 0, freshUntil = new Map(), announcedTop = null, linkRaf 
 /* Live voice: while the deck is open, Lina says new updates out loud (not news or the briefing), at most two at a
    time, only when she isn't talking with Kevin. Toggle at the top. */
 const QUIET_SOURCES = ['news', 'briefing'];
+/* Something new Workbench asks: she says it and listens, so a plain yes or a few words are enough. One at a time; the
+   rest waits on the page. Only what came up while the deck is open: opening the app never reads out a list. */
+let askedSeen = null;
+function askWorkbench(link) {
+  const asks = (link && link.asks) || [];
+  if (askedSeen === null) { if (link) askedSeen = new Set(asks.map(a => a.id)); return false; }
+  const fresh = asks.filter(a => !askedSeen.has(a.id) && a.online);
+  if (!fresh.length || !announceOn() || !canTalk() || talk.state !== 'idle' || isSpeaking() || document.visibilityState !== 'visible') return false;
+  fresh.forEach(a => askedSeen.add(a.id));
+  askYesNo(askLine(fresh[0], fresh.length), fresh[0].id);
+  return true;
+}
 function announce(events) {
   const top = events[0] ? events[0].id : 0;
   if (announcedTop === null) { announcedTop = top; return; }
   if (top <= announcedTop) return;
-  const fresh = events.filter(e => e.id > announcedTop && !e.told && !QUIET_SOURCES.includes(e.source)).reverse();
+  // a Workbench ask is asked as a question (askWorkbench), not read out as news
+  const fresh = events.filter(e => e.id > announcedTop && !e.told && !QUIET_SOURCES.includes(e.source) && !(e.source === 'workbench' && e.kind === 'ask')).reverse();
   announcedTop = top;
   if (!fresh.length || !announceOn() || talk.state !== 'idle' || isSpeaking() || document.visibilityState !== 'visible') return;
   const said = fresh.slice(-2);
@@ -156,6 +169,19 @@ function vaultSat(v) {
 
 const WB_DOT = { running: 'running', active: 'running', working: 'running', busy: 'running', waiting: 'running', 'needs-input': 'running', done: 'done', completed: 'done', failed: 'error', error: 'error' };
 function workbenchSat(w) {
+  if (w && w.link) {
+    const l = w.link, open = () => openInDeck('workbench');
+    return [
+      satHead('Workbench', l.needs ? l.needs + (l.needs === 1 ? ' needs you' : ' need you') : null, open),
+      ...l.machines.map(m => h('button.sat-line', { type: 'button', onclick: open, title: m.online ? `${m.working} of ${m.total} lanes busy` : 'not connected right now' },
+        h('span', { class: 'status-dot ' + (m.online ? 'done' : 'idle') }), h('span', m.name),
+        m.total ? h('span.sat-lanes', { 'aria-hidden': 'true' }, Array.from({ length: m.total }, (_, i) => h('i' + (i < m.working ? '.on' : '')))) : null,
+        m.now == null ? null : h('span.sat-dim.data', m.now + ' %'))),
+      ...l.asks.slice(0, Math.max(1, rowsFor() - 2)).map(a => h('button.sat-line', { type: 'button', onclick: open }, h('span.status-dot.running'), h('span', a.title))),
+      ...l.plans.filter(p => p.total).slice(0, 2).map(p => h('div.sat-plan', h('div.sat-line', h('span', p.title), h('span.sat-dim.data', `${p.done}/${p.total}`)),
+        h('div.plan-bar', h('i', { style: { width: Math.round((p.done / p.total) * 100) + '%' } }))))
+    ];
+  }
   if (!w || !w.configured || (!w.sessions.length && !(w.plans && w.plans.length))) return null;
   return [
     satHead('Workbench', w.reachable ? w.active + ' active' : 'not reachable', () => window.open(WORKBENCH_URL, '_blank', 'noopener'), 'Open Workbench'),
@@ -265,6 +291,7 @@ function importance(key, s, data) {
   if (key === 'workbench') {
     const w = s && s.workbench;
     if (!w) return 0;
+    if (w.link) return w.link.needs ? 86 : w.link.machines.some(m => m.working) ? 60 : 30;
     return w.attention && w.attention.length ? 76 : w.active ? 60 : 30;
   }
   if (key === 'live') {
@@ -308,6 +335,11 @@ function paintFocus() {
   if (!focus) { if (focusShown) { deck.focusRoot.replaceChildren(); focusShown = null; focusView = null; } return; }
   const route = routeList().find(r => r.id === focus);
   if (!route || route.id === 'lina') { focus = null; return paintFocus(); }
+  if (focusShown !== focus) {                        // the entrance once per page, not on every update
+    deck.el.classList.add('focus-in');
+    clearTimeout(deck.focusTimer);
+    deck.focusTimer = setTimeout(() => deck && deck.el.classList.remove('focus-in'), 700);
+  }
   focusView = route.view;
   deck.focusTitle.textContent = route.label;
   deck.focusRoot.replaceChildren();
@@ -382,7 +414,7 @@ function paint() {
   const problem = systems(s, connected, error);    // only says something when Lina can't reach the server
   deck.liveVoice.title = problem.length && !s ? problem[0].textContent : 'Lina says new updates out loud while this screen is open';
   deck.liveVoice.setAttribute('aria-pressed', String(announceOn()));
-  if (data && data.events) announce(data.events);
+  if (data && data.events) { if (askWorkbench(s && s.workbench.link)) announcedTop = data.events[0] ? data.events[0].id : announcedTop; else announce(data.events); }
   const content = { next: nextSat(s), vault: vaultSat(s && s.vault), workbench: workbenchSat(s && s.workbench), live: liveSat(data), hermes: hermesSat(s), server: serverSat(s) };
   const ranked = Object.keys(content).filter(k => content[k]).sort((a, b) => importance(b, s, data) - importance(a, s, data));
   const room = innerHeight >= 760 ? SLOTS : 4;
@@ -460,7 +492,7 @@ export default {
     // the router unmounts before every re-render too: only tear down once the deck is really gone
     setTimeout(() => {
       if (!deck || deck.el.isConnected) return;
-      clearInterval(poll); poll = 0; announcedTop = null;
+      clearInterval(poll); poll = 0; announcedTop = null; askedSeen = null;
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('resize', onResize);
       deck.chrono.destroy();

@@ -203,7 +203,8 @@ html[data-route='lina'] body > canvas { opacity: .38; transition: opacity var(--
 .view.lina[data-focus]:not([data-focus='']) .lina-dial { width: 132px; }
 .view.lina[data-focus]:not([data-focus='']) .lina-dial .chronosphere { opacity: 0; transition: opacity .3s; }
 .view.lina[data-focus]:not([data-focus='']) .lina-space { min-height: 0; }
-.view.lina[data-focus]:not([data-focus='']) .lina-focus { display: block; padding-top: 140px; animation: sat-in .6s var(--ease-spring, ease) both; }
+.view.lina[data-focus]:not([data-focus='']) .lina-focus { display: block; padding-top: 140px; }
+.view.lina.focus-in .lina-focus { animation: sat-in .6s var(--ease-spring, ease) both; }
 .lina-focus-bar { display: flex; align-items: center; gap: var(--s-4); margin-bottom: var(--s-4); }
 .focus-back { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 1px solid var(--seam); border-radius: var(--r-pill); background: none; color: var(--ink-2); font-family: var(--font-data); font-size: var(--fs-xs); letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
 .focus-back svg { width: 12px; height: 12px; }

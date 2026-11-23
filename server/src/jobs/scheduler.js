@@ -14,6 +14,7 @@ import { triageInbox } from './triage.js';
 import { meetingPrep, jobNudge } from './assist.js';
 import { pullRegistry } from '../hub/registry.js';
 import { pruneFeed } from '../lina/feed.js';
+import { pruneWorkbench } from '../workbench/link.js';
 
 export const JOBS = {
   refresh: async () => ({ inbox: await refreshInbox(), triaged: await triageInbox() }),
@@ -69,6 +70,7 @@ async function maintenance() {
   db.run('DELETE FROM notifications WHERE created_at < ?', now - 30 * day);
   db.run('DELETE FROM ops_reports WHERE created_at < ?', now - 90 * day);
   pruneFeed(now);
+  pruneWorkbench(now);
   db.exec('PRAGMA optimize');
   return { ok: true };
 }

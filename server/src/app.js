@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { readFileSync } from 'node:fs';
 import { config } from './config.js';
 import { HttpError, page } from './http.js';
-import { requireAuth, requireOps, requireDevice } from './auth.js';
+import { requireAuth, requireOps, requireDevice, requireWorkbench } from './auth.js';
 import { callback as googleCallback } from './connectors/google.js';
 import { twiml, callStatus, validTwilioSignature } from './phone/twilio.js';
 import { safeEqual, hmac } from './lib/crypto.js';
@@ -21,6 +21,7 @@ import { hubState } from './routes/hub.js';
 import { githubStats } from './hub/github.js';
 import { pullRegistry } from './hub/registry.js';
 import { workbench } from './routes/workbench.js';
+import { workbenchLink, workbenchControl } from './routes/workbench-link.js';
 
 export const app = new Hono();
 
@@ -83,6 +84,10 @@ app.route('/api', lina);
 /* Hub state: the apps see everything, an ops token (Hermes's hub-status skill) a summary without ids. */
 app.get('/api/hub/state', requireDevice, hubState);
 
+/* Workbench link: each computer's Workbench connects out to here with its own narrow token. */
+app.use('/api/workbench-link/*', requireWorkbench);
+app.route('/api', workbenchLink);
+
 /* ---------- everything else needs a device token ---------- */
 const api = new Hono();
 api.use('*', requireAuth);
@@ -98,6 +103,7 @@ api.get('/hub/github', async c => c.json(await githubStats({ fresh: c.req.query(
 /* "Check now" on the Hub tab: pull the registry and check every service without waiting for the 15-minute job. */
 api.post('/hub/refresh', async c => c.json(await pullRegistry()));
 api.route('/', workbench);
+api.route('/', workbenchControl);
 app.route('/api', api);
 
 app.notFound(c => c.json({ error: 'Not found' }, 404));

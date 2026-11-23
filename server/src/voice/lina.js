@@ -13,6 +13,7 @@ import { worldSpeech } from '../jobs/news.js';
 import { synthesize, transcribe } from './speech.js';
 import { getTask } from '../routes/tasks.js';
 import { decideApproval } from '../routes/approvals.js';
+import { workbenchItem, yesOption, decideItem } from '../workbench/link.js';
 
 /* What Kevin was just listening to, so a spoken follow-up like "tell me more about the second one" makes sense. */
 export function voiceContext(kind) {
@@ -76,7 +77,7 @@ const PAGE_WORDS = [
   ['calendar', /\b(kalender|calendar|termine?|agenda)\b/], ['captures', /\b(captures?|notizen|notes|capture)\b/],
   ['inbox', /\b(inbox|posteingang|mails?|e-?mails?|postfach)\b/], ['world', /\b(world ?view|world|welt(karte|ansicht)?|news|nachrichten|karte|map)\b/],
   ['settings', /\b(settings|einstellungen|optionen)\b/], ['today', /\b(today|heute|tagesansicht)\b/],
-  ['plan', /\b(plan|planung|ziele|goals|board)\b/], ['hub', /\b(hub|geräte|devices|agents?)\b/],
+  ['plan', /\b(plan|planung|ziele|goals|board)\b/], ['workbench', /\b(work ?bench|lanes?|spuren)\b/], ['hub', /\b(hub|geräte|devices|agents?)\b/],
   ['home', /\b(home|übersicht|overview|startseite)\b/], ['jobs', /\b(jobs?|job hunt|bewerbungen)\b/],
   ['ai', /\b(ai|ki)( models?| modelle)?\b/], ['chat', /\b(chat)\b/], ['lina', /\b(lina|dich)\b/]
 ];
@@ -108,6 +109,7 @@ const DONE = {
   update_event: { en: 'Done, it’s changed and the guests are told.', de: 'Erledigt, der Termin ist geändert und die Gäste wissen Bescheid.' },
   draft_email: { en: 'The email is ready: open it in the app to send it.', de: 'Die Mail ist vorbereitet: öffne sie in der App zum Senden.' },
   schedule_call: { en: 'Okay, I’ll call you.', de: 'Okay, ich rufe dich an.' },
+  workbench_decide: { en: 'Okay, it’s with Workbench. I’ll tell you when it’s through.', de: 'Okay, ist bei Workbench. Ich sage dir, wenn es durch ist.' },
   start_task: { en: 'Approved, it’s on its way. I’ll tell you when it’s done.', de: 'Freigegeben, es läuft. Ich sage dir, wenn es fertig ist.' }
 };
 
@@ -120,6 +122,21 @@ function taskWaits(runId) {
     .map(t => ({ id: t.id, summary: 'Approve: ' + t.title }));
 }
 const waitingTasks = ids => ids.filter(id => /^tsk_/.test(id)).map(getTask).filter(t => t && t.status === 'awaiting_approval');
+
+/* He answered a Workbench ask in words ("restart it", "tell it to use the old API"): the model needs to know which. */
+function askContext(ids) {
+  const list = ids.filter(id => /^wbk_/.test(id)).map(id => workbenchItem(id)).filter(Boolean);
+  return list.length ? '\nYou just read this Workbench ask to Kevin; what he says now is most likely his answer to it (then workbench_decide):\n' +
+    asData('workbench_ask', list.map(i => `${i.id} | ${i.title} | ${i.detail.slice(0, 400)} | options: ${i.options.map(o => o.id + (o.text === 'required' ? ' (needs text)' : '')).join(', ')}`).join('\n')) : '';
+}
+
+/* Something Workbench asks that Lina just read out on the deck: a plain yes takes the option Workbench marked for it,
+   a no leaves it open. Only one at a time, so a yes can never mean two things. */
+function waitingAsk(ids) {
+  const list = ids.filter(id => /^wbk_/.test(id));
+  const item = list.length === 1 ? workbenchItem(list[0]) : null;
+  return item && yesOption(item) ? item : null;
+}
 
 const speak = (text, lang) => synthesize({ text, lang, fast: true }).then(r => r.audio.toString('base64'));
 
@@ -223,7 +240,8 @@ export async function linaTurn({ audio, type, prepared: prepId, conversationId, 
   let tools = [], ui = [];
   const waiting = awaiting.length ? db.all(`SELECT id, tool FROM agent_actions WHERE status = 'pending' AND id IN (${awaiting.map(() => '?').join(',')})`, ...awaiting) : [];
   const tasks = waitingTasks(awaiting);
-  const yn = waiting.length || tasks.length ? yesNo(heard) : null;
+  const ask = waiting.length || tasks.length ? null : waitingAsk(awaiting);
+  const yn = waiting.length || tasks.length || ask ? yesNo(heard) : null;
 
   if (!heard) {
     if (!viaWake || !raw.trim()) return { heard: '', reply: '', lang, conversationId: cid, awaiting: [], listen: false, audio: null };
@@ -247,7 +265,10 @@ export async function linaTurn({ audio, type, prepared: prepId, conversationId, 
     for (const t of tasks) {
       try { decideApproval(t.approvalId, yn.answer === 'yes', 'lina-voice'); } catch (e) { errors.push(e.message); }
     }
-    const kinds = [...new Set([...waiting.map(a => a.tool), ...tasks.map(() => 'start_task')])];
+    if (ask && yn.answer === 'yes') {
+      try { decideItem(ask.id, yesOption(ask).id, { by: 'lina-voice' }); } catch (e) { errors.push(e.message); }
+    }
+    const kinds = [...new Set([...waiting.map(a => a.tool), ...tasks.map(() => 'start_task'), ...(ask ? ['workbench_decide'] : [])])];
     reply = errors.length ? SAY[lang].fail + errors[0] : yn.answer === 'no' ? SAY[lang].no
       : kinds.length === 1 && DONE[kinds[0]] ? DONE[kinds[0]][lang] : SAY[lang].done;
   } else if (instantOn() && !((waiting.length || tasks.length) && /^\W*(ja|jo|yes|yeah|nein|no|nö|nope)\b/i.test(heard)) &&
@@ -258,7 +279,7 @@ export async function linaTurn({ audio, type, prepared: prepId, conversationId, 
     cid = r.cid;
   } else {
     const onEvent = ev => { if (ev.type === 'tool') tools.push({ name: ev.name, status: ev.status, summary: ev.summary }); else if (ev.type === 'ui') ui.push({ action: ev.action, data: ev.data }); };
-    const r = await runAgent({ message: heard, conversationId: cid, trigger: 'voice', onEvent, extraSystem: voiceContext(context) + (acked ? ACKED : '') });
+    const r = await runAgent({ message: heard, conversationId: cid, trigger: 'voice', onEvent, extraSystem: voiceContext(context) + askContext(awaiting) + (acked ? ACKED : '') });
     cid = r.conversationId;
     reply = r.answer;
     lang = guessLang(reply);

@@ -10,6 +10,7 @@ version 1.0.0. The consumer is Hermes, the ops agent on the agent box: its `serv
 | Scope | Who | May |
 |---|---|---|
 | `full` | the apps, the approvals relay | everything, including deciding approvals |
+| `workbench` | a computer's Workbench | the Workbench link only ([workbench-link.md](workbench-link.md)) |
 | `ops` | agent box (`agent-box`), main server (`main-server`) | post ops reports, ask for, read and consume approvals, read hub state (reduced), work Hermes's agent tasks |
 
 An ops token gets `403` on every other route. Neither ops token can approve or reject: only full-scope devices decide.

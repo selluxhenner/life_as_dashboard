@@ -59,7 +59,7 @@ voice.post('/voice/turn', async c => {
   if (q.prepared && !(prepared && hasPrepared(prepared))) throw new HttpError(409, 'Unknown prepared turn');
   const buf = prepared ? null : await recording(c);
   const conversationId = /^conv_\w+$/.test(q.conversationId || '') ? q.conversationId : null;
-  const awaiting = String(q.awaiting || '').split(',').filter(id => /^(act|tsk)_\w+$/.test(id)).slice(0, 5);
+  const awaiting = String(q.awaiting || '').split(',').filter(id => /^(act|tsk|wbk)_\w+$/.test(id)).slice(0, 5);
   const context = ['briefing', 'world'].includes(q.context) ? q.context : null;
   return c.json(await linaTurn({ audio: buf, type, prepared, conversationId, awaiting, viaWake: q.wake === '1', context, acked: q.acked === '1' }));
 });
